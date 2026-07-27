@@ -40,6 +40,7 @@ class _RNNFamily(nn.Module):
         n_layers: int = 1,
         lattice: Lattice | None = None,
         *,
+        d_input: int | None = None,
         nd_method: str | Callable[..., nn.Module] = axial_scan,
         plan: ScanPlan | None = None,
         bidirectional: bool | AxisSpec | list[AxisSpec] = False,
@@ -56,6 +57,11 @@ class _RNNFamily(nn.Module):
         elif bidirectional is not False:
             raise ValueError("pass either `plan` or `bidirectional`, not both")
 
+        # An input projection only when the data is not already d_model wide.
+        # Without it every caller writes the same nn.Linear, which is friction
+        # for no gain in purity.
+        self.in_proj = nn.Linear(d_input, d_model) if d_input is not None else nn.Identity()
+
         self.nd = resolve_nd_method(nd_method)(
             mixer=partial(self._mixer, d_model),
             plan=plan,
@@ -71,18 +77,21 @@ class _RNNFamily(nn.Module):
         return self.nd.plan
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """``(B, [T,] *shape, d_model)`` in, same shape out.
+        """``(B, [T,] *shape, d_input or d_model)`` in, ``d_model`` out.
 
-        With no lattice that is just ``(B, T, d_model)``.
+        With no lattice that is just ``(B, T, ...)``.
         """
-        return self.nd(x)
+        return self.nd(self.in_proj(x))
 
 
 class LSTM(_RNNFamily):
     """LSTM over a sequence, or over an N-D lattice.
 
     Args:
-        d_model: feature width, in and out.
+        d_model: feature width the model works in, and the output width.
+        d_input: width of the incoming features, when it differs from
+            ``d_model``. Adds a single input projection; omit it and the input
+            is expected to already be ``d_model`` wide.
         n_layers: how many sweeps. With a lattice, layers cycle through its
             axes unless ``plan`` says otherwise.
         lattice: omit for an ordinary 1-D sequence model.

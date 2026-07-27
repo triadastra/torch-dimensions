@@ -58,4 +58,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `torch.compile` numerics. A check that cannot run is reported as **skipped**,
   never as passed.
 
-The data construction layer lands in Phase 5.
+- Phase 5 `td.data` — long-format rows to lattice layout. `from_coords` infers
+  the lattice, its vocabularies, and which cells are absent; `from_table` builds
+  the `(T, *shape, F)` series; `LatticeWindow` handles time windowing as pure
+  index arithmetic; `LatticeSource` is a protocol so any storage backend works;
+  `LatticeDataset` and `collate_lattice` plug into `torch.utils.data.DataLoader`.
+  No trainer, no normalization policy, no downloads.
+- `d_input=` on the RNN models, adding a single input projection when the data
+  is not already `d_model` wide.
+
+The kernel family lands in Phase 6.
