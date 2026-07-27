@@ -37,8 +37,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   axis at a time, with pre-norm residual layers driven by a `ScanPlan`. Absent
   cells are zeroed on entry and after each layer, so outputs at present cells
   are invariant to whatever values sat in absent ones.
-- `LSTMND` and `GRUND` — N-dimensional RNNs, and `LSTMMixer`/`GRUMixer` adapters
-  over `torch.nn`. Direction is the schedule's job, so neither adapter sets
-  `bidirectional=True` on the underlying RNN.
+- `LSTM` and `GRU` — one class each covering 1-D and N-D, plus `LSTMMixer` /
+  `GRUMixer` adapters over `torch.nn`. Direction is the schedule's job, so
+  neither adapter sets `bidirectional=True` on the underlying RNN.
+- `nd_method`: how a model's extra axes are handled, given as a registered name
+  or any user-written callable. `register_nd_method` / `resolve_nd_method`.
+- `Lattice(shape=(), time=True)` — a lattice that is only a sequence. Its
+  permutation is the identity, so the 1-D path needs no special-casing and
+  `td.LSTM(d_model, n_layers)` with no lattice is an ordinary sequence model.
+
+### Changed (breaking, pre-alpha)
+- `LSTMND` / `GRUND` are now `LSTM` / `GRU`, taking an optional `lattice=`.
 
 The conformance suite lands in Phase 4.

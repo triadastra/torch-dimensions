@@ -70,9 +70,9 @@ The first real block. **LSTM first, not Mamba** — `nn.LSTM` needs no optional 
 
 - `AxialScan`: permute → fold others into batch → mixer → unfold → inverse permute, pre-norm residual per layer.
 - Batch-fold chunking, library-owned and auto-tuned from device limits — never a user-facing constant.
-- `LSTMND`, `GRUND`.
+- `LSTM`, `GRU` — one class each, 1-D without a lattice and N-D with one.
 
-**Acceptance:** on a rank-1 lattice, `LSTMND` matches `nn.LSTM` **bit-for-bit**. That single test catches essentially every permutation and residual bug.
+**Acceptance:** a single layer on a rank-1 lattice matches `nn.LSTM` **bit-for-bit**. That one test catches essentially every permutation and residual bug. Multi-layer stacks match only to floating-point tolerance, because the fold normalizes memory layout and torch's RNN kernels are layout-sensitive — expected, not a defect.
 
 **Deliverable:** a working N-dimensional LSTM — prior art as MDRNN (Graves et al. 2007) and Grid-LSTM (Kalchbrenner et al. 2015), but with no maintained modern implementation. Shippable on its own.
 
@@ -84,7 +84,7 @@ Built now, before the hard math, so every later block is validated by constructi
 
 The seven checks are specified in [DESIGN.md §6](DESIGN.md). Packaged as `td.testing.check_block(...)` so downstream users can run it against their own mixers.
 
-**Acceptance:** `LSTMND` and `GRUND` pass all seven. Suite is parametrized over rank 1–4 and dense/sparse.
+**Acceptance:** `LSTM` and `GRU` pass all seven. Suite is parametrized over rank 1–4 and dense/sparse.
 
 ---
 
@@ -233,7 +233,7 @@ torch-dimensions/
 │   │   └── ssm.py                  Mamba-2/3, S4, S5   [optional deps]
 │   │
 │   └── models/
-│       ├── rnn_nd.py               LSTMND, GRUND
+│       ├── rnn.py                  LSTM, GRU  (1-D without a lattice, N-D with one)
 │       ├── transformer_nd.py       AxialTransformer, factorized axial attention
 │       └── ssm_nd.py               MambaND, S4ND
 │

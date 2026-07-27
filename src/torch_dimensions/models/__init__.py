@@ -1,3 +1,3 @@
-from torch_dimensions.models.rnn_nd import GRUND, LSTMND
+from torch_dimensions.models.rnn import GRU, LSTM
 
-__all__ = ["GRUND", "LSTMND"]
+__all__ = ["GRU", "LSTM"]

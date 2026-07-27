@@ -58,8 +58,11 @@ class Lattice:
 
     def __post_init__(self) -> None:
         self.shape = tuple(int(s) for s in self.shape)
-        if not self.shape:
-            raise ValueError("a lattice needs at least one axis; got shape=()")
+        if not self.shape and not self.time:
+            # shape=() with time=True is the degenerate "just a sequence"
+            # lattice, which is what makes the 1-D case fall out of the same
+            # machinery instead of needing its own code path.
+            raise ValueError("a lattice needs at least one axis; got shape=() with time=False")
         if any(s <= 0 for s in self.shape):
             raise ValueError(f"lattice axes must be positive; got shape={self.shape}")
 
@@ -78,6 +81,8 @@ class Lattice:
             raise ValueError("'time' is reserved when time=True; rename that lattice axis")
 
         if self.valid is not None:
+            if not self.shape:
+                raise ValueError("a time-only lattice has no cells to mark valid")
             if tuple(self.valid.shape) != self.shape:
                 raise ValueError(
                     f"valid mask has shape {tuple(self.valid.shape)}, expected {self.shape}"

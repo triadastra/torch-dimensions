@@ -2,7 +2,7 @@
 
 N-dimensional sequence models for PyTorch — state-space models, RNNs, and transformers over arbitrary lattices, behind one API.
 
-> **Status: pre-alpha.** The N-D machinery and the RNN family are built and tested — `Lattice`, `ScanPlan`, `AxialScan`, `LSTMND`, `GRUND`. SSM and attention families are not yet implemented. See [PLAN.md](PLAN.md) for build order and [DESIGN.md](DESIGN.md) for the architecture.
+> **Status: pre-alpha.** The N-D machinery and the RNN family are built and tested — `Lattice`, `ScanPlan`, `AxialScan`, `LSTM`, `GRU`. SSM and attention families are not yet implemented. See [PLAN.md](PLAN.md) for build order and [DESIGN.md](DESIGN.md) for the architecture.
 
 ## Why
 
@@ -29,12 +29,19 @@ import torch_dimensions as td
 
 lattice = td.Lattice(shape=(32, 64, 64), names=("depth", "height", "width"))
 
-model = td.MambaND(d_model=128, n_layers=12, lattice=lattice, time=True)
+model = td.LSTM(d_model=128, n_layers=12, lattice=lattice)
 loss = model(x).pow(2).mean()
 loss.backward()
 ```
 
-Swap `MambaND` for `S4ND`, `LSTMND`, or `AxialTransformer` without changing anything else. Drop to `td.AxialScan(mixer=..., plan=...)` to compose your own, or drive the whole thing from YAML.
+Drop the `lattice=` and the same class is an ordinary 1-D LSTM — there is no separate `LSTMND`, because a lattice with no spatial axes folds to the identity. Swap `LSTM` for `MambaND`, `S4ND`, or `AxialTransformer` without changing anything else.
+
+How the extra axes get handled is one argument:
+
+```python
+td.LSTM(d_model=128, n_layers=12, lattice=lattice, nd_method="axial_scan")  # RNN sweeps every axis
+td.LSTM(d_model=128, n_layers=12, lattice=lattice, nd_method=my_traversal)  # your own strategy
+```
 
 ## Scope
 

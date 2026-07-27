@@ -1,6 +1,6 @@
 # torch-dimensions — Design
 
-**Status:** Phases 0–3 built (`Lattice`, `ScanPlan`, `AxialScan`, `LSTMND`/`GRUND`); the rest is design. See [PLAN.md](PLAN.md) for build order.
+**Status:** Phases 0–3 built (`Lattice`, `ScanPlan`, `AxialScan`, `LSTM`/`GRU`); the rest is design. See [PLAN.md](PLAN.md) for build order.
 **Positioning:** composition layer. We depend on `mamba-ssm` / `flash-linear-attention` / `state-spaces/s4` for 1-D kernels. We own the N-D structure, the registry, the config surface, and the `nn.Module` contract.
 
 ---
@@ -15,17 +15,20 @@ Every model in scope is the same object:
 |---|---|---|
 | Mamba-ND | Mamba-2 / Mamba-3 selective scan | sequential, one axis per layer, alternating direction |
 | MDRNN / Grid-LSTM | `nn.LSTM` / `nn.GRU` | sequential, one axis per layer |
+| RNN + axial attention | `nn.LSTM` / `nn.GRU` | hybrid — kernel across the lattice, mixer along time |
 | S4ND | S4 FFT conv | separable — per-axis kernel, outer product |
 | Axial Transformer | attention | per-axis kernel, contracted in turn |
 | Factorized axial attention | factorized axial cross-attn | per-axis kernel, Kronecker contraction |
 
 Nobody has written this down as one abstraction. Every repo above hardcodes its own axis bookkeeping. That is the entire product: **N-D RNNs, N-D transformers, and N-D SSMs fall out of one mechanism**, which is why the user-facing API can be as small as `S4(dim=2, layers=12)`.
 
-The mechanism splits into exactly two composition strategies:
+The mechanism splits into composition strategies, selected per model by `nd_method`:
 
 **`AxialScan` — sequential.** Permute one lattice axis to the sequence position, fold every other axis into batch, run the 1-D mixer, permute back. Residual + pre-norm per layer. This is what makes ND tractable: *we never write an N-D kernel.* Mamba-ND's real insight is that alternating 1-D scans over permuted axis orderings recover N-D context, so the existing 1-D CUDA kernel is reused unchanged.
 
 **`AxialKernel` — contraction.** Build one kernel `A_ax ∈ R^{S_ax × S_ax}` per axis, contract them into the value tensor one axis at a time. On a dense lattice the joint operator is exactly the Kronecker product `A_0 ⊗ A_1 ⊗ … ⊗ A_{n-1}`, so cost is quadratic in *axial* size, not in `prod(shape)`.
+
+**Hybrid — different operators on different axes.** A kernel-family operator mixes across the lattice at each timestep; the 1-D mixer then runs along time. This is the shape of most real forecasting models over a categorical lattice, and it is why `LSTM(nd_method="cafa")` is meaningful: CaFA never consumes the LSTM, it handles the axes the LSTM does not.
 
 Everything else in the library is a mixer, a plan, or a readout.
 
@@ -51,7 +54,9 @@ loss.backward()  # plain autograd; nothing custom to call
 
 Autograd is free. Composed torch ops give backward automatically; the upstream kernels already ship their own `autograd.Function`. There is no `model.backwards()` — you call `.backward()` on the loss, as with any torch model.
 
-`LSTMND` and `AxialTransformer` take the same constructor shape. That is the point.
+`LSTM` and `AxialTransformer` take the same constructor shape. That is the point.
+
+There is no `LSTMND`. `td.LSTM(d_model, n_layers)` with no lattice is an ordinary sequence model; adding `lattice=` makes the same class N-dimensional, because a lattice with no spatial axes has an identity permutation and the 1-D case is the N-D case with nothing to fold. How the extra axes are handled is `nd_method`'s business — a registered name, or any callable a user writes.
 
 ### Level 2 — mixer + plan
 
@@ -147,7 +152,7 @@ torch_dimensions/
     ssm.py            Mamba2, Mamba3, S4, S5   (thin adapters over upstream kernels)
     rnn.py            LSTM, GRU                (adapters over torch.nn)
     attn.py           self-attn, cross-attn, factorized axial kernel
-  models/             MambaND, S4ND, AxialTransformer, LSTMND, GRUND
+  models/             MambaND, S4ND, AxialTransformer, LSTM, GRU
   data/               LatticeSource protocol, long-format tables, windowing, collate
   registry.py         register / build / list
   config.py           dataclass schemas + YAML loader + save/load
@@ -164,7 +169,7 @@ One parametrized suite every registered block must pass. This is what keeps an N
 
 1. **Shape** — `(B, *shape, H)` in, same out, for ranks 1–4.
 2. **Gradient** — `gradcheck` in float64 on a tiny instance; every parameter receives non-`None` grad.
-3. **Equivalence** — a rank-1 lattice must match the underlying 1-D module bit-for-bit. Catches permutation bugs immediately.
+3. **Equivalence** — a *single layer* on a rank-1 lattice must match the underlying 1-D module bit-for-bit. Catches permutation bugs immediately. Stacks are checked to floating-point tolerance instead: the fold reshapes, which requires contiguity, and torch's RNN kernels are not bit-identical across memory layouts, so from layer two onward a one-ULP drift is expected and is not a bug.
 4. **Kronecker identity** — for `AxialKernel` on a dense lattice, sequential contraction must equal the explicit `⊗` operator to numerical tolerance.
 5. **Mask invariance** — invalid cells must not influence valid outputs. Perturb invalid cells, assert valid outputs are bitwise unchanged. This is the sparse-lattice guarantee, and the test most likely to catch a real bug.
 6. **Permutation covariance** — permuting lattice axes and the plan together permutes the output correspondingly.
@@ -174,7 +179,7 @@ One parametrized suite every registered block must pass. This is what keeps an N
 
 ## 7. v0.1 scope
 
-**In:** `Lattice` (dense + sparse), `ScanPlan`, `AxialScan`, `AxialKernel`, mixers for LSTM/GRU/attention (pure torch, no optional deps) and Mamba-2/S4 (adapters), models `LSTMND`/`GRUND`/`AxialTransformer`/`MambaND`/`S4ND`, the `data/` construction layer (§8), registry, config, save/load, conformance suite. Ranks 1–4.
+**In:** `Lattice` (dense + sparse), `ScanPlan`, `AxialScan`, `AxialKernel`, mixers for LSTM/GRU/attention (pure torch, no optional deps) and Mamba-2/S4 (adapters), models `LSTM`/`GRU`/`AxialTransformer`/`MambaND`/`S4ND`, the `data/` construction layer (§8), registry, config, save/load, conformance suite. Ranks 1–4.
 
 **Deferred, deliberately:**
 

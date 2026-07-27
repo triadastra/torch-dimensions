@@ -12,16 +12,23 @@ are imported defensively so a CPU-only install stays importable.
 """
 
 from torch_dimensions import mixers
-from torch_dimensions.compose.scan import AxialScan, axial_apply
+from torch_dimensions.compose import (
+    ND_METHODS,
+    AxialScan,
+    axial_apply,
+    register_nd_method,
+    resolve_nd_method,
+)
 from torch_dimensions.lattice import Lattice, Restore
-from torch_dimensions.models.rnn_nd import GRUND, LSTMND
+from torch_dimensions.models.rnn import GRU, LSTM
 from torch_dimensions.plan import ScanPlan, Step
 
 __version__ = "0.0.0"
 
 __all__ = [
-    "GRUND",
-    "LSTMND",
+    "GRU",
+    "LSTM",
+    "ND_METHODS",
     "AxialScan",
     "Lattice",
     "Restore",
@@ -29,4 +36,6 @@ __all__ = [
     "Step",
     "axial_apply",
     "mixers",
+    "register_nd_method",
+    "resolve_nd_method",
 ]

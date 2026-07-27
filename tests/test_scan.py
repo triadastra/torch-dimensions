@@ -1,4 +1,4 @@
-"""Phase 3 acceptance for axial_apply / AxialScan / LSTMND. See PLAN.md.
+"""Phase 3 acceptance for axial_apply / AxialScan / LSTM. See PLAN.md.
 
 The load-bearing tests use ``cumsum`` and a position-weighting as mixers,
 because torch already provides an independent reference for "apply this to
@@ -11,7 +11,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from torch_dimensions import GRUND, LSTMND, AxialScan, Lattice, ScanPlan, axial_apply
+from torch_dimensions import GRU, LSTM, AxialScan, Lattice, ScanPlan, axial_apply
 from torch_dimensions.mixers import LSTMMixer
 
 RANKS = [1, 2, 3, 4]
@@ -219,10 +219,10 @@ def test_dense_lattice_allocates_no_mask():
     assert _linear_scan(Lattice(shape=(2, 3))).cell_mask is None
 
 
-# -- LSTMND / GRUND ----------------------------------------------------------
+# -- LSTM / GRU --------------------------------------------------------------
 
 
-def test_lstmnd_rank_one_single_layer_equals_a_bare_lstm():
+def test_rank_one_single_layer_equals_a_bare_lstm():
     """With one axis, no norm, and no residual, the stack must reduce exactly
     to nn.LSTM — the sharpest check that the fold is transparent."""
     torch.manual_seed(0)
@@ -240,9 +240,9 @@ def test_lstmnd_rank_one_single_layer_equals_a_bare_lstm():
     assert torch.equal(scan(x), mixer.rnn(x)[0])
 
 
-@pytest.mark.parametrize("model_cls", [LSTMND, GRUND])
+@pytest.mark.parametrize("model_cls", [LSTM, GRU])
 @pytest.mark.parametrize("rank", RANKS)
-def test_nd_rnn_forward_and_backward(model_cls, rank):
+def test_rnn_forward_and_backward(model_cls, rank):
     lat = Lattice(shape=_shape(rank), time=True)
     model = model_cls(d_model=4, n_layers=lat.n_axes, lattice=lat)
     x = torch.randn(2, 3, *lat.shape, 4)
@@ -252,31 +252,132 @@ def test_nd_rnn_forward_and_backward(model_cls, rank):
     assert all(p.grad is not None for p in model.parameters())
 
 
-def test_nd_rnn_uses_a_cyclic_plan_by_default():
+def test_rnn_uses_a_cyclic_plan_by_default():
     lat = Lattice(shape=(2, 3), names=("h", "w"), time=True)
-    assert [s.axis for s in LSTMND(4, 4, lat).plan] == [0, 1, 2, 0]
+    assert [s.axis for s in LSTM(4, 4, lat).plan] == [0, 1, 2, 0]
 
 
-def test_nd_rnn_accepts_a_custom_plan():
+def test_rnn_accepts_a_custom_plan():
     lat = Lattice(shape=(2, 3), names=("h", "w"))
     plan = ScanPlan.from_list([("w", True), ("h", False)])
-    assert [(s.axis, s.reverse) for s in LSTMND(4, 2, lat, plan=plan).plan] == [
+    assert [(s.axis, s.reverse) for s in LSTM(4, 2, lat, plan=plan).plan] == [
         (1, True),
         (0, False),
     ]
 
 
-def test_nd_rnn_refuses_plan_and_bidirectional_together():
+def test_rnn_refuses_plan_and_bidirectional_together():
     lat = Lattice(shape=(2, 3))
     with pytest.raises(ValueError, match="not both"):
-        LSTMND(4, 2, lat, plan=ScanPlan.from_list([0]), bidirectional=True)
+        LSTM(4, 2, lat, plan=ScanPlan.from_list([0]), bidirectional=True)
 
 
-def test_nd_rnn_bidirectional_reaches_the_plan():
+def test_rnn_bidirectional_reaches_the_plan():
     lat = Lattice(shape=(2, 3), names=("h", "w"), time=True)
-    plan = LSTMND(4, 6, lat, bidirectional=("h", "w")).plan
+    plan = LSTM(4, 6, lat, bidirectional=("h", "w")).plan
     seen = {}
     for s in plan:
         seen.setdefault(s.axis, set()).add(s.reverse)
     assert seen[0] == {False}  # time stays causal
     assert seen[1] == {False, True} and seen[2] == {False, True}
+
+
+# -- 1-D is the N-D case with nothing to fold --------------------------------
+
+
+def test_no_lattice_gives_a_plain_sequence_model():
+    model = LSTM(d_model=4, n_layers=3)
+    assert model.lattice.rank == 0 and model.lattice.n_axes == 1
+    x = torch.randn(2, 7, 4)
+    assert model(x).shape == x.shape
+
+
+def test_no_lattice_accepts_varying_sequence_length():
+    """The degenerate lattice has no static size, so length stays dynamic."""
+    model = LSTM(d_model=4, n_layers=2)
+    for t in (1, 5, 50):
+        assert model(torch.randn(2, t, 4)).shape == (2, t, 4)
+
+
+def test_one_dimensional_stack_matches_stacked_lstm_layers():
+    """No norm, no residual: the stack must equal applying each nn.LSTM in
+    turn, which is what makes the 1-D path free of special-casing.
+
+    Equal to floating point, not bitwise, and the reason is worth knowing.
+    The fold reshapes, which needs a contiguous tensor, while nn.LSTM returns
+    a transposed view. So from layer two onward the mixer receives contiguous
+    input where the reference hands it a view, and torch's RNN kernels are not
+    bit-identical across memory layouts. A single layer *is* bitwise exact --
+    see the test above -- which is what pins the fold itself.
+    """
+    torch.manual_seed(0)
+    lat = Lattice(shape=(), time=True)
+    mixers = [LSTMMixer(4).double() for _ in range(3)]
+    it = iter(mixers)
+    scan = AxialScan(
+        mixer=lambda: next(it),
+        plan=ScanPlan.cyclic(("time",), 3),
+        lattice=lat,
+        d_model=4,
+        norm=False,
+        residual=False,
+    )
+    x = torch.randn(2, 6, 4, dtype=torch.float64)
+    ref = x
+    for m in mixers:
+        ref = m(ref)
+    assert torch.allclose(scan(x), ref, rtol=0, atol=1e-15)
+    assert (scan(x) - ref).abs().max() < 1e-15
+
+
+def test_time_only_lattice_rejects_a_validity_mask():
+    with pytest.raises(ValueError, match="no cells to mark valid"):
+        Lattice(shape=(), time=True, valid=torch.ones(1, dtype=torch.bool))
+
+
+def test_empty_shape_without_time_is_still_an_error():
+    with pytest.raises(ValueError, match="time=False"):
+        Lattice(shape=())
+
+
+# -- nd_method ---------------------------------------------------------------
+
+
+def test_nd_method_accepts_a_registered_name():
+    lat = Lattice(shape=(2, 3))
+    assert isinstance(LSTM(4, 2, lat, nd_method="axial_scan").nd, AxialScan)
+
+
+def test_nd_method_accepts_a_user_written_callable():
+    """A custom strategy needs no registration — that is the extension point."""
+    seen = {}
+
+    def only_first_axis(mixer, plan, lattice, d_model, **kw):
+        seen["called"] = True
+        return AxialScan(
+            mixer=mixer, plan=ScanPlan.from_list([0]), lattice=lattice, d_model=d_model
+        )
+
+    lat = Lattice(shape=(2, 3))
+    model = LSTM(4, 2, lat, nd_method=only_first_axis)
+    assert seen["called"] and len(model.plan) == 1
+    assert model(torch.randn(2, 2, 3, 4)).shape == (2, 2, 3, 4)
+
+
+def test_unknown_nd_method_names_the_registered_ones():
+    lat = Lattice(shape=(2, 3))
+    with pytest.raises(ValueError, match="axial_scan"):
+        LSTM(4, 2, lat, nd_method="cafa")
+
+
+def test_nd_method_must_be_a_name_or_callable():
+    lat = Lattice(shape=(2, 3))
+    with pytest.raises(TypeError, match="name or a callable"):
+        LSTM(4, 2, lat, nd_method=42)
+
+
+def test_registering_a_duplicate_nd_method_is_refused():
+    from torch_dimensions import register_nd_method
+
+    with pytest.raises(ValueError, match="already registered"):
+        register_nd_method("axial_scan", AxialScan)
