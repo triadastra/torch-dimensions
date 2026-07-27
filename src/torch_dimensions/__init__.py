@@ -11,7 +11,7 @@ Public names land here as each phase completes, and optional-dependency blocks
 are imported defensively so a CPU-only install stays importable.
 """
 
-from torch_dimensions import mixers
+from torch_dimensions import mixers, testing
 from torch_dimensions.compose import (
     ND_METHODS,
     AxialScan,
@@ -38,6 +38,7 @@ __all__ = [
     "axial_apply",
     "axial_scan",
     "mixers",
+    "testing",
     "register_nd_method",
     "resolve_nd_method",
 ]

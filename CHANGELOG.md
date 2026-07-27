@@ -51,4 +51,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed (breaking, pre-alpha)
 - `LSTMND` / `GRUND` are now `LSTM` / `GRU`, taking an optional `lattice=`.
 
-The conformance suite lands in Phase 4.
+- Phase 4 `td.testing.check_block` — the shared conformance suite, shipped as
+  public API so a user's own mixer or `nd_method` gets the same verification the
+  library runs on itself. Checks shape, gradients and `gradcheck`, rank-1
+  equivalence, absent-cell invariance, covariance with axis storage order, and
+  `torch.compile` numerics. A check that cannot run is reported as **skipped**,
+  never as passed.
+
+The data construction layer lands in Phase 5.
