@@ -14,4 +14,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   1-D sequences, scatter/gather for lattices whose cells are not all populated,
   broadcast validity masks, and per-axis valid counts for masked pooling.
 
-`ScanPlan` lands in Phase 2.
+- Phase 2 `ScanPlan`: per-layer sweep schedules as plain data — `cyclic`,
+  `paired`, and `from_list` constructors, name-or-index axes resolved against a
+  lattice, dict round-trip, and a warning when a plan leaves an axis unswept.
+
+### Changed
+- Data construction (`Lattice.from_coords`, windowing, the `LatticeSource`
+  protocol, `collate_lattice`) is now in scope as Phase 5, and models gain
+  `save`/`load` in Phase 8. Training loops remain permanently out of scope.
+
+### Removed
+- `ScanPlan.hilbert()` from the planned constructor list. A step is
+  `(axis, reverse)` and a space-filling curve is not axis-aligned, so it needs
+  a different step kind entirely. Deferred rather than stubbed.
+
+`AxialScan` and `LSTMND` land in Phase 3.
