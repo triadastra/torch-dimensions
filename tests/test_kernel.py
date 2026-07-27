@@ -1,0 +1,211 @@
+"""Phase 6 acceptance for the kernel family. See PLAN.md.
+
+The load-bearing test builds the joint operator explicitly as a Kronecker
+product and checks the factorized contraction equals it. That is only possible
+while the lattice is small, which is exactly why it happens now rather than
+after the attention modules are layered on top.
+"""
+
+import pytest
+import torch
+
+from torch_dimensions import Lattice
+from torch_dimensions.compose.kernel import axial_contract, kron_operator
+
+RANKS = [1, 2, 3, 4]
+
+
+def _lat(rank, **kw):
+    return Lattice(shape=tuple(range(2, 2 + rank)), **kw)
+
+
+def _kernels(lat, seed=0):
+    g = torch.Generator().manual_seed(seed)
+    return [torch.randn(s, s, generator=g, dtype=torch.float64) for s in lat.shape]
+
+
+def _contract_all(x, lat, kernels, valid=None):
+    for axis, k in enumerate(kernels):
+        x = axial_contract(x, lat, axis, k, valid=valid)
+    return x
+
+
+# -- the identity the whole family rests on ----------------------------------
+
+
+@pytest.mark.parametrize("rank", RANKS)
+def test_sequential_contraction_equals_the_kronecker_product(rank):
+    lat = _lat(rank)
+    kernels = _kernels(lat)
+    x = torch.randn(2, *lat.shape, 3, dtype=torch.float64)
+
+    got = _contract_all(x, lat, kernels)
+
+    # Independent reference: flatten the lattice and apply the joint operator.
+    joint = kron_operator(kernels)
+    flat = x.reshape(2, lat.n_cells, 3)
+    want = (joint @ flat).reshape(x.shape)
+
+    assert torch.allclose(got, want, atol=1e-10), (got - want).abs().max()
+
+
+def test_the_joint_operator_is_as_large_as_advertised():
+    """The reason the factorization exists: the explicit operator is quadratic
+    in cells, the factorized one only in axial size."""
+    lat = _lat(3)  # (2, 3, 4) -> 24 cells
+    joint = kron_operator(_kernels(lat))
+    assert joint.shape == (24, 24)
+    assert sum(k.numel() for k in _kernels(lat)) == 4 + 9 + 16 < 24 * 24
+
+
+@pytest.mark.parametrize("rank", RANKS)
+def test_contraction_order_does_not_matter_on_a_dense_lattice(rank):
+    """Kronecker factors commute across distinct axes; if ours do not, the
+    contraction is entangling axes it should not."""
+    lat = _lat(rank)
+    kernels = _kernels(lat)
+    x = torch.randn(2, *lat.shape, 3, dtype=torch.float64)
+
+    forward = _contract_all(x, lat, kernels)
+    backward = x
+    for axis in reversed(range(rank)):
+        backward = axial_contract(backward, lat, axis, kernels[axis])
+    assert torch.allclose(forward, backward, atol=1e-10)
+
+
+def test_identity_kernels_leave_the_input_alone():
+    lat = _lat(3)
+    eye = [torch.eye(s, dtype=torch.float64) for s in lat.shape]
+    x = torch.randn(2, *lat.shape, 3, dtype=torch.float64)
+    assert torch.allclose(_contract_all(x, lat, eye), x, atol=1e-12)
+
+
+def test_a_single_axis_contraction_is_a_plain_matmul():
+    lat = _lat(1)
+    k = _kernels(lat)[0]
+    x = torch.randn(2, 2, 3, dtype=torch.float64)
+    assert torch.allclose(axial_contract(x, lat, 0, k), k @ x, atol=1e-12)
+
+
+def test_contraction_works_with_a_time_axis():
+    lat = _lat(2, time=True)
+    kernels = _kernels(lat)
+    x = torch.randn(2, 4, *lat.shape, 3, dtype=torch.float64)
+    out = x
+    for axis, k in enumerate(kernels):
+        out = axial_contract(out, lat, lat.axis_names[axis + 1], k)
+    assert out.shape == x.shape
+
+
+def test_axes_can_be_named():
+    lat = Lattice(shape=(3, 4), names=("h", "w"))
+    k = torch.randn(4, 4, dtype=torch.float64)
+    x = torch.randn(2, 3, 4, 5, dtype=torch.float64)
+    assert torch.equal(axial_contract(x, lat, "w", k), axial_contract(x, lat, 1, k))
+
+
+def test_a_batched_kernel_broadcasts_over_the_folded_batch():
+    lat = _lat(2)
+    x = torch.randn(2, *lat.shape, 3, dtype=torch.float64)
+    m = x.shape[0] * lat.shape[1]  # folded rows when sweeping axis 0
+    k = torch.randn(m, 2, 2, dtype=torch.float64)
+    assert axial_contract(x, lat, 0, k).shape == x.shape
+
+
+# -- sparse renormalization --------------------------------------------------
+
+
+def _sparse(rank=2, seed=0):
+    shape = tuple(range(2, 2 + rank))
+    g = torch.Generator().manual_seed(seed)
+    valid = torch.rand(shape, generator=g) > 0.4
+    valid.reshape(-1)[0] = True
+    valid.reshape(-1)[-1] = True
+    return Lattice(shape=shape, valid=valid)
+
+
+def test_renormalization_makes_a_uniform_kernel_average_only_present_cells():
+    """With a uniform kernel the contraction is a mean; renormalized, it must
+    be the mean over cells that exist, not over all of them."""
+    valid = torch.tensor([[True, True, True], [True, False, False]])
+    lat = Lattice(shape=(2, 3), valid=valid)
+    x = torch.ones(1, 2, 3, 1, dtype=torch.float64) * lat.mask().to(torch.float64)
+    ones = torch.ones(3, 3, dtype=torch.float64)
+
+    out = axial_contract(x, lat, 1, ones, valid=lat.mask().to(torch.float64))
+    # Row 0 has three present cells all equal to 1 -> mean 1.
+    assert torch.allclose(out[0, 0], torch.ones(3, 1, dtype=torch.float64))
+    # Row 1 has one present cell equal to 1 -> still 1, not 1/3.
+    assert torch.allclose(out[0, 1], torch.ones(3, 1, dtype=torch.float64))
+
+
+def test_without_renormalization_structural_zeros_dilute_the_result():
+    """The control: this is what the renormalization is correcting."""
+    valid = torch.tensor([[True, True, True], [True, False, False]])
+    lat = Lattice(shape=(2, 3), valid=valid)
+    x = torch.ones(1, 2, 3, 1, dtype=torch.float64) * lat.mask().to(torch.float64)
+    ones = torch.ones(3, 3, dtype=torch.float64)
+
+    plain = axial_contract(x, lat, 1, ones)
+    assert torch.allclose(plain[0, 1], torch.ones(3, 1, dtype=torch.float64))
+    assert not torch.allclose(plain[0, 1] / 3, out_row := plain[0, 1])  # noqa: F841
+    # Unrenormalized, the mean over the line would be 1/3 rather than 1.
+    assert torch.allclose(plain[0, 1] / 3, torch.full((3, 1), 1 / 3, dtype=torch.float64))
+
+
+@pytest.mark.parametrize("rank", [2, 3])
+def test_absent_cell_values_cannot_influence_present_outputs(rank):
+    lat = _sparse(rank)
+    kernels = _kernels(lat)
+    mask = lat.mask().to(torch.float64)
+    x = torch.randn(2, *lat.shape, 3, dtype=torch.float64) * mask
+    noise = torch.randn_like(x) * 1e3 * (1 - mask)
+
+    a = _contract_all(x, lat, kernels, valid=mask) * mask
+    b = _contract_all(x + noise, lat, kernels, valid=mask) * mask
+    assert torch.equal(a, b), "absent cells leaked into present outputs"
+
+
+def test_a_line_with_no_present_cells_stays_finite():
+    """Dead lines divide by clamped zero; they must not produce NaN."""
+    valid = torch.tensor([[True, True], [False, False]])
+    lat = Lattice(shape=(2, 2), valid=valid)
+    mask = lat.mask().to(torch.float64)
+    x = torch.randn(1, 2, 2, 3, dtype=torch.float64) * mask
+    out = axial_contract(x, lat, 1, torch.randn(2, 2, dtype=torch.float64), valid=mask)
+    assert torch.isfinite(out).all()
+
+
+def test_renormalization_is_a_no_op_on_a_dense_lattice_with_a_stochastic_kernel():
+    """When every cell is present and the kernel rows sum to one, the
+    denominator is one everywhere and nothing changes."""
+    lat = _lat(2)
+    ones = torch.ones(*lat.shape, 1, dtype=torch.float64)
+    kernels = [torch.softmax(k, dim=-1) for k in _kernels(lat)]
+    x = torch.randn(2, *lat.shape, 3, dtype=torch.float64)
+    plain = _contract_all(x, lat, kernels)
+    renorm = _contract_all(x, lat, kernels, valid=ones)
+    assert torch.allclose(plain, renorm, atol=1e-10)
+
+
+# -- autograd ----------------------------------------------------------------
+
+
+def test_contraction_is_differentiable_through_both_arguments():
+    lat = _lat(2)
+    x = torch.randn(1, *lat.shape, 2, dtype=torch.float64, requires_grad=True)
+    kernels = [k.clone().requires_grad_(True) for k in _kernels(lat)]
+    _contract_all(x, lat, kernels).pow(2).sum().backward()
+    assert x.grad is not None
+    assert all(k.grad is not None for k in kernels)
+
+
+def test_gradcheck_passes_through_the_contraction():
+    lat = _lat(2)
+    kernels = _kernels(lat)
+
+    def fn(x):
+        return _contract_all(x, lat, kernels)
+
+    x = torch.randn(1, *lat.shape, 2, dtype=torch.float64, requires_grad=True)
+    assert torch.autograd.gradcheck(fn, (x,), fast_mode=True)

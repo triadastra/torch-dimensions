@@ -39,13 +39,16 @@ import torch.nn as nn
 from torch_dimensions.lattice import Lattice
 from torch_dimensions.plan import ScanPlan
 
+from torch_dimensions.compose.kernel import axial_contract, kron_operator  # isort: skip
 from torch_dimensions.compose.scan import AxialScan, axial_apply  # isort: skip
 
 __all__ = [
     "ND_METHODS",
     "AxialScan",
     "axial_apply",
+    "axial_contract",
     "axial_scan",
+    "kron_operator",
     "register_nd_method",
     "resolve_nd_method",
 ]

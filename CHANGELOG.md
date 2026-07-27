@@ -81,4 +81,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `examples/train_nd.py` — the full path from long-format rows to a trained
   model, in plain PyTorch.
 
-The kernel family lands in Phase 6.
+- Phase 6 (part 1) `axial_contract` and `kron_operator` — per-axis kernels
+  contracted into a joint operator that, on a dense lattice, is exactly the
+  Kronecker product. Verified against the explicitly materialized operator at
+  ranks 1-4. Sparse lattices renormalize each output line by the kernel mass
+  landing on present cells, generalized to arbitrary rank rather than keyed to
+  one.
+
+The attention modules land next.
