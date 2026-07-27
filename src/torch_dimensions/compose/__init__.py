@@ -8,15 +8,15 @@ model's 1-D mixer and the lattice, and returns a module. Signature::
 Three strategies fit that contract, and they differ in *who handles which
 axis*:
 
-``axial_scan``
+``td.axial_scan``
     The mixer sweeps every axis, one per layer. Mamba-ND and the N-D RNNs.
 
-``axial_kernel`` (Phase 6)
+``td.axial_attention`` / ``td.cafa`` (Phase 6)
     Per-axis kernels contracted together — the joint operator is a Kronecker
     product. The operator *is* the kernel, so there is no mixer slot: axial
     attention and CaFA are their own thing, not an LSTM wearing a hat.
 
-``hybrid`` (Phase 6)
+hybrid — the same two names, given a mixer (Phase 6)
     The mixer owns the sequence axis; a kernel-family operator owns the
     lattice axes. Attention or CaFA mixes across the grid at each timestep,
     then the RNN or SSM runs along time. This is the shape of most real
@@ -24,8 +24,10 @@ axis*:
     ``LSTM(nd_method="cafa")`` is meaningful — CaFA never consumes the LSTM,
     it just handles the axes the LSTM does not.
 
-A user-supplied callable is a first-class strategy; registration only exists
-so a name can be written in a config file.
+Strategies are plain functions, exported at top level: ``td.axial_scan`` today,
+``td.axial_attention`` and ``td.cafa`` when the kernel family lands. A
+user-supplied function is a first-class strategy on exactly the same footing;
+the string registry exists only because YAML cannot hold a callable.
 """
 
 from __future__ import annotations
@@ -34,18 +36,52 @@ from collections.abc import Callable
 
 import torch.nn as nn
 
-from torch_dimensions.compose.scan import AxialScan, axial_apply
+from torch_dimensions.lattice import Lattice
+from torch_dimensions.plan import ScanPlan
 
-__all__ = ["ND_METHODS", "AxialScan", "axial_apply", "register_nd_method", "resolve_nd_method"]
+from torch_dimensions.compose.scan import AxialScan, axial_apply  # isort: skip
+
+__all__ = [
+    "ND_METHODS",
+    "AxialScan",
+    "axial_apply",
+    "axial_scan",
+    "register_nd_method",
+    "resolve_nd_method",
+]
+
+
+def axial_scan(
+    mixer: Callable[[], nn.Module] | nn.Module,
+    plan: ScanPlan,
+    lattice: Lattice,
+    d_model: int,
+    **kwargs,
+) -> nn.Module:
+    """Sweep the mixer along one axis per layer — the default strategy.
+
+    ``td.LSTM(..., nd_method=td.axial_scan)``. This is the Mamba-ND / MDRNN
+    shape: the model's own 1-D operator handles every axis, and the schedule
+    decides which axis and which direction each layer gets.
+
+    A strategy is a plain function, not a class, because not all of them wrap
+    a single module — a hybrid strategy composes two operators over different
+    axes. Passing your own function here needs no registration.
+    """
+    return AxialScan(mixer=mixer, plan=plan, lattice=lattice, d_model=d_model, **kwargs)
+
 
 ND_METHODS: dict[str, Callable[..., nn.Module]] = {
-    "axial_scan": AxialScan,
+    "axial_scan": axial_scan,
 }
 
 
 def register_nd_method(name: str, factory: Callable[..., nn.Module]) -> None:
-    """Make a composition strategy addressable by name, so it can be selected
-    from config as well as from Python."""
+    """Make a composition strategy addressable by name.
+
+    Only needed for config files, which cannot hold a Python callable. In
+    Python, pass the function itself.
+    """
     if name in ND_METHODS:
         raise ValueError(f"nd_method {name!r} is already registered")
     ND_METHODS[name] = factory

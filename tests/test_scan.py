@@ -343,7 +343,24 @@ def test_empty_shape_without_time_is_still_an_error():
 # -- nd_method ---------------------------------------------------------------
 
 
-def test_nd_method_accepts_a_registered_name():
+def test_nd_method_accepts_the_exported_function():
+    """The documented spelling: a strategy is a function, not a string."""
+    import torch_dimensions as td
+
+    lat = Lattice(shape=(2, 3))
+    assert isinstance(LSTM(4, 2, lat, nd_method=td.axial_scan).nd, AxialScan)
+
+
+def test_the_default_strategy_is_that_same_function():
+    import torch_dimensions as td
+
+    lat = Lattice(shape=(2, 3))
+    explicit = LSTM(4, 2, lat, nd_method=td.axial_scan)
+    assert type(LSTM(4, 2, lat).nd) is type(explicit.nd)
+
+
+def test_nd_method_still_accepts_a_registered_name_for_config():
+    """YAML cannot hold a callable, so names keep working."""
     lat = Lattice(shape=(2, 3))
     assert isinstance(LSTM(4, 2, lat, nd_method="axial_scan").nd, AxialScan)
 
@@ -377,7 +394,8 @@ def test_nd_method_must_be_a_name_or_callable():
 
 
 def test_registering_a_duplicate_nd_method_is_refused():
+    import torch_dimensions as td
     from torch_dimensions import register_nd_method
 
     with pytest.raises(ValueError, match="already registered"):
-        register_nd_method("axial_scan", AxialScan)
+        register_nd_method("axial_scan", td.axial_scan)

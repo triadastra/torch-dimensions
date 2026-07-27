@@ -16,6 +16,7 @@ from torch_dimensions.compose import (
     ND_METHODS,
     AxialScan,
     axial_apply,
+    axial_scan,
     register_nd_method,
     resolve_nd_method,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "ScanPlan",
     "Step",
     "axial_apply",
+    "axial_scan",
     "mixers",
     "register_nd_method",
     "resolve_nd_method",

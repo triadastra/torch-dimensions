@@ -40,8 +40,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `LSTM` and `GRU` — one class each covering 1-D and N-D, plus `LSTMMixer` /
   `GRUMixer` adapters over `torch.nn`. Direction is the schedule's job, so
   neither adapter sets `bidirectional=True` on the underlying RNN.
-- `nd_method`: how a model's extra axes are handled, given as a registered name
-  or any user-written callable. `register_nd_method` / `resolve_nd_method`.
+- `nd_method`: how a model's extra axes are handled. Strategies are plain
+  functions exported at top level (`td.axial_scan`, with `td.axial_attention`
+  and `td.cafa` to follow), and a user-written function is on the same footing.
+  Names still resolve, but only because YAML cannot hold a callable.
 - `Lattice(shape=(), time=True)` — a lattice that is only a sequence. Its
   permutation is the identity, so the 1-D path needs no special-casing and
   `td.LSTM(d_model, n_layers)` with no lattice is an ordinary sequence model.

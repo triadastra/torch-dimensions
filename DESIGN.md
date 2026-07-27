@@ -28,7 +28,7 @@ The mechanism splits into composition strategies, selected per model by `nd_meth
 
 **`AxialKernel` — contraction.** Build one kernel `A_ax ∈ R^{S_ax × S_ax}` per axis, contract them into the value tensor one axis at a time. On a dense lattice the joint operator is exactly the Kronecker product `A_0 ⊗ A_1 ⊗ … ⊗ A_{n-1}`, so cost is quadratic in *axial* size, not in `prod(shape)`.
 
-**Hybrid — different operators on different axes.** A kernel-family operator mixes across the lattice at each timestep; the 1-D mixer then runs along time. This is the shape of most real forecasting models over a categorical lattice, and it is why `LSTM(nd_method="cafa")` is meaningful: CaFA never consumes the LSTM, it handles the axes the LSTM does not.
+**Hybrid — different operators on different axes.** A kernel-family operator mixes across the lattice at each timestep; the 1-D mixer then runs along time. This is the shape of most real forecasting models over a categorical lattice, and it is why `LSTM(nd_method=td.cafa)` is meaningful: CaFA never consumes the LSTM, it handles the axes the LSTM does not.
 
 Everything else in the library is a mixer, a plan, or a readout.
 
@@ -56,7 +56,7 @@ Autograd is free. Composed torch ops give backward automatically; the upstream k
 
 `LSTM` and `AxialTransformer` take the same constructor shape. That is the point.
 
-There is no `LSTMND`. `td.LSTM(d_model, n_layers)` with no lattice is an ordinary sequence model; adding `lattice=` makes the same class N-dimensional, because a lattice with no spatial axes has an identity permutation and the 1-D case is the N-D case with nothing to fold. How the extra axes are handled is `nd_method`'s business — a registered name, or any callable a user writes.
+There is no `LSTMND`. `td.LSTM(d_model, n_layers)` with no lattice is an ordinary sequence model; adding `lattice=` makes the same class N-dimensional, because a lattice with no spatial axes has an identity permutation and the 1-D case is the N-D case with nothing to fold. How the extra axes are handled is `nd_method`'s business. Strategies are plain functions exported at top level — `td.axial_scan`, later `td.axial_attention` and `td.cafa` — and a user's own function sits on exactly the same footing. Names are accepted too, but only because YAML cannot hold a callable.
 
 ### Level 2 — mixer + plan
 

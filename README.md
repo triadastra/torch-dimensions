@@ -39,8 +39,9 @@ Drop the `lattice=` and the same class is an ordinary 1-D LSTM — there is no s
 How the extra axes get handled is one argument:
 
 ```python
-td.LSTM(d_model=128, n_layers=12, lattice=lattice, nd_method="axial_scan")  # RNN sweeps every axis
-td.LSTM(d_model=128, n_layers=12, lattice=lattice, nd_method=my_traversal)  # your own strategy
+td.LSTM(..., lattice=lattice, nd_method=td.axial_scan)  # the RNN sweeps every axis
+td.LSTM(..., lattice=lattice, nd_method=td.cafa)  # CaFA across the lattice, RNN along time
+td.LSTM(..., lattice=lattice, nd_method=my_traversal)  # your own function
 ```
 
 ## Scope
