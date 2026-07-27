@@ -2,7 +2,7 @@
 
 N-dimensional sequence models for PyTorch — state-space models, RNNs, and transformers over arbitrary lattices, behind one API.
 
-> **Status: pre-alpha.** Design and build plan are complete; no functionality is implemented yet. See [PLAN.md](PLAN.md) for build order and [DESIGN.md](DESIGN.md) for the architecture.
+> **Status: pre-alpha.** `Lattice` (the N-D bookkeeping layer) is built and tested; models are not. See [PLAN.md](PLAN.md) for build order and [DESIGN.md](DESIGN.md) for the architecture.
 
 ## Why
 

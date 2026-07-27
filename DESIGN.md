@@ -1,6 +1,6 @@
 # torch-dimensions — Design
 
-**Status:** design draft, nothing implemented.
+**Status:** Phases 0–1 built (`Lattice`); the rest is design. See [PLAN.md](PLAN.md) for build order.
 **Positioning:** composition layer. We depend on `mamba-ssm` / `flash-linear-attention` / `state-spaces/s4` for 1-D kernels. We own the N-D structure, the registry, the config surface, and the `nn.Module` contract.
 
 ---
@@ -141,8 +141,9 @@ torch_dimensions/
     rnn.py            LSTM, GRU                (adapters over torch.nn)
     attn.py           self-attn, cross-attn, factorized axial kernel
   models/             MambaND, S4ND, AxialTransformer, LSTMND, GRUND
+  data/               LatticeSource protocol, long-format tables, windowing, collate
   registry.py         register / build / list
-  config.py           dataclass schemas + YAML loader
+  config.py           dataclass schemas + YAML loader + save/load
   testing.py          shared conformance suite
 ```
 
@@ -166,20 +167,41 @@ One parametrized suite every registered block must pass. This is what keeps an N
 
 ## 7. v0.1 scope
 
-**In:** `Lattice` (dense + sparse), `ScanPlan`, `AxialScan`, `AxialKernel`, mixers for LSTM/GRU/attention (pure torch, no optional deps) and Mamba-2/S4 (adapters), models `LSTMND`/`GRUND`/`AxialTransformer`/`MambaND`/`S4ND`, registry, config, conformance suite. Ranks 1–4.
+**In:** `Lattice` (dense + sparse), `ScanPlan`, `AxialScan`, `AxialKernel`, mixers for LSTM/GRU/attention (pure torch, no optional deps) and Mamba-2/S4 (adapters), models `LSTMND`/`GRUND`/`AxialTransformer`/`MambaND`/`S4ND`, the `data/` construction layer (§8), registry, config, save/load, conformance suite. Ranks 1–4.
 
 **Deferred, deliberately:**
 
 - **Stateful stepping.** Autoregressive decode needs per-axis recurrent state caching, and along a *non-time* axis "state" is not well-defined — you would be caching a cross-section, not a prefix. This is a genuine open research question, not an implementation gap. v0.1 is forward-only; the README must say so.
 - **Custom kernels.** The composition-layer decision. Revisit only when profiling shows permute/contiguous dominating, at which point the fix is a fused permute+scan kernel, not a reimplemented SSM.
 - **Ranks ≥ 5.** Nothing forbids them; nothing tests them.
-- **Training loops, datasets, trainers.** Out of scope permanently. This is a layer library.
+- **Training loops, optimizers, losses, schedules.** Out of scope permanently. `data/` builds lattices; it never trains them (§8).
 
 **Known risk.** The permutes are not free: `AxialScan` needs two `.contiguous()` calls per layer, so a 12-layer ND model does ~24 full-tensor copies. Benchmark this before advertising performance numbers — it may well dominate the mixer at small `d_model`.
 
 ---
 
-## 8. Open questions
+## 8. Data — construction, not training
+
+One distinction scopes this entire subpackage:
+
+> **Building a lattice from data is lattice construction, which this library already owns. Running a training loop is not.**
+
+The gap is concrete. A user holding long-format rows — `(coord₀, coord₁, …, t, features…)` — must otherwise hand-write the coordinate-to-index mapping, infer the shape, build the validity mask, and scatter into `(B, T, *shape, H)`. That is exactly the code that silently produces a *mis-shuffled* lattice: it trains, it converges, and the numbers are quietly wrong. It is the same bug class §3 exists to eliminate, sitting one layer up.
+
+Four pieces, each usable alone:
+
+- **`Lattice.from_coords`** — infer shape, validity mask, and categorical vocabularies from observed coordinates.
+- **`LatticeWindow`** — windowing over time. Pure index arithmetic, no I/O.
+- **`LatticeSource`** — a **protocol, not a base class**. This is where customization comes from: memory-mapped arrays, zarr, HDF5, or a database all batch correctly if they satisfy it. Ship the protocol plus two reference implementations.
+- **`collate_lattice`** — stacks windows, keeping the `Lattice` *out* of the batch since it is static metadata rather than per-sample data.
+
+Customization comes from composition, never from a god-class with forty constructor arguments.
+
+**Deliberately absent:** dataset downloads, normalization policy (a hook, shipping nothing), augmentation, splitting strategy, trainers, Lightning integration.
+
+---
+
+## 9. Open questions
 
 1. **Axis order when `time=True`.** Is time axis 0 of the lattice, or a separate leading dim? Existing implementations special-case it into the scan schedule. Cleaner: time is a normal named axis, and causality is a property of the *mixer*, not the axis.
 2. **Does `AxialKernel` need `AxialScan`'s per-layer alternation**, or is one pass over all axes sufficient? Factorized attention does one pass; Mamba-ND alternates across 12 layers. Probably a plan-level choice rather than two mechanisms.

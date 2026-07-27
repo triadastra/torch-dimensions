@@ -88,7 +88,30 @@ The seven checks are specified in [DESIGN.md §6](DESIGN.md). Packaged as `td.te
 
 ---
 
-## Phase 5 — `AxialKernel` and axial attention  ·  L  ·  needs Phase 4
+## Phase 5 — Data: getting real data into lattice layout  ·  M  ·  needs Phase 4
+
+Scoped by one distinction: **building a lattice from data is lattice construction, which this library already owns. Running a training loop is not.** Everything here is the former.
+
+The gap is concrete. A user holding long-format rows — `(coord₀, coord₁, …, t, features…)` — must currently hand-write the coordinate-to-index mapping, infer the shape, build the valid mask, and scatter into `(B, T, *shape, H)`. That is precisely the code that silently produces a *mis-shuffled* lattice: it trains, it converges, the numbers are quietly wrong. Same bug class Phase 1 exists to eliminate, one layer up, currently unowned.
+
+Four pieces, each usable alone:
+
+- **`Lattice.from_coords(coords, names=...)`** — infer shape, valid mask, and categorical vocabularies from observed coordinates. Returns the lattice plus the mapping needed to place rows.
+- **`LatticeWindow`** — windowing over time (`input_len`, `horizon`, `stride`, split boundaries). Pure index arithmetic, no I/O, independently testable.
+- **`LatticeSource`** — a small protocol, *not* a base class. This is where customization comes from: a memory-mapped array, zarr, HDF5, or a database all batch correctly as long as they satisfy it. Ship the protocol plus two reference implementations (in-memory tensor, long-format table).
+- **`collate_lattice`** — stacks windows and keeps the `Lattice` *out* of the batch, since it is static metadata rather than per-sample data.
+
+Customization comes from composition, never from a god-class with forty constructor arguments.
+
+**Deliberately absent:** dataset downloads, normalization policy (a hook, shipping nothing), augmentation, splitting strategy, trainers, Lightning integration.
+
+**Placement rationale:** after Phase 4 so the data API is designed against a real, already-validated consumer rather than a guess — the same reasoning that puts config last. This is also the first phase that makes an end-to-end example runnable: load → model → loss → backward.
+
+**Acceptance:** a long-format table with deliberately missing combinations round-trips to a lattice and back with values landing in the right cells — verified against an independently constructed dense reference, not just a shape check. Windows tile the time axis with no gaps or overlaps beyond the requested stride. A user-supplied source satisfying only the protocol batches correctly.
+
+---
+
+## Phase 6 — `AxialKernel` and axial attention  ·  L  ·  needs Phase 4
 
 The hardest math in the project. Three strictly ordered steps, each independently verifiable:
 
@@ -102,7 +125,7 @@ Generalizing rank-locked contraction tables to arbitrary N is the largest single
 
 ---
 
-## Phase 6 — SSM adapters  ·  L  ·  needs Phase 4  ·  **needs a GPU**
+## Phase 7 — SSM adapters  ·  L  ·  needs Phase 4  ·  **needs a GPU**
 
 - Thin adapters over `mamba-ssm` (Mamba-2), `state-spaces/s4`, and Mamba-3.
 - Defensive imports: a missing optional dep unregisters that block and leaves everything else importable. A missing real implementation **fails loudly and never silently substitutes a stub**.
@@ -114,19 +137,22 @@ Generalizing rank-locked contraction tables to arbitrary N is the largest single
 
 ---
 
-## Phase 7 — Registry and config  ·  M  ·  needs Phases 5–6
+## Phase 8 — Registry, config, and save/load  ·  M  ·  needs Phases 6–7
 
 Deliberately late. Now that every block signature has settled, the config schema describes reality instead of predicting it.
 
 - `register()` / `build()` / `list_blocks()`.
 - One dataclass schema per block; validation errors name the offending key and list valid ones.
 - YAML loader.
+- **`model.save(path)` / `td.load(path)`** — architecture *and* weights in one file, so a checkpoint reconstructs its own model without the user re-specifying the config. This belongs here rather than earlier: it is the registry plus the config schema, and it cannot exist before either.
 
-**Acceptance:** every model in the library round-trips config → model → config. Unknown keys are a hard error, not a silent ignore.
+Save/load is where a config system quietly rots, so two properties are non-negotiable. A checkpoint records the library version and refuses to load silently under an incompatible one. And a lattice's validity mask travels *with* the checkpoint — a model restored against a different sparsity pattern is a wrong model, not a warning.
+
+**Acceptance:** every model round-trips config → model → config, and save → load → identical outputs on identical input, verified bitwise. Unknown config keys are a hard error, not a silent ignore.
 
 ---
 
-## Phase 8 — Acceptance against a real workload  ·  M  ·  needs Phase 7
+## Phase 9 — Acceptance against a real workload  ·  M  ·  needs Phase 8
 
 **The phase that decides whether the abstraction is right.** Reproduce a published result from one of the source papers — an S4ND or Mamba-ND benchmark number on a public dataset — using only torch-dimensions blocks and config.
 
@@ -136,7 +162,7 @@ If the numbers land, the generalization preserved semantics. If they do not, the
 
 ---
 
-## Phase 9 — Benchmarks  ·  M  ·  needs Phase 8
+## Phase 10 — Benchmarks  ·  M  ·  needs Phase 9
 
 Measure the known risk before making any performance claim: two `.contiguous()` calls per layer means a 12-layer ND model does ~24 full-tensor copies, which plausibly dominates the mixer at small `d_model`.
 
@@ -148,7 +174,7 @@ Measure the known risk before making any performance claim: two `.contiguous()` 
 
 ---
 
-## Phase 10 — Docs and v0.1.0  ·  M  ·  needs Phase 9
+## Phase 11 — Docs and v0.1.0  ·  M  ·  needs Phase 10
 
 - README: the unification table, 10-line quickstart, honest scope limits.
 - "Adding a mixer" guide — the extension point is the product, so this page matters more than the API reference.
@@ -161,11 +187,12 @@ Measure the known risk before making any performance claim: two `.contiguous()` 
 ## Critical path
 
 ```
-0 ──► 1 ──► 2 ──► 3 ──► 4 ──┬──► 5 ──┬──► 7 ──► 8 ──► 9 ──► 10
-                            └──► 6 ──┘
+                            ┌──► 5 ──┐
+0 ──► 1 ──► 2 ──► 3 ──► 4 ──┼──► 6 ──┼──► 8 ──► 9 ──► 10 ──► 11
+                            └──► 7 ──┘
 ```
 
-Phases 5 and 6 are independent once the suite exists — 6 is the one to defer if GPU access is intermittent, since everything through Phase 5 is CPU-only. That is deliberate: **the library is useful and shippable without a single CUDA kernel.**
+Phases 5, 6, and 7 are independent once the conformance suite exists. Phase 7 is the one to defer if GPU access is intermittent, since everything else is CPU-only. That is deliberate: **the library is useful and shippable without a single CUDA kernel.**
 
 ---
 
@@ -186,8 +213,14 @@ torch-dimensions/
 │   ├── lattice.py                  Lattice: axes, names, valid mask, permute/scatter/gather
 │   ├── plan.py                     ScanPlan + constructors
 │   ├── registry.py                 register / build / list_blocks
-│   ├── config.py                   dataclass schemas + YAML loader
+│   ├── config.py                   dataclass schemas + YAML loader + save/load
 │   ├── testing.py                  check_block() — the conformance suite, public
+│   │
+│   ├── data/                       BUILDS lattices; never trains them
+│   │   ├── source.py               LatticeSource protocol + in-memory reference
+│   │   ├── table.py                long-format rows -> Lattice + dense tensor
+│   │   ├── window.py               LatticeWindow — time windowing, pure index math
+│   │   └── collate.py              collate_lattice
 │   │
 │   ├── compose/
 │   │   ├── scan.py                 AxialScan — sequential 1-D passes
@@ -210,6 +243,8 @@ torch-dimensions/
 │   ├── test_conformance.py         parametrized: every block × rank 1–4 × dense/sparse
 │   ├── test_kronecker.py           factorized == explicit ⊗
 │   ├── test_equivalence.py         rank-1 == the underlying 1-D module
+│   ├── test_data.py                coords -> lattice -> back, against a dense reference
+│   ├── test_save_load.py           checkpoint reconstructs its own model, bitwise
 │   └── gpu/                        @pytest.mark.gpu — SSM adapters
 │
 ├── benchmarks/
@@ -228,4 +263,4 @@ Three properties of this layout are load-bearing:
 
 - **`mixers/` are adapters.** That directory is where the composition-layer decision either holds or quietly collapses into a reimplementation.
 - **`testing.py` is public API**, not `tests/`. Users adding their own mixer get the same verification the library uses on itself.
-- **No `training/`, no `data/`, no trainers — ever.** This is a layer library.
+- **`data/` builds lattices; it does not train them.** The dividing line is that constructing a lattice from real data is this library's own object being constructed, whereas optimizers, losses, schedules, and training loops belong to the caller. No trainers, ever.
