@@ -25,7 +25,7 @@ import torch.nn as nn
 from torch_dimensions.lattice import Lattice
 from torch_dimensions.plan import ScanPlan
 
-__all__ = ["Report", "Result", "check_block"]
+__all__ = ["Report", "Result", "check_block", "check_trainable"]
 
 Factory = Callable[..., nn.Module]
 
@@ -273,3 +273,79 @@ class _Skip(Exception):
     Deliberately not silent: a skipped check appears in the report, so
     "we never ran that one" can never read as "that one passed".
     """
+
+
+def check_trainable(
+    factory: Factory,
+    *,
+    d_model: int = 16,
+    steps: int = 200,
+    lr: float = 1e-2,
+    batch: int = 8,
+    seq: int = 5,
+    min_ratio: float = 3.0,
+    seed: int = 0,
+    raise_on_failure: bool = True,
+) -> dict[str, float]:
+    """Fit a small task that genuinely needs N-D mixing, and check it learns.
+
+    Separate from :func:`check_block` on purpose. That one asks *is this
+    correct* — deterministic, exact, fast. This one asks *does this learn*,
+    which is stochastic, slower, and catches a different failure entirely: a
+    block can have flawless gradients, pass ``gradcheck``, and still never
+    converge because of initialization, masking that kills the signal, or
+    activations that blow up. "No trainer in the library" must not quietly
+    become "nobody ever checked that it trains".
+
+    The task is a cumulative sum along the **last lattice axis**, so a model
+    that never sweeps that axis cannot solve it — the check has a meaningful
+    negative, not just a number that goes down.
+
+    Fresh data is drawn every step and the reported score is on a held-out
+    batch. With a fixed training set this test is worthless: a model with
+    enough capacity memorizes eight examples without doing any axial mixing at
+    all, and every plan passes.
+
+    Returns a dict of ``initial``, ``final``, ``held_out`` and ``ratio``.
+    """
+    lat = Lattice(shape=(3, 4), names=("h", "w"), time=True)
+    torch.manual_seed(seed)
+    block = factory(lat, d_model)
+    head = nn.Linear(d_model, 1)
+    opt = torch.optim.Adam([*block.parameters(), *head.parameters()], lr=lr)
+
+    def draw(g):
+        x = torch.randn(batch, seq, *lat.shape, d_model, generator=g)
+        return x, x[..., :1].cumsum(dim=lat.tensor_dim("w"))
+
+    g = torch.Generator().manual_seed(seed)
+    initial = final = 0.0
+    for i in range(steps):
+        x, y = draw(g)
+        loss = (head(block(x)) - y).pow(2).mean()
+        if i == 0:
+            initial = loss.item()
+        final = loss.item()
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+
+    block.eval()
+    with torch.no_grad():
+        x, y = draw(torch.Generator().manual_seed(seed + 9973))
+        held_out = (head(block(x)) - y).pow(2).mean().item()
+
+    ratio = initial / max(held_out, 1e-12)
+    result = {
+        "initial": initial,
+        "final": final,
+        "held_out": held_out,
+        "ratio": ratio,
+    }
+    if raise_on_failure and ratio < min_ratio:
+        raise AssertionError(
+            f"block did not learn: held-out loss {held_out:.4f} vs initial {initial:.4f} "
+            f"({ratio:.1f}x, needed {min_ratio}x). Gradients can be correct and the "
+            "block still not converge."
+        )
+    return result

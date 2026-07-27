@@ -44,13 +44,32 @@ td.LSTM(..., lattice=lattice, nd_method=td.cafa)  # CaFA across the lattice, RNN
 td.LSTM(..., lattice=lattice, nd_method=my_traversal)  # your own function
 ```
 
+## Trainable, without a trainer
+
+The library ships no training loop — optimizers, schedules and losses are yours. What it does guarantee is that its models are ordinary `nn.Module`s that converge with ordinary PyTorch, and that guarantee is tested rather than asserted:
+
+```bash
+python examples/train_nd.py
+```
+
+```
+LatticeTable(T=120, shape=(3, 2), F=1, cells=5/6)
+plan: ScanPlan(0+, 1+, 2+, 0+, 1-, 2-)
+epoch  0  train mse 0.47440
+epoch 14  train mse 0.00717
+held-out mse 0.01411
+absent-cell outputs: max |x| = 0.0e+00
+```
+
+`td.testing.check_trainable(factory)` runs the same guarantee against your own block. It fits a task that genuinely needs axial mixing — a cumulative sum along one lattice axis — on freshly drawn data, and scores on a held-out batch. A block that never sweeps that axis fails it, which is what makes passing it mean something.
+
 ## Scope
 
 **This is a composition layer.** Fused kernels come from `mamba-ssm`, `flash-linear-attention`, and `state-spaces/s4` — we adapt them, we do not reimplement them. What this library owns is the N-D structure, the sparse-lattice handling, the registry, and the `nn.Module` contract.
 
 `torch` is the only required dependency; every kernel is an optional extra, so a CPU-only install gets a working library.
 
-**Not in v0.1:** autoregressive stepping (forward-only), ranks ≥ 5 (untested), and training loops or datasets of any kind (permanently out of scope — this is a layer library).
+**Not in v0.1:** autoregressive stepping (forward-only) and ranks ≥ 5 (untested). Training loops, optimizers, losses and schedules are out of scope permanently — `td.data` builds lattices from your data, it never trains them.
 
 ## License
 

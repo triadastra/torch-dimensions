@@ -74,4 +74,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   which directions each axis is *actually* swept in, and which axes a plan never
   sweeps. Foundation for the viewer ([VIEWER.md](VIEWER.md)).
 
+- `td.testing.check_trainable` — fits a small task that genuinely needs axial
+  mixing and checks the block learns it. Separate from `check_block`, which asks
+  whether a block is *correct*; this asks whether it *converges*, which can fail
+  independently through initialization, masking, or activation scale.
+- `examples/train_nd.py` — the full path from long-format rows to a trained
+  model, in plain PyTorch.
+
 The kernel family lands in Phase 6.
