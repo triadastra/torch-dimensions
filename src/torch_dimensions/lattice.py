@@ -1,0 +1,293 @@
+"""The N-D lattice: axis naming, permutation, and sparse-cell bookkeeping.
+
+Every block in the library delegates its axis handling here, so that no model
+ever hardcodes a rank or an axis meaning. This module holds no learnable
+parameters and builds no modules — it is pure tensor bookkeeping, and it is
+deliberately the most heavily tested part of the package. Almost every bug in
+an N-D model presents as "the model is bad" and is actually an axis-order bug.
+
+Canonical tensor layout::
+
+    (B, [T,] *shape, H)
+
+Batch first, an optional time axis when ``time=True``, then one dim per lattice
+axis, then features last. Time is a normal sweepable axis in every respect
+except that its length is dynamic and therefore absent from ``shape``;
+causality is a property of the mixer, not of the axis.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from typing import NamedTuple
+
+import torch
+
+__all__ = ["Lattice", "Restore"]
+
+AxisSpec = int | str
+
+
+class Restore(NamedTuple):
+    """Opaque handle returned by :meth:`Lattice.to_sequence`, consumed by
+    :meth:`Lattice.from_sequence` to undo the fold."""
+
+    axis: int
+    shape: torch.Size
+
+
+@dataclass(eq=False)
+class Lattice:
+    """Describes the N-D grid a block operates over.
+
+    Args:
+        shape: size of each lattice axis. Excludes batch, features, and time.
+        names: per-axis names; defaults to ``("dim0", "dim1", ...)``. Used for
+            readable axis references (``lattice.permutation("width")``).
+        valid: optional bool tensor of shape ``shape`` marking which cells
+            exist. ``None`` means dense. This is what lets blocks operate on
+            grids that are not fully populated.
+        time: prepend a dynamic-length time axis named ``"time"``.
+    """
+
+    shape: tuple[int, ...]
+    names: tuple[str, ...] | None = None
+    valid: torch.Tensor | None = None
+    time: bool = False
+
+    def __post_init__(self) -> None:
+        self.shape = tuple(int(s) for s in self.shape)
+        if not self.shape:
+            raise ValueError("a lattice needs at least one axis; got shape=()")
+        if any(s <= 0 for s in self.shape):
+            raise ValueError(f"lattice axes must be positive; got shape={self.shape}")
+
+        if self.names is None:
+            self.names = tuple(f"dim{i}" for i in range(len(self.shape)))
+        else:
+            self.names = tuple(str(n) for n in self.names)
+            if len(self.names) != len(self.shape):
+                raise ValueError(
+                    f"got {len(self.names)} names for {len(self.shape)} axes: "
+                    f"names={self.names}, shape={self.shape}"
+                )
+        if len(set(self.names)) != len(self.names):
+            raise ValueError(f"axis names must be unique; got {self.names}")
+        if self.time and "time" in self.names:
+            raise ValueError("'time' is reserved when time=True; rename that lattice axis")
+
+        if self.valid is not None:
+            if tuple(self.valid.shape) != self.shape:
+                raise ValueError(
+                    f"valid mask has shape {tuple(self.valid.shape)}, expected {self.shape}"
+                )
+            self.valid = self.valid.to(torch.bool)
+            if not bool(self.valid.any()):
+                raise ValueError("valid mask selects no cells")
+
+        self._cache: dict[str, torch.Tensor] = {}
+
+    # -- structure ----------------------------------------------------------
+
+    @property
+    def rank(self) -> int:
+        """Number of lattice axes, excluding time."""
+        return len(self.shape)
+
+    @property
+    def n_axes(self) -> int:
+        """Number of sweepable axes, including time when present."""
+        return self.rank + (1 if self.time else 0)
+
+    @property
+    def axis_names(self) -> tuple[str, ...]:
+        """Sweepable axis names, time first when present."""
+        assert self.names is not None
+        return ("time", *self.names) if self.time else self.names
+
+    @property
+    def tensor_ndim(self) -> int:
+        """Rank of a well-formed tensor for this lattice: batch + axes + features."""
+        return self.n_axes + 2
+
+    @property
+    def n_cells(self) -> int:
+        """Total lattice cells, valid or not."""
+        return math.prod(self.shape)
+
+    @property
+    def is_dense(self) -> bool:
+        return self.valid is None
+
+    @property
+    def n_valid(self) -> int:
+        """Number of cells that exist. Equals :attr:`n_cells` when dense."""
+        return self.n_cells if self.is_dense else int(self.valid.sum())
+
+    @property
+    def device(self) -> torch.device | None:
+        return None if self.valid is None else self.valid.device
+
+    def to(self, device: torch.device | str) -> Lattice:
+        """Return a lattice whose derived tensors live on ``device``.
+
+        Dense lattices hold no tensors, so this is a no-op for them. Blocks are
+        expected to ``register_buffer`` whatever they need at construction, so
+        that moving the *module* keeps the buffers in step.
+        """
+        if self.valid is None:
+            return self
+        return Lattice(self.shape, self.names, self.valid.to(device), self.time)
+
+    # -- axis resolution ----------------------------------------------------
+
+    def axis_index(self, axis: AxisSpec) -> int:
+        """Resolve a name or index to a sweep-axis index in ``[0, n_axes)``.
+
+        Index 0 is time when ``time=True``, otherwise the first lattice axis.
+        Negative indices count from the end.
+        """
+        if isinstance(axis, str):
+            names = self.axis_names
+            if axis not in names:
+                raise KeyError(f"unknown axis {axis!r}; lattice has {names}")
+            return names.index(axis)
+        i = int(axis)
+        if i < 0:
+            i += self.n_axes
+        if not 0 <= i < self.n_axes:
+            raise IndexError(f"axis {axis} out of range for {self.n_axes} axes")
+        return i
+
+    def tensor_dim(self, axis: AxisSpec) -> int:
+        """Position of ``axis`` within a ``(B, [T,] *shape, H)`` tensor."""
+        return 1 + self.axis_index(axis)
+
+    def lattice_index(self, axis: AxisSpec) -> int:
+        """Resolve to an index into :attr:`shape`. Raises for the time axis."""
+        i = self.axis_index(axis)
+        if self.time:
+            if i == 0:
+                raise ValueError("'time' is not a lattice axis; it has no static size")
+            return i - 1
+        return i
+
+    def axis_size(self, axis: AxisSpec) -> int:
+        """Static length of ``axis``. Raises for time, whose length is dynamic."""
+        return self.shape[self.lattice_index(axis)]
+
+    # -- permutation --------------------------------------------------------
+
+    def permutation(self, axis: AxisSpec) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        """Permutation moving ``axis`` to the sequence position, and its inverse.
+
+        The forward permutation maps ``(B, [T,] *shape, H)`` to
+        ``(B, *others, A, H)`` so that everything but the swept axis folds into
+        the batch. The inverse is built directly rather than derived twice; the
+        test suite is what checks it against ``torch.argsort``.
+        """
+        d = self.tensor_dim(axis)
+        nd = self.tensor_ndim
+        others = [i for i in range(1, nd - 1) if i != d]
+        perm = (0, *others, d, nd - 1)
+
+        inv = [0] * nd
+        for new_pos, old in enumerate(perm):
+            inv[old] = new_pos
+        return perm, tuple(inv)
+
+    def _check(self, x: torch.Tensor) -> None:
+        if x.ndim != self.tensor_ndim:
+            raise ValueError(
+                f"expected a {self.tensor_ndim}-D tensor (B, "
+                f"{'T, ' if self.time else ''}*{self.shape}, H); got shape {tuple(x.shape)}"
+            )
+        start = 1 + (1 if self.time else 0)
+        got = tuple(x.shape[start : start + self.rank])
+        if got != self.shape:
+            raise ValueError(f"tensor has lattice dims {got}, expected {self.shape}")
+
+    def to_sequence(self, x: torch.Tensor, axis: AxisSpec) -> tuple[torch.Tensor, Restore]:
+        """Fold ``x`` into ``(M, A, H)`` batched 1-D sequences along ``axis``.
+
+        ``M`` is the batch times every other axis, ``A`` is the length of the
+        swept axis. This is the shape every mixer sees; a mixer never learns
+        which axis it is sweeping or how many axes exist.
+        """
+        self._check(x)
+        i = self.axis_index(axis)
+        perm, _ = self.permutation(i)
+        d = x.permute(*perm).contiguous()
+        return d.reshape(-1, d.shape[-2], d.shape[-1]), Restore(i, d.shape)
+
+    def from_sequence(self, seq: torch.Tensor, restore: Restore) -> torch.Tensor:
+        """Invert :meth:`to_sequence`."""
+        _, inv = self.permutation(restore.axis)
+        return seq.reshape(restore.shape).permute(*inv).contiguous()
+
+    # -- sparse cells -------------------------------------------------------
+
+    @property
+    def flat_idx(self) -> torch.Tensor:
+        """Indices of existing cells into the flattened lattice, shape ``(G,)``."""
+        if "flat_idx" not in self._cache:
+            if self.valid is None:
+                idx = torch.arange(self.n_cells)
+            else:
+                idx = self.valid.reshape(-1).nonzero(as_tuple=True)[0]
+            self._cache["flat_idx"] = idx
+        return self._cache["flat_idx"]
+
+    def scatter(self, x: torch.Tensor) -> torch.Tensor:
+        """``(B, [T,] G, H)`` of existing cells -> dense ``(B, [T,] *shape, H)``.
+
+        Cells that do not exist are exactly zero, which is what lets a plain
+        sum double as a masked sum downstream.
+        """
+        lead, h = x.shape[:-2], x.shape[-1]
+        if x.shape[-2] != self.n_valid:
+            raise ValueError(f"expected {self.n_valid} cells, got {x.shape[-2]}")
+        out = x.new_zeros(*lead, self.n_cells, h)
+        out[..., self.flat_idx, :] = x
+        return out.reshape(*lead, *self.shape, h)
+
+    def gather(self, x: torch.Tensor) -> torch.Tensor:
+        """Dense ``(B, [T,] *shape, H)`` -> ``(B, [T,] G, H)`` of existing cells."""
+        lead, h = x.shape[: -(self.rank + 1)], x.shape[-1]
+        flat = x.reshape(*lead, self.n_cells, h)
+        return flat[..., self.flat_idx, :]
+
+    def mask(self, dtype: torch.dtype = torch.bool) -> torch.Tensor:
+        """Validity mask shaped to broadcast over ``(B, [T,] *shape, H)``."""
+        key = f"mask_{dtype}"
+        if key not in self._cache:
+            base = torch.ones(self.shape, dtype=torch.bool) if self.valid is None else self.valid
+            lead = (1, 1) if self.time else (1,)
+            self._cache[key] = base.reshape(*lead, *self.shape, 1).to(dtype)
+        return self._cache[key]
+
+    def valid_counts(self, axis: AxisSpec) -> torch.Tensor:
+        """Existing cells at each position of ``axis``, shape ``(axis_size,)``.
+
+        This is the denominator for masked-mean pooling over the other axes.
+        Never zero: dead lines are clamped to 1 so callers divide safely, and
+        their numerators are zero anyway.
+        """
+        i = self.lattice_index(axis)
+        if self.valid is None:
+            n = self.n_cells // self.shape[i]
+            return torch.full((self.shape[i],), float(n))
+        others = tuple(j for j in range(self.rank) if j != i)
+        counts = self.valid.sum(dim=others) if others else self.valid.to(torch.long)
+        return counts.to(torch.float32).clamp_min(1.0)
+
+    # -- display ------------------------------------------------------------
+
+    def __repr__(self) -> str:
+        parts = [f"shape={self.shape}", f"names={self.axis_names}"]
+        if self.time:
+            parts.append("time=True")
+        if not self.is_dense:
+            parts.append(f"valid={self.n_valid}/{self.n_cells}")
+        return f"Lattice({', '.join(parts)})"

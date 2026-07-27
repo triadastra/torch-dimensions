@@ -7,11 +7,12 @@ Conventionally imported as::
 
     import torch_dimensions as td
 
-Nothing is implemented yet: this is the Phase 0 packaging skeleton. Public
-names land here as each phase completes, and optional-dependency blocks are
-imported defensively so a CPU-only install stays importable.
+Public names land here as each phase completes, and optional-dependency blocks
+are imported defensively so a CPU-only install stays importable.
 """
+
+from torch_dimensions.lattice import Lattice, Restore
 
 __version__ = "0.0.0"
 
-__all__: list[str] = []
+__all__ = ["Lattice", "Restore"]

@@ -10,5 +10,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Architecture design ([DESIGN.md](DESIGN.md)) and phased build plan ([PLAN.md](PLAN.md)).
 - Phase 0 packaging skeleton: `src/` layout, `torch>=2.4` as the only required
   dependency, kernel backends behind optional extras, ruff + pytest + CPU-only CI.
+- Phase 1 `Lattice`: axis naming and resolution, permutation to and from folded
+  1-D sequences, scatter/gather for lattices whose cells are not all populated,
+  broadcast validity masks, and per-axis valid counts for masked pooling.
 
-Nothing is implemented yet. `Lattice` lands in Phase 1.
+`ScanPlan` lands in Phase 2.
