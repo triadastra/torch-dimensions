@@ -64,7 +64,9 @@ block = td.AxialScan(
 )
 ```
 
-`ScanPlan` is **data, not control flow** — a list of `(axis, reverse)` steps that is printable, serializable, diffable, and unit-testable independent of any mixer. In every existing ND implementation this schedule is inline list comprehensions welded to the module, which is why none of them can be inspected or swapped without editing the model. Constructors: `.cyclic()`, `.paired()`, `.from_list()`.
+`ScanPlan` is **data, not control flow** — a list of `(axis, reverse)` steps that is printable, serializable, diffable, and unit-testable independent of any mixer. In every existing ND implementation this schedule is inline list comprehensions welded to the module, which is why none of them can be inspected or swapped without editing the model. Constructors: `.cyclic()`, `.paired()`, `.from_list()`. `.paired()` is the schedule the official Mamba-ND implementation uses.
+
+**Bidirectionality is per-axis, not a global flag.** Forward-only along time is correct — that is causality — while forward-only along a spatial or categorical axis is just lost receptive field, so `bidirectional=` takes a collection of axes. It also costs layers: covering *k* axes both ways needs roughly *2k* layers, and below that budget the request is silently downgraded. `ScanPlan` warns instead.
 
 Space-filling traversals (Hilbert, Morton) were in an earlier draft of this list and do not belong: a step is `(axis, reverse)`, and a Hilbert curve is not axis-aligned. Supporting it needs a second step kind carrying a full permutation of cell indices, which changes what `AxialScan` folds and is a different feature wearing this one's clothes. Deferred rather than stubbed.
 

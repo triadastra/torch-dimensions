@@ -60,37 +60,112 @@ class ScanPlan:
             raise ValueError(f"n_layers must be >= 1; got {n_layers}")
         return axes
 
+    @staticmethod
+    def _bidi_set(
+        bidirectional: bool | AxisSpec | Sequence[AxisSpec] | None,
+        axes: Sequence[AxisSpec],
+    ) -> set[AxisSpec]:
+        """Normalize the ``bidirectional`` argument to a set of axes.
+
+        Bidirectionality is per-axis on purpose. Forward-only along time is
+        correct — that is causality — while forward-only along a spatial or
+        categorical axis is just lost receptive field. An all-or-nothing flag
+        cannot express that distinction.
+        """
+        if bidirectional is None or bidirectional is False:
+            return set()
+        if bidirectional is True:
+            return set(axes)
+        # A bare axis is a common shorthand. Guard the string case explicitly:
+        # set("time") is {'t','i','m','e'}, which would silently match nothing.
+        if isinstance(bidirectional, (str, int)):
+            bidirectional = [bidirectional]
+        chosen = set(bidirectional)
+        unknown = chosen - set(axes)
+        if unknown:
+            raise ValueError(f"bidirectional axes {sorted(map(str, unknown))} are not in {axes}")
+        return chosen
+
+    @staticmethod
+    def _warn_if_pinned(steps: Sequence[Step], wanted: set[AxisSpec]) -> None:
+        """Warn when an axis was asked to be bidirectional but only got one way.
+
+        Bidirectional coverage costs layers. Below that budget the request is
+        silently downgraded, which is exactly the failure this class exists to
+        make visible.
+        """
+        seen: dict[AxisSpec, set[bool]] = {}
+        for s in steps:
+            seen.setdefault(s.axis, set()).add(s.reverse)
+        pinned = [a for a in wanted if len(seen.get(a, set())) < 2]
+        if pinned:
+            warnings.warn(
+                f"axes {sorted(map(str, pinned))} were requested bidirectional but only get "
+                f"one direction in {len(steps)} layers; bidirectional coverage of k axes needs "
+                f"roughly 2k layers, so either add layers or scan fewer axes",
+                UserWarning,
+                stacklevel=3,
+            )
+
     @classmethod
     def cyclic(
         cls,
         axes: Sequence[AxisSpec],
         n_layers: int,
-        bidirectional: bool = False,
+        bidirectional: bool | AxisSpec | Sequence[AxisSpec] = False,
+        warn: bool = True,
     ) -> ScanPlan:
         """Cycle through ``axes``, one axis per layer.
 
-        When ``bidirectional``, direction flips after each *full cycle* rather
-        than after each layer. Flipping per layer looks equivalent and is not:
-        with an even number of axes it aliases against the cycle, so every axis
-        is pinned to one direction forever and the plan is silently
-        unidirectional. Flipping per cycle gives every axis both directions.
+        ``bidirectional`` accepts ``True``/``False`` or an explicit collection
+        of axes, so time can stay causal while spatial axes get both
+        directions.
+
+        Direction flips after each *full cycle*, not after each layer. Flipping
+        per layer looks equivalent and is not: with an even number of axes the
+        two periods phase-lock, every axis is pinned to one direction forever,
+        and the plan is silently unidirectional.
         """
         axes = cls._check_axes(axes, n_layers)
+        bidi = cls._bidi_set(bidirectional, axes)
         n = len(axes)
-        return cls(
-            [Step(axes[i % n], bidirectional and (i // n) % 2 == 1) for i in range(n_layers)]
-        )
+        steps = [
+            Step(axes[i % n], axes[i % n] in bidi and (i // n) % 2 == 1) for i in range(n_layers)
+        ]
+        if warn:
+            cls._warn_if_pinned(steps, bidi)
+        return cls(steps)
 
     @classmethod
-    def paired(cls, axes: Sequence[AxisSpec], n_layers: int) -> ScanPlan:
-        """Sweep each axis forward then immediately backward before moving on.
+    def paired(
+        cls,
+        axes: Sequence[AxisSpec],
+        n_layers: int,
+        bidirectional: bool | AxisSpec | Sequence[AxisSpec] = True,
+        warn: bool = True,
+    ) -> ScanPlan:
+        """Sweep each bidirectional axis forward then immediately backward.
 
-        Gives an axis both directions within adjacent layers, where
-        :meth:`cyclic` spreads them a full cycle apart.
+        This is the schedule used by the official Mamba-ND implementation,
+        which advances the axis ordering every *two* layers while flipping
+        direction every layer — so each ordering is used once forward and once
+        backward, and no phase-locking is possible for any axis count. Axes
+        outside ``bidirectional`` take a single forward layer instead of two.
+
+        Prefer this over :meth:`cyclic` when layers are plentiful: it gives an
+        axis both directions in adjacent layers rather than a full cycle apart.
+        The cost is coverage — pairing k axes needs 2k layers before the
+        schedule repeats, so at shallow depth it reaches fewer distinct axes.
         """
         axes = cls._check_axes(axes, n_layers)
-        n = len(axes)
-        return cls([Step(axes[(i // 2) % n], bool(i % 2)) for i in range(n_layers)])
+        bidi = cls._bidi_set(bidirectional, axes)
+        template = [
+            Step(ax, rev) for ax in axes for rev in ((False, True) if ax in bidi else (False,))
+        ]
+        steps = [template[i % len(template)] for i in range(n_layers)]
+        if warn:
+            cls._warn_if_pinned(steps, bidi)
+        return cls(steps)
 
     @classmethod
     def from_list(cls, steps: Sequence[Step | tuple | AxisSpec]) -> ScanPlan:

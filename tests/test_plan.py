@@ -45,6 +45,72 @@ def test_cyclic_without_bidirectional_is_all_forward():
     assert not any(s.reverse for s in plan)
 
 
+def test_bidirectional_accepts_an_explicit_axis_set():
+    """Time stays causal while spatial axes get both directions — the reason
+    bidirectionality is per-axis rather than a single flag."""
+    plan = ScanPlan.cyclic(("time", "h", "w"), n_layers=12, bidirectional=("h", "w"))
+    seen: dict[str, set[bool]] = {}
+    for s in plan:
+        seen.setdefault(s.axis, set()).add(s.reverse)
+    assert seen["time"] == {False}
+    assert seen["h"] == {False, True}
+    assert seen["w"] == {False, True}
+
+
+def test_bidirectional_accepts_a_bare_axis_name():
+    """set('time') is {'t','i','m','e'}; a bare string must not be iterated."""
+    plan = ScanPlan.cyclic(("time", "h"), n_layers=8, bidirectional="time")
+    seen: dict[str, set[bool]] = {}
+    for s in plan:
+        seen.setdefault(s.axis, set()).add(s.reverse)
+    assert seen["time"] == {False, True}
+    assert seen["h"] == {False}
+
+
+def test_bidirectional_rejects_axes_not_being_scanned():
+    with pytest.raises(ValueError, match="not in"):
+        ScanPlan.cyclic(("h", "w"), n_layers=4, bidirectional=("depth",))
+
+
+def test_warns_when_layers_are_too_few_for_the_requested_bidirectionality():
+    """Four axes in four layers gets each axis exactly one sweep, so no
+    schedule can give any of them both directions. Say so rather than
+    silently downgrading."""
+    with pytest.warns(UserWarning, match="requested bidirectional"):
+        ScanPlan.cyclic(("t", "s", "c", "f"), n_layers=4, bidirectional=True)
+
+
+def test_no_warning_when_the_layer_budget_is_sufficient(recwarn):
+    ScanPlan.cyclic(("t", "s", "c", "f"), n_layers=8, bidirectional=True)
+    assert len(recwarn) == 0
+
+
+def test_paired_matches_the_official_mamba_nd_schedule():
+    """Upstream advances the ordering every two layers (z = i // 2) while
+    flipping direction every layer, so each ordering runs once forward and
+    once backward."""
+    plan = ScanPlan.paired(("a", "b", "c"), n_layers=6)
+    upstream = [("a", False), ("a", True), ("b", False), ("b", True), ("c", False), ("c", True)]
+    assert [(s.axis, s.reverse) for s in plan] == upstream
+
+
+def test_paired_gives_unpaired_axes_a_single_forward_layer():
+    plan = ScanPlan.paired(("time", "h"), n_layers=6, bidirectional=("h",))
+    assert [(s.axis, s.reverse) for s in plan] == [
+        ("time", False),
+        ("h", False),
+        ("h", True),
+        ("time", False),
+        ("h", False),
+        ("h", True),
+    ]
+
+
+def test_warnings_can_be_suppressed_for_deliberate_shallow_plans(recwarn):
+    ScanPlan.cyclic(("a", "b", "c", "d"), n_layers=4, bidirectional=True, warn=False)
+    assert len(recwarn) == 0
+
+
 def test_paired_alternates_within_adjacent_layers():
     plan = ScanPlan.paired(("a", "b"), n_layers=6)
     assert list(plan) == [

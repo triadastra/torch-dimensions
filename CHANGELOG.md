@@ -28,4 +28,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `(axis, reverse)` and a space-filling curve is not axis-aligned, so it needs
   a different step kind entirely. Deferred rather than stubbed.
 
+- Per-axis bidirectionality in `ScanPlan`: `bidirectional=` accepts a collection
+  of axes, so time can stay causal while spatial axes are swept both ways.
+  Construction warns when the layer budget cannot deliver what was requested —
+  bidirectional coverage of *k* axes needs roughly *2k* layers.
+
 `AxialScan` and `LSTMND` land in Phase 3.
