@@ -33,4 +33,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Construction warns when the layer budget cannot deliver what was requested —
   bidirectional coverage of *k* axes needs roughly *2k* layers.
 
-`AxialScan` and `LSTMND` land in Phase 3.
+- Phase 3 `axial_apply` and `AxialScan`: sweep any 1-D mixer along one lattice
+  axis at a time, with pre-norm residual layers driven by a `ScanPlan`. Absent
+  cells are zeroed on entry and after each layer, so outputs at present cells
+  are invariant to whatever values sat in absent ones.
+- `LSTMND` and `GRUND` — N-dimensional RNNs, and `LSTMMixer`/`GRUMixer` adapters
+  over `torch.nn`. Direction is the schedule's job, so neither adapter sets
+  `bidirectional=True` on the underlying RNN.
+
+The conformance suite lands in Phase 4.

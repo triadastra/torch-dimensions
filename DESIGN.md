@@ -1,6 +1,6 @@
 # torch-dimensions — Design
 
-**Status:** Phases 0–1 built (`Lattice`); the rest is design. See [PLAN.md](PLAN.md) for build order.
+**Status:** Phases 0–3 built (`Lattice`, `ScanPlan`, `AxialScan`, `LSTMND`/`GRUND`); the rest is design. See [PLAN.md](PLAN.md) for build order.
 **Positioning:** composition layer. We depend on `mamba-ssm` / `flash-linear-attention` / `state-spaces/s4` for 1-D kernels. We own the N-D structure, the registry, the config surface, and the `nn.Module` contract.
 
 ---
@@ -60,7 +60,10 @@ import torch_dimensions as td
 
 plan = td.ScanPlan.cyclic(axes=("time", "depth", "height"), n_layers=12, bidirectional=True)
 block = td.AxialScan(
-    mixer=td.mixers.Mamba2Mixer(d_model=128, d_state=64), plan=plan, lattice=lattice
+    mixer=partial(td.mixers.Mamba2Mixer, d_model=128, d_state=64),  # one per layer
+    plan=plan,
+    lattice=lattice,
+    d_model=128,
 )
 ```
 
@@ -70,7 +73,7 @@ block = td.AxialScan(
 
 Space-filling traversals (Hilbert, Morton) were in an earlier draft of this list and do not belong: a step is `(axis, reverse)`, and a Hilbert curve is not axis-aligned. Supporting it needs a second step kind carrying a full permutation of cell indices, which changes what `AxialScan` folds and is a different feature wearing this one's clothes. Deferred rather than stubbed.
 
-Any `nn.Module` mapping `(M, A, H) -> (M, A, H)` is a valid mixer. That is the extension point — a user drops in a new SSM from a paper published next month without touching the library.
+Any `nn.Module` mapping `(M, A, H) -> (M, A, H)` is a valid mixer. That is the extension point — a user drops in a new SSM from a paper published next month without touching the library. Pass a *factory* for per-layer weights, or a built module to share one set across layers.
 
 ### Level 3 — config
 

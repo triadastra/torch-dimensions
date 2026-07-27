@@ -11,9 +11,22 @@ Public names land here as each phase completes, and optional-dependency blocks
 are imported defensively so a CPU-only install stays importable.
 """
 
+from torch_dimensions import mixers
+from torch_dimensions.compose.scan import AxialScan, axial_apply
 from torch_dimensions.lattice import Lattice, Restore
+from torch_dimensions.models.rnn_nd import GRUND, LSTMND
 from torch_dimensions.plan import ScanPlan, Step
 
 __version__ = "0.0.0"
 
-__all__ = ["Lattice", "Restore", "ScanPlan", "Step"]
+__all__ = [
+    "GRUND",
+    "LSTMND",
+    "AxialScan",
+    "Lattice",
+    "Restore",
+    "ScanPlan",
+    "Step",
+    "axial_apply",
+    "mixers",
+]
