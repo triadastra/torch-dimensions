@@ -67,4 +67,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `d_input=` on the RNN models, adding a single input projection when the data
   is not already `d_model` wide.
 
+- `td.spec(model)` — a versioned JSON description of a model's N-D
+  architecture: the lattice with a run-length-encoded presence mask, the
+  resolved per-layer sweep schedule, mixer identities and parameter counts, and
+  symbolic input/output shapes. Derived without a forward pass. It also reports
+  which directions each axis is *actually* swept in, and which axes a plan never
+  sweeps. Foundation for the viewer ([VIEWER.md](VIEWER.md)).
+
 The kernel family lands in Phase 6.

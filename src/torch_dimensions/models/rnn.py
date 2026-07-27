@@ -76,6 +76,16 @@ class _RNNFamily(nn.Module):
     def plan(self) -> ScanPlan:
         return self.nd.plan
 
+    def to_spec(self) -> dict:
+        """A JSON-able description of this model's N-D architecture.
+
+        Derived without a forward pass, so it can be taken before any data
+        exists. See VIEWER.md.
+        """
+        from torch_dimensions.spec import scan_model_spec
+
+        return scan_model_spec(self)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """``(B, [T,] *shape, d_input or d_model)`` in, ``d_model`` out.
 

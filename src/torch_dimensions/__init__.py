@@ -23,6 +23,7 @@ from torch_dimensions.compose import (
 from torch_dimensions.lattice import Lattice, Restore
 from torch_dimensions.models.rnn import GRU, LSTM
 from torch_dimensions.plan import ScanPlan, Step
+from torch_dimensions.spec import spec
 
 __version__ = "0.0.0"
 
@@ -42,4 +43,5 @@ __all__ = [
     "testing",
     "register_nd_method",
     "resolve_nd_method",
+    "spec",
 ]
