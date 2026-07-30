@@ -150,6 +150,36 @@ derivative under Apache-2.0 may do:
 So the GPU-only remainder of this phase is `mamba-ssm` (CUDA-only extension);
 the S4 family is coverable by the device suite (tests/test_device.py) on MPS.
 
+**Mamba portability, established empirically (2026-07-30, MPS, mamba_ssm
+2.3.2.post1 source):** the real modules run on Mac without any CUDA:
+
+- **Mamba (v1)** — `modules/mamba_simple.Mamba` with `use_fast_path=False`,
+  routing `selective_scan_fn` to upstream's own `selective_scan_ref`.
+  CPU↔MPS parity **2.98e-8**, clean gradients.
+- **Mamba2** — `modules/mamba2.Mamba2` with `use_mem_eff_path=False`, an
+  adapter impersonating `mamba_chunk_scan_combined` on top of upstream's
+  `ssd_minimal_discrete` (their own fused↔minimal test gives the mapping:
+  `x*dt, A*dt`; the adapter adds dt_bias/softplus/dt_limit, group→head
+  expansion of B/C, chunk padding, D-skip, z-gate, plus `rms_norm_ref` in
+  place of the triton gated RMSNorm). CPU↔MPS parity **4.77e-7**, and the
+  adapter itself verified against an independent hand-written sequential
+  recurrence at **8.9e-15** in float64.
+- **Import shims a vendored copy needs** (all vestigial for the math):
+  the unguarded `import selective_scan_cuda`; `triton` (needed only so
+  kernel *definitions* import — fallback paths never call them; the stub
+  must provide `autotune` attaching `.configs` and a `Config` with real
+  `num_warps`, and must be installed **after** torch imports or torch's own
+  triton detection breaks); `huggingface_hub.PyTorchModelHubMixin`; and
+  `transformers` (avoid by not executing the package `__init__`).
+- **Mamba3** — not portable today: every path runs through the triton
+  SISO/MIMO rotary kernels and upstream ships **no reference
+  implementation**. A Mac-capable derivative means writing the rotary
+  trapezoidal recurrence in torch from the paper and verifying on a CUDA
+  box; budget it as its own task, not an adapter.
+
+Working harness and probes preserved in the session scratchpad; the
+chunk-scan adapter above is the seed of `adapters/mamba.py`.
+
 **Acceptance:** both pass the suite on GPU; `MambaND` on a rank-1 lattice matches a bare `Mamba2` block.
 
 ---
