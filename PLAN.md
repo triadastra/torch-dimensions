@@ -125,13 +125,30 @@ Generalizing rank-locked contraction tables to arbitrary N is the largest single
 
 ---
 
-## Phase 7 — SSM adapters  ·  L  ·  needs Phase 4  ·  **needs a GPU**
+## Phase 7 — SSM adapters  ·  L  ·  needs Phase 4  ·  **needs a GPU (Mamba only)**
 
 - Thin adapters over `mamba-ssm` (Mamba-2), `state-spaces/s4`, and Mamba-3.
 - Defensive imports: a missing optional dep unregisters that block and leaves everything else importable. A missing real implementation **fails loudly and never silently substitutes a stub**.
 - `MambaND`, `S4ND`.
 
-**Risk:** CI cannot cover this. GPU tests run locally and are marked. Budget real time for kernel-integration friction — grid limits, dtype constraints, and version pinning are where this phase actually goes over.
+**S4 portability, established empirically (2026-07-30, MPS):** the full
+`S4Block` and `S4D` both run on MPS — forward, backward, and CPU-parity to
+~1.1e-6 — once three things are handled in the vendored copy, all of which a
+derivative under Apache-2.0 may do:
+
+1. Drop the `pytorch_lightning` import (used for one logging decorator).
+2. Inline `DropoutNd` in `s4d.py` (it imports a repo-internal path).
+3. Fix a **latent upstream numerical bug** in `SSMKernelDPLR._omega`: the
+   bilinear transform `z = 2(1-ω)/(1+ω)` divides by a quantity that is
+   mathematically zero at the Nyquist point (ω = -1). CPU/CUDA dodge the pole
+   by ~1e-7 of rounding error in the complex pow; MPS lands on -1 exactly and
+   the whole kernel goes NaN. Guard the denominator (the full expression
+   cancels the pole analytically, so an eps nudge reproduces what rounding
+   already does elsewhere). This must be fixed in the vendored copy regardless
+   of backend — code that works only by accident of rounding is not portable.
+
+So the GPU-only remainder of this phase is `mamba-ssm` (CUDA-only extension);
+the S4 family is coverable by the device suite (tests/test_device.py) on MPS.
 
 **Acceptance:** both pass the suite on GPU; `MambaND` on a rank-1 lattice matches a bare `Mamba2` block.
 
