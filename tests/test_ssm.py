@@ -159,7 +159,7 @@ def test_the_s4_kernel_equals_dense_state_space_powers():
     "nd_cls,base_name", [(td.S4ND, "S4"), (td.S4DND, "S4D"), (td.MambaND, "Mamba")]
 )
 def test_the_nd_names_build_their_own_lattice(nd_cls, base_name):
-    model = nd_cls(8, 4, shape=(3, 4), names=("h", "w"))
+    model = nd_cls(8, 4, dim=2, shape=(3, 4), names=("h", "w"))
     assert model.lattice.rank == 2 and model.lattice.time
     out = model(torch.randn(2, 5, 3, 4, 8))
     assert out.shape == (2, 5, 3, 4, 8)
@@ -167,15 +167,19 @@ def test_the_nd_names_build_their_own_lattice(nd_cls, base_name):
 
 
 def test_the_nd_names_refuse_ambiguity_and_absence():
+    with pytest.raises(ValueError, match="requires `dim`"):
+        td.S4ND(8, 4, shape=(3, 4))  # the N-D name without declaring N
     with pytest.raises(ValueError, match="needs a lattice"):
-        td.S4ND(8, 4)
+        td.S4ND(8, 4, dim=2)
     with pytest.raises(ValueError, match="not both"):
-        td.S4ND(8, 4, lattice=td.Lattice(shape=(3, 4)), shape=(3, 4))
+        td.S4ND(8, 4, dim=2, lattice=td.Lattice(shape=(3, 4)), shape=(3, 4))
     with pytest.raises(ValueError, match="dim=3"):
         td.MambaND(8, 4, shape=(3, 4), dim=3)
     with pytest.raises(ValueError, match="no spatial axes"):
-        td.S4DND(8, 4, lattice=td.Lattice(shape=(), time=True))
+        td.S4DND(8, 4, dim=1, lattice=td.Lattice(shape=(), time=True))
+    with pytest.raises(ValueError, match=">= 1"):
+        td.S4ND(8, 4, dim=0, shape=(3,))
 
 
 def test_dim_that_agrees_is_accepted():
-    assert td.S4ND(8, 4, shape=(3, 4), dim=2).lattice.rank == 2
+    assert td.S4ND(8, 4, dim=2, shape=(3, 4)).lattice.rank == 2
