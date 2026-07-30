@@ -21,7 +21,13 @@ __all__ = ["Batch", "collate_lattice"]
 class Batch(dict):
     """A stacked batch. ``batch.x`` is ``(B, T, *shape, F)``."""
 
-    __getattr__ = dict.__getitem__
+    # See Sample: KeyError from attribute lookup breaks hasattr and pickling,
+    # and worker processes pickle the collated Batch on its way back.
+    def __getattr__(self, name: str):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name) from None
 
 
 def collate_lattice(samples: Sequence[Sample]) -> Batch:

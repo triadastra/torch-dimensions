@@ -75,7 +75,13 @@ def axial_contract(
         # orders of magnitude. Leaving degenerate lines unscaled is the honest
         # fallback: a genuinely dead line has a zero numerator and stays zero.
         den = torch.where(den.abs() < _EPS, torch.ones_like(den), den)
-        out = torch.nan_to_num(out / den)
+        # No nan_to_num here. The where-guard already keeps |den| >= eps, so
+        # this division cannot create a fresh NaN or inf — the only NaNs that
+        # could reach a nan_to_num are ones already in `x`, and zeroing those
+        # would silently launder a diverging model into finite numbers mid-
+        # network. A NaN that arrives must leave; that is what makes divergence
+        # debuggable.
+        out = out / den
 
     return lattice.from_sequence(out, restore)
 

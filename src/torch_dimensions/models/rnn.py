@@ -17,6 +17,7 @@ exactly; beyond that these are modern defaults, not a drop-in reimplementation.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from functools import partial
 from typing import cast
@@ -55,8 +56,23 @@ class _RNNFamily(nn.Module):
 
         if plan is None:
             plan = ScanPlan.cyclic(self.lattice.axis_names, n_layers, bidirectional=bidirectional)
-        elif bidirectional is not False:
-            raise ValueError("pass either `plan` or `bidirectional`, not both")
+        else:
+            if bidirectional is not False:
+                raise ValueError("pass either `plan` or `bidirectional`, not both")
+            # A plan *is* the layer schedule, so it fixes the depth, and it
+            # wins. But winning *silently* over a disagreeing n_layers would
+            # ship a model shallower (or deeper) than requested — the same
+            # silent-downgrade failure the schedule machinery exists to make
+            # loud. A warning rather than an error because generic builders
+            # legitimately fill n_layers unconditionally and add a plan only
+            # sometimes; n_layers=1 is the default and passes untouched.
+            if n_layers != 1 and n_layers != len(plan):
+                warnings.warn(
+                    f"n_layers={n_layers} is ignored: the given plan has {len(plan)} steps "
+                    "and a plan determines the depth",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
         # An input projection only when the data is not already d_model wide.
         # Without it every caller writes the same nn.Linear, which is friction

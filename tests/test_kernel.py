@@ -256,3 +256,16 @@ def test_a_genuinely_dead_line_is_still_zero_under_the_guard():
     out = axial_contract(x, lat, 1, torch.rand(2, 2, dtype=torch.float64), valid=mask)
     assert torch.isfinite(out).all()
     assert out[0, 1].abs().max() == 0.0
+
+
+def test_a_nan_in_the_input_is_not_silently_laundered():
+    """A `nan_to_num` after the division zeroed NaNs arriving in `x`, hiding a
+    diverging model mid-network behind finite numbers. The magnitude guard
+    already makes the division itself safe, so the only NaNs reaching that
+    point are real upstream failures — and a NaN that arrives must leave."""
+    lat = Lattice(shape=(4,), valid=torch.tensor([True, True, True, False]))
+    mask = lat.mask().to(torch.float64)
+    x = torch.randn(2, 4, 3, dtype=torch.float64) * mask
+    x[0, 1, 2] = float("nan")  # a present cell diverged upstream
+    out = axial_contract(x, lat, 0, torch.randn(4, 4, dtype=torch.float64), valid=mask)
+    assert bool(out.isnan().any()), "an input NaN vanished into finite output"

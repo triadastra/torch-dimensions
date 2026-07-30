@@ -64,7 +64,17 @@ class Sample(dict):
     """One window. A dict so it survives any collate function, with attribute
     access because ``sample.x`` reads better than ``sample["x"]``."""
 
-    __getattr__ = dict.__getitem__
+    # Not `__getattr__ = dict.__getitem__`: that raises KeyError where Python
+    # expects AttributeError, which breaks hasattr()/getattr(s, "y", None) —
+    # and breaks *pickling*, because pickle probes for optional dunders with
+    # getattr and only tolerates AttributeError. DataLoader(num_workers>0)
+    # pickles every sample through the worker queue, so the shortcut version
+    # cannot be batched with multiprocessing at all.
+    def __getattr__(self, name: str):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name) from None
 
 
 class LatticeDataset(Dataset):

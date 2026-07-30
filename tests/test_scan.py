@@ -399,3 +399,20 @@ def test_registering_a_duplicate_nd_method_is_refused():
 
     with pytest.raises(ValueError, match="already registered"):
         register_nd_method("axial_scan", td.axial_scan)
+
+
+def test_rnn_warns_when_a_plan_disagrees_with_n_layers():
+    """A plan fixes the depth. Accepting n_layers=6 with a 2-step plan and
+    silently building 2 layers ships a model shallower than requested — the
+    downgrade must at least be loud. A warning rather than an error because
+    generic builders legitimately pass both."""
+    lat = Lattice(shape=(2, 3))
+    with pytest.warns(UserWarning, match="n_layers=6 is ignored"):
+        model = LSTM(4, 6, lat, plan=ScanPlan.from_list([0, 1]))
+    assert len(model.plan) == 2  # the plan wins
+
+
+def test_rnn_accepts_a_plan_with_the_default_n_layers(recwarn):
+    lat = Lattice(shape=(2, 3))
+    assert len(LSTM(4, lattice=lat, plan=ScanPlan.from_list([0, 1, 0])).plan) == 3
+    assert len(recwarn) == 0

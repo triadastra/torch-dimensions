@@ -342,3 +342,49 @@ def test_d_input_is_optional_when_the_data_is_already_d_model_wide():
     lat = td.Lattice(shape=(2, 3), time=True)
     model = td.LSTM(d_model=5, n_layers=3, lattice=lat)
     assert model(torch.randn(1, 4, 2, 3, 5)).shape == (1, 4, 2, 3, 5)
+
+
+# -- multiprocessing safety ---------------------------------------------------
+
+
+def _small_dataset():
+    lat = td.Lattice(shape=(2, 3), time=True)
+    source = TensorSource(torch.randn(8, 2, 3, 4), lat)
+    return LatticeDataset(source, LatticeWindow(8, input_len=3, horizon=1))
+
+
+def test_samples_and_batches_survive_pickling():
+    """DataLoader workers send every Sample — and the collated Batch — through
+    a pickled queue. `__getattr__ = dict.__getitem__` broke that: pickle probes
+    optional dunders with getattr and tolerates AttributeError, not the
+    KeyError a dict lookup raises. num_workers>0 crashed outright."""
+    import pickle
+
+    sample = _small_dataset()[0]
+    back = pickle.loads(pickle.dumps(sample))
+    assert torch.equal(back.x, sample.x) and torch.equal(back.y, sample.y)
+
+    batch = collate_lattice([sample, sample])
+    back = pickle.loads(pickle.dumps(batch))
+    assert torch.equal(back.x, batch.x)
+
+
+def test_a_missing_field_reads_as_absent_not_as_a_keyerror():
+    """`getattr(sample, "y", None)` and `hasattr` must behave; a horizon-0
+    sample simply has no target."""
+    lat = td.Lattice(shape=(2, 3), time=True)
+    source = TensorSource(torch.randn(8, 2, 3, 4), lat)
+    sample = LatticeDataset(source, LatticeWindow(8, input_len=3, horizon=0))[0]
+    assert getattr(sample, "y", None) is None
+    assert not hasattr(sample, "y")
+    with pytest.raises(AttributeError):
+        _ = sample.y
+
+
+def test_dataloader_with_worker_processes():
+    """The end-to-end form of the pickling guarantee: real worker processes,
+    real queues. This is the configuration every user with a large dataset
+    reaches for first."""
+    dl = DataLoader(_small_dataset(), batch_size=2, num_workers=2, collate_fn=collate_lattice)
+    batch = next(iter(dl))
+    assert batch.x.shape == (2, 3, 2, 3, 4) and batch.y.shape == (2, 1, 2, 3, 4)

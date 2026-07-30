@@ -4,9 +4,10 @@ Every bug found in this library, what caused it, how it was found, and what now
 prevents it from coming back.
 
 Kept because the *patterns* are worth more than the individual fixes. Four of
-the eight below are the same two mistakes wearing different clothes, and the
-techniques that caught them (§B) caught them in code that was already passing a
-green test suite.
+the first eight below are the same two mistakes wearing different clothes, and
+the techniques that caught them (§B) caught them in code that was already
+passing a green test suite — as did the later entries, found by re-running
+those same techniques against code the suite already blessed.
 
 Every citation here is live. The pre-fix code for each fixed bug is one
 `git checkout` away, so each **Reproduce** block below lets you watch the guard
@@ -35,6 +36,9 @@ Their generalizable lessons are folded into §A without identifying details.
 | 6 | `tests/test_kernel.py` — a test that could not fail | medium | audit | replaced, `7c3f812` |
 | 7 | CI — mypy was never executed | medium | audit | fixed, `7c3f812` |
 | 8 | invariant script — batch dims folded into the cell index | low | crash | fixed immediately |
+| 9 | `data/` — `Sample`/`Batch` unpicklable, `DataLoader(num_workers>0)` hangs | high | targeted probe | fixed |
+| 10 | `models/rnn.py` — `plan` silently overrode `n_layers` | medium | targeted probe | fixed |
+| 11 | `compose/kernel.py` — `nan_to_num` laundered input NaNs | medium | targeted probe | fixed |
 
 Severity is "what would this have cost if it reached a user", not "how hard was
 it to fix". Every one of #1–#5 is silent: no exception, no NaN, just wrong
@@ -280,6 +284,63 @@ was still easy to get wrong when writing a one-off script.
 
 ---
 
+## 9. `Sample`/`Batch` could not be pickled, so worker loading hung
+
+```python
+class Sample(dict):
+    __getattr__ = dict.__getitem__  # sample.x — neat, and broken
+```
+
+A missing attribute raised ``KeyError`` where Python promises
+``AttributeError``. That breaks ``hasattr`` and ``getattr(s, "y", None)`` — and
+breaks **pickling**, because pickle probes for optional dunders like
+``__getstate__`` with ``getattr`` and only tolerates ``AttributeError``. Every
+``DataLoader(num_workers>0)`` pickles each sample through the worker queue, so
+multiprocessing loading did not fail cleanly: the worker died mid-pickle and
+the main process **hung forever waiting on the queue**.
+
+**Cause.** A shortcut that changes an exception type across a protocol
+boundary. The one-liner reads as equivalent to a real ``__getattr__`` and is
+not.
+**Fix.** A ``__getattr__`` that translates ``KeyError`` to ``AttributeError``.
+**Guarded by** `test_samples_and_batches_survive_pickling`,
+`test_a_missing_field_reads_as_absent_not_as_a_keyerror`, and the end-to-end
+`test_dataloader_with_worker_processes`. Note the first is the canonical guard:
+on the broken code the worker test *hangs* rather than fails, which is exactly
+why a fast direct test must sit in front of a slow end-to-end one.
+
+---
+
+## 10. A `plan` silently overrode `n_layers`
+
+`td.LSTM(8, n_layers=6, lattice=lat, plan=two_step_plan)` built a 2-layer
+model. No error, no warning — a model quietly shallower than requested, the
+same silent-downgrade class as #4.
+
+**Fix.** The plan still wins, but the downgrade warns. A warning rather than an
+error because the first attempt at a hard error immediately broke this suite's
+own generic factories — builders that fill ``n_layers`` unconditionally and add
+a plan only sometimes are legitimate, and the default ``n_layers=1`` passes
+untouched either way.
+**Guarded by** `test_rnn_warns_when_a_plan_disagrees_with_n_layers`.
+
+---
+
+## 11. `nan_to_num` laundered upstream NaNs into finite output
+
+After #3's magnitude guard, the division in the sparse renormalizer cannot
+create a fresh NaN — so the ``nan_to_num`` wrapped around it could only ever
+fire on NaNs already present in the *input*, zeroing them. A diverging model's
+NaNs vanished mid-network into plausible finite numbers.
+
+**Cause.** A guard kept after the failure it guarded against was fixed
+properly. Same shape as #3: ask what a ``nan_to_num`` is for, and if the
+answer is "nothing anymore", it is hiding something else.
+**Fix.** Removed. A NaN that arrives must leave.
+**Guarded by** `test_a_nan_in_the_input_is_not_silently_laundered`.
+
+---
+
 ## Not bugs
 
 Two things that look like defects and are not. Recorded so they are not
@@ -302,7 +363,10 @@ unobservable. A semantically equivalent mutant, not a coverage hole.
 
 ## A. Recurring patterns
 
-Four classes account for all eight.
+Four classes account for the first eight — and the later finds keep landing in
+them: #10 is another silent downgrade like #4, #11 another guard aimed at the
+wrong failure like #3, and #9 another object whose neat idiom does not deliver
+what it announces, like A3.
 
 **A1 — An assumption that holds in one configuration.** (#3, and both
 private-repo findings.) A masking or normalization step correct for one axis,
