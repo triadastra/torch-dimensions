@@ -8,6 +8,14 @@ the eight below are the same two mistakes wearing different clothes, and the
 techniques that caught them (§B) caught them in code that was already passing a
 green test suite.
 
+Every citation here is live. The pre-fix code for each fixed bug is one
+`git checkout` away, so each **Reproduce** block below lets you watch the guard
+fire — and each was *run before being written down*, which is how two citations
+that were not actually guards got caught (see #1 and #3). A "guarded by" line
+is itself a comment stating an invariant (§A1), so the citations get a test:
+[tests/test_debug_md.py](tests/test_debug_md.py) fails if any test name or
+commit hash cited here stops existing.
+
 **Scope note.** This file covers torch-dimensions only. Two further bugs were
 found in separate private research repositories during the same work; they are
 documented on their own fix branches and are deliberately not detailed here.
@@ -57,8 +65,19 @@ signals immutability, but nothing enforced it.
 guarantee.
 
 **Fix.** `__setattr__` and `__delattr__` raise after construction.
-**Guarded by** `test_a_plan_cannot_be_mutated_after_construction`,
-`test_a_plan_survives_use_as_a_dict_key`.
+**Guarded by** `test_a_plan_cannot_be_mutated_after_construction`.
+`test_a_plan_survives_use_as_a_dict_key` documents the value-semantics contract
+but **passes even on the pre-fix code** — it never mutates anything — so it is
+not a guard for this bug. An earlier revision of this file cited it as one;
+running both tests against the pre-fix file is what corrected that.
+
+**Reproduce.**
+
+```bash
+git checkout 7c3f812~1 -- src/torch_dimensions/plan.py
+pytest tests/test_plan.py -k cannot_be_mutated        # 1 failed
+git checkout HEAD -- src/torch_dimensions/plan.py
+```
 
 ---
 
@@ -84,6 +103,14 @@ lattice desyncs an already-built module regardless of the cache.
 **Fix.** Immutable after `__post_init__`. `to()` already returned a new
 instance rather than mutating.
 **Guarded by** `test_a_lattice_cannot_be_mutated_after_construction`.
+
+**Reproduce.**
+
+```bash
+git checkout 7c3f812~1 -- src/torch_dimensions/lattice.py
+pytest tests/test_lattice.py -k cannot_be_mutated     # 1 failed
+git checkout HEAD -- src/torch_dimensions/lattice.py
+```
 
 ---
 
@@ -114,8 +141,19 @@ that silently mis-handles a different one (cancellation).
 
 **Fix.** Guard the *magnitude* and leave degenerate lines unscaled. A genuinely
 dead line still has a zero numerator, so it stays zero.
-**Guarded by** `test_a_signed_kernel_does_not_explode_when_the_mass_cancels`,
-`test_a_genuinely_dead_line_is_still_zero_under_the_guard`.
+**Guarded by** `test_a_signed_kernel_does_not_explode_when_the_mass_cancels`.
+`test_a_genuinely_dead_line_is_still_zero_under_the_guard` **passes even on the
+pre-fix code** — a dead line's numerator is zero either way — so it pins the
+fix against overcorrection rather than catching the bug. Both roles are worth
+having; they are different roles, and this file originally conflated them.
+
+**Reproduce.**
+
+```bash
+git checkout 7c3f812~1 -- src/torch_dimensions/compose/kernel.py
+pytest tests/test_kernel.py -k signed_kernel          # 1 failed
+git checkout HEAD -- src/torch_dimensions/compose/kernel.py
+```
 
 ---
 
@@ -155,6 +193,17 @@ factor with `n`.
 which fails on exactly the even axis counts and passes on odd — the signature
 of the aliasing, and evidence the test is testing the right thing.
 
+**Reproduce.** The bug never shipped, so the reproduction is a mutation: in
+`ScanPlan.cyclic`, change the direction term `(i // n) % 2 == 1` to
+`i % 2 == 1`, then
+
+```bash
+pytest tests/test_plan.py::test_bidirectional_cyclic_gives_every_axis_both_directions
+```
+
+fails at 2 and 4 axes and passes at 1 and 3 — the parity signature above,
+observed rather than asserted.
+
 ---
 
 ## 5. `check_trainable` proved nothing on its first version
@@ -182,6 +231,10 @@ never sweeps w (control)   held-out 1.376
 learning.
 **Guarded by** `test_a_model_that_never_sweeps_the_needed_axis_cannot_learn_it`,
 which asserts the control *fails*.
+
+**Reproduce.** Not reproducible from history: the fixed-batch version was
+replaced before `e5edbfb` was committed. The numbers above are from the
+session in which it was caught.
 
 ---
 
@@ -279,6 +332,10 @@ Ranked by yield in this project.
 
 1. **Mutation testing.** Break the code deliberately, confirm the suite
    notices. Found #6 and validated #4. Cheap: revert with `git checkout`.
+   The same trick runs backwards through history —
+   `git checkout <fix>~1 -- <file>`, run the guard, restore — which is how
+   every **Reproduce** block above was verified, and how two cited "guards"
+   were exposed as tests that pass on the buggy code (#1, #3).
 2. **Independent references.** Check against something sharing no code —
    `x.cumsum(dim=d)` for an axial sweep, `torch.kron` for the factorization,
    `torch.argsort` for an inverse permutation, a hand-written decoder for an
