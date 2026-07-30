@@ -42,6 +42,7 @@ class LatticeModel(nn.Module):
         *,
         d_input: int | None = None,
         nd_method: str | Callable[..., nn.Module] = axial_scan,
+        method: str | Callable[..., nn.Module] | None = None,
         plan: ScanPlan | None = None,
         bidirectional: bool | AxisSpec | list[AxisSpec] = False,
         dropout: float = 0.0,
@@ -50,6 +51,13 @@ class LatticeModel(nn.Module):
         **method_kwargs,
     ) -> None:
         super().__init__()
+        # `method` is the short spelling of `nd_method` — the method of
+        # multidimensionality. Both name the same thing; giving both is a
+        # contradiction waiting to happen and is refused.
+        if method is not None:
+            if nd_method is not axial_scan:
+                raise ValueError("pass either `method` or `nd_method`, not both")
+            nd_method = method
         # No lattice means a single dynamic axis: an ordinary sequence.
         self.lattice = lattice if lattice is not None else Lattice(shape=(), time=True)
 

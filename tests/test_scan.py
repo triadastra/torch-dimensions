@@ -382,9 +382,11 @@ def test_nd_method_accepts_a_user_written_callable():
 
 
 def test_unknown_nd_method_names_the_registered_ones():
+    """ "cafa" was once the example of an unknown name here; it is now a real
+    registered method, which is exactly why the example must be impossible."""
     lat = Lattice(shape=(2, 3))
-    with pytest.raises(ValueError, match="axial_scan"):
-        LSTM(4, 2, lat, nd_method="cafa")
+    with pytest.raises(ValueError, match="axial_attention.*axial_scan.*cafa"):
+        LSTM(4, 2, lat, nd_method="no_such_method")
 
 
 def test_nd_method_must_be_a_name_or_callable():

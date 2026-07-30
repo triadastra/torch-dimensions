@@ -39,15 +39,19 @@ import torch.nn as nn
 from torch_dimensions.lattice import Lattice
 from torch_dimensions.plan import ScanPlan
 
+from torch_dimensions.compose.attention import AxialKernel  # isort: skip
 from torch_dimensions.compose.kernel import axial_contract, kron_operator  # isort: skip
 from torch_dimensions.compose.scan import AxialScan, axial_apply  # isort: skip
 
 __all__ = [
     "ND_METHODS",
+    "AxialKernel",
     "AxialScan",
     "axial_apply",
     "axial_contract",
+    "axial_attention",
     "axial_scan",
+    "cafa",
     "kron_operator",
     "register_nd_method",
     "resolve_nd_method",
@@ -74,8 +78,50 @@ def axial_scan(
     return AxialScan(mixer=mixer, plan=plan, lattice=lattice, d_model=d_model, **kwargs)
 
 
+def axial_attention(
+    mixer: Callable[[], nn.Module] | nn.Module | None,
+    plan: ScanPlan,
+    lattice: Lattice,
+    d_model: int,
+    **kwargs,
+) -> nn.Module:
+    """Per-line attention kernels over the spatial axes; the mixer runs along
+    time — the hybrid form. ``td.LSTM(..., nd_method=td.axial_attention)``.
+
+    Each layer contracts every spatial axis with a per-line softmax kernel
+    (plus a learned relative-position bias), then the model's own 1-D mixer
+    sweeps the time axis. The attention never consumes the mixer; it handles
+    the axes the mixer does not.
+    """
+    return AxialKernel(
+        mixer=mixer, plan=plan, lattice=lattice, d_model=d_model, per_line=True, **kwargs
+    )
+
+
+def cafa(
+    mixer: Callable[[], nn.Module] | nn.Module | None,
+    plan: ScanPlan,
+    lattice: Lattice,
+    d_model: int,
+    **kwargs,
+) -> nn.Module:
+    """Factorized attention (CaFA): pooled per-axis kernels, Kronecker-
+    structured, with the mixer along time. ``td.LSTM(..., nd_method=td.cafa)``.
+
+    Cheaper than :func:`axial_attention` — one kernel per axis per (batch,
+    timestep) instead of per line — and more structured: the joint operator
+    is exactly a Kronecker product of the per-axis kernels. ``gate=`` selects
+    ``"softmax"`` (default) or ``"leaky_relu"`` (the CaFA paper's default).
+    """
+    return AxialKernel(
+        mixer=mixer, plan=plan, lattice=lattice, d_model=d_model, per_line=False, **kwargs
+    )
+
+
 ND_METHODS: dict[str, Callable[..., nn.Module]] = {
+    "axial_attention": axial_attention,
     "axial_scan": axial_scan,
+    "cafa": cafa,
 }
 
 
