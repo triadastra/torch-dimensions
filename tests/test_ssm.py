@@ -175,10 +175,20 @@ def test_the_nd_names_refuse_ambiguity_and_absence():
         td.S4ND(8, 4, dim=2, lattice=td.Lattice(shape=(3, 4)), shape=(3, 4))
     with pytest.raises(ValueError, match="dim=3"):
         td.MambaND(8, 4, shape=(3, 4), dim=3)
-    with pytest.raises(ValueError, match="no spatial axes"):
-        td.S4DND(8, 4, dim=1, lattice=td.Lattice(shape=(), time=True))
-    with pytest.raises(ValueError, match=">= 1"):
+    with pytest.raises(ValueError, match=">= 2"):
         td.S4ND(8, 4, dim=0, shape=(3,))
+
+
+def test_dim_one_is_refused_by_name():
+    """dim=1 under the N-D name would run the plain 1-D model while the code
+    reads 'S4ND' — the reader would believe something false. Each refusal
+    names the class actually being requested."""
+    with pytest.raises(ValueError, match="one spatial axis is just S4[^D]"):
+        td.S4ND(8, 4, dim=1, shape=(6,))
+    with pytest.raises(ValueError, match="just S4D"):
+        td.S4DND(8, 4, dim=1, shape=(6,))
+    with pytest.raises(ValueError, match="just Mamba"):
+        td.MambaND(8, 4, dim=1, lattice=td.Lattice(shape=(6,), time=True))
 
 
 def test_dim_that_agrees_is_accepted():

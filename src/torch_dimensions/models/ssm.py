@@ -4,8 +4,10 @@
 lattice and it is S4ND. Same for ``td.S4D`` and ``td.Mamba``. The explicit N-D
 names — ``td.S4ND``, ``td.S4DND``, ``td.MambaND`` — are the same classes with
 ``dim`` and the lattice made mandatory: taking the N-D name means declaring
-what N is, and the declaration is checked. Pass ``lattice=...`` or just
-``shape=(32, 32)`` and the lattice is constructed for you.
+what N is, the declaration is checked, and ``dim=1`` is refused outright —
+one spatial axis is the 1-D model, and code reading "S4ND" must not be
+running S4. Pass ``lattice=...`` or just ``shape=(32, 32)`` and the lattice
+is constructed for you.
 
 The mixers are the portable implementations in
 :mod:`torch_dimensions.mixers.ssm`: pure torch, verified against the upstream
@@ -121,8 +123,17 @@ def _nd_lattice(
             f"{cls_name} requires `dim` — declare the number of spatial axes, "
             f"e.g. td.{cls_name}(64, 8, dim=2, shape=(32, 32))"
         )
+    base = cls_name.removesuffix("ND")
+    if dim == 1:
+        # Refused loudly rather than accepted quietly: a model built this way
+        # would *be* the 1-D model, and someone reading "S4ND" in their code
+        # or their spec would believe they are running something they are not.
+        raise ValueError(
+            f"dim=1 is not {cls_name} — one spatial axis is just {base}. "
+            f"Use td.{base}(..., lattice=...) so the code says what is actually running."
+        )
     if dim < 1:
-        raise ValueError(f"dim must be >= 1; got {dim}")
+        raise ValueError(f"the N-D names need dim >= 2; got {dim}")
     if lattice is None:
         if shape is None:
             raise ValueError(
