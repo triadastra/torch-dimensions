@@ -86,3 +86,22 @@ def test_spec_survives_a_device_model():
     spec = model.to_spec()
     assert spec["lattice"]["cells"]["present"] == 9
     assert spec["model"]["kind"] == "GRU"
+
+
+@pytest.mark.parametrize("cls", [td.S4D, td.Mamba])
+def test_the_ssm_family_runs_and_agrees_on_the_device(cls):
+    lat = _sparse_lattice()
+    torch.manual_seed(0)
+    cpu = cls(8, 3, lat)
+    dev = cls(8, 3, lat)
+    dev.load_state_dict(cpu.state_dict())
+    dev = dev.to(DEV)
+    x = torch.randn(2, 5, 3, 4, 8)
+    with torch.no_grad():
+        yc = cpu(x)
+        ym = dev(x.to(DEV))
+    assert not bool(ym.isnan().any())
+    diff = (yc - ym.cpu()).abs().max().item()
+    assert diff < 1e-4, f"cpu-vs-device diff {diff:.2e}"
+    dev(x.to(DEV)).pow(2).mean().backward()
+    assert all(p.grad is not None for p in dev.parameters() if p.requires_grad)

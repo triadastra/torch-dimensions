@@ -24,6 +24,7 @@ from torch_dimensions.compose import (
 )
 from torch_dimensions.lattice import Lattice, Restore
 from torch_dimensions.models.rnn import GRU, LSTM
+from torch_dimensions.models.ssm import S4D, Mamba
 from torch_dimensions.plan import ScanPlan, Step
 from torch_dimensions.spec import spec
 
@@ -32,6 +33,8 @@ __version__ = "0.0.0"
 __all__ = [
     "GRU",
     "LSTM",
+    "Mamba",
+    "S4D",
     "ND_METHODS",
     "AxialScan",
     "Lattice",

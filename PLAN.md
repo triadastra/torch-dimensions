@@ -25,7 +25,7 @@ Settled before Phase 0, since the name fixes the import path, the PyPI reservati
 Make the repo installable and enforceable before any logic exists.
 
 - `pyproject.toml` (hatchling), `src/` layout so tests import the installed package rather than the working tree.
-- Dependencies: `torch>=2.4` required and **nothing else**. Optional extras: `[mamba]`, `[s4]`, `[fla]`, `[dev]`, `[all]`.
+- Dependencies: `torch>=2.4` required and **nothing else**. Optional extras: `[mamba]`, `[fla]`, `[dev]`, `[all]`. (An `[s4]` extra existed until the portable S4D landed in-tree and made it pointless.)
 - `ruff` (lint + format), `pytest`, `pytest-cov`. Type hints throughout; `mypy` advisory, not gating.
 - CI: CPU matrix on Python 3.10–3.12. GPU tests marked `@pytest.mark.gpu` and skipped.
 - `LICENSE` (Apache-2.0 — matches PyTorch, permits the adapter story), `README.md`, `CONTRIBUTING.md`.
@@ -247,7 +247,7 @@ Phases 5, 6, and 7 are independent once the conformance suite exists. Phase 7 is
 
 ```
 torch-dimensions/
-├── pyproject.toml                  hatchling; torch>=2.4 only; extras [mamba] [s4] [fla] [dev] [all]
+├── pyproject.toml                  hatchling; torch>=2.4 only; extras [mamba] [fla] [dev] [all]
 ├── README.md                       pitch, unification table, quickstart, scope limits
 ├── DESIGN.md                       architecture
 ├── PLAN.md                         this file

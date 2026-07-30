@@ -28,11 +28,10 @@ dependencies = ["torch>=2.4"]
 [project.optional-dependencies]
 mamba = ["mamba-ssm>=2.0"]
 fla = ["flash-linear-attention"]
-# state-spaces/s4 is not published to PyPI; the standalone S4 module needs these
-# and the source is vendored or installed from git by the user.
-s4 = ["einops", "opt-einsum"]
+# S4D ships built in (portable, pure torch) — no [s4] extra. The full DPLR S4
+# stays upstream; PLAN.md Phase 7 records what a vendored copy must patch.
 dev = ["pytest>=8", "pytest-cov", "ruff>=0.6", "mypy", "hypothesis", "pyyaml"]
-all = ["torch-dimensions[mamba,fla,s4]"]
+all = ["torch-dimensions[mamba,fla]"]
 
 [project.urls]
 Homepage = "https://github.com/triadastra/torch-dimensions"
