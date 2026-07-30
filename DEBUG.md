@@ -45,6 +45,7 @@ Their generalizable lessons are folded into §A without identifying details.
 | 15 | `data/window.py` — `split_at_time` on unsorted times: silent nonsense | medium | targeted probe | fixed |
 | 16 | `testing.py` — conformance checks ran at ranks the caller excluded | medium | audit | fixed |
 | 17 | `compose/scan.py` — `chunk=0` errored from deep inside `range()` | low | targeted probe | fixed |
+| 18 | `lattice.py` — device lattice could not index CPU tensors | medium | device probe (MPS) | fixed |
 
 Severity is "what would this have cost if it reached a user", not "how hard was
 it to fix". Every one of #1–#5 is silent: no exception, no NaN, just wrong
@@ -435,6 +436,28 @@ Not wrong, just useless: the contract violation surfaced three frames deep
 with no mention of ``chunk``. Boundaries state their contracts;
 ``axial_apply`` now validates ``chunk >= 1`` itself.
 **Guarded by** `test_chunk_must_be_positive`.
+
+---
+
+## 18. `gather`/`scatter` broke in one device direction
+
+``lat.to(device).gather(x_cpu)`` raised from three frames inside an indexing
+kernel, while the mirror case — CPU lattice, device tensor — happened to work,
+because torch tolerates CPU indices on a device tensor but not the reverse.
+The cached ``flat_idx`` lives wherever ``valid`` lives, and callers should not
+have to know that.
+
+Found **without CUDA**: device-placement bugs need *a* second device, not a
+specific one, and this machine's MPS backend is one. The whole class is now
+pinned by [tests/test_device.py](tests/test_device.py), which runs against
+whatever accelerator exists (MPS here, CUDA elsewhere) and skips visibly on
+CPU-only machines. What MPS cannot vouch for — CUDA kernel numerics,
+``torch.compile`` backends, float64 on device — is stated in that file's
+docstring rather than silently unclaimed.
+
+**Fix.** Index with ``flat_idx.to(x.device)``; a no-op when they agree.
+**Guarded by** `test_gather_scatter_round_trip_across_device_mismatches`,
+both mismatch directions.
 
 ---
 

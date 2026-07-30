@@ -274,14 +274,18 @@ class Lattice:
         if x.shape[-2] != self.n_valid:
             raise ValueError(f"expected {self.n_valid} cells, got {x.shape[-2]}")
         out = x.new_zeros(*lead, self.n_cells, h)
-        out[..., self.flat_idx, :] = x
+        # Index on x's device. The cache lives wherever `valid` lives, and
+        # torch only tolerates the CPU-index-into-device-tensor direction —
+        # a device lattice indexing a CPU tensor raises. `.to` is a no-op
+        # when they already agree.
+        out[..., self.flat_idx.to(x.device), :] = x
         return out.reshape(*lead, *self.shape, h)
 
     def gather(self, x: torch.Tensor) -> torch.Tensor:
         """Dense ``(B, [T,] *shape, H)`` -> ``(B, [T,] G, H)`` of existing cells."""
         lead, h = x.shape[: -(self.rank + 1)], x.shape[-1]
         flat = x.reshape(*lead, self.n_cells, h)
-        return flat[..., self.flat_idx, :]
+        return flat[..., self.flat_idx.to(x.device), :]
 
     def mask(self, dtype: torch.dtype = torch.bool) -> torch.Tensor:
         """Validity mask shaped to broadcast over ``(B, [T,] *shape, H)``.
