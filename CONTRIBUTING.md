@@ -43,4 +43,11 @@ That suite is public API, not test-directory scaffolding: it is the same set of 
 
 ## Tests
 
+[DEBUG.md](DEBUG.md) records every bug found in this library so far, and its
+last two sections are worth reading before writing tests: §A lists the four
+mistake patterns that account for all of them, and §B ranks the techniques
+that actually caught them. Two are cheap and found the most here — check
+against an *independent* reference rather than a round-trip through your own
+code, and break the implementation deliberately to confirm the suite notices.
+
 Every new block must pass `check_block`. Beyond that, the tests worth writing are the ones that catch axis bugs: rank-1 equivalence against the underlying 1-D module, permutation round-trips, and mask invariance on sparse lattices. See [PLAN.md](PLAN.md) for what each phase must prove before the next one starts.
