@@ -11,10 +11,10 @@ import pytest
 import torch
 
 import torch_dimensions as td
-from torch_dimensions.mixers.ssm import MambaMixer, S4DMixer
+from torch_dimensions.mixers.ssm import MambaMixer, S4DMixer, S4Mixer
 
-MODELS = [td.S4D, td.Mamba]
-MIXERS = [S4DMixer, MambaMixer]
+MODELS = [td.S4, td.S4D, td.Mamba]
+MIXERS = [S4Mixer, S4DMixer, MambaMixer]
 
 
 def _factory(cls):
@@ -39,11 +39,12 @@ def test_ssm_family_passes_every_applicable_check(cls):
 @pytest.mark.parametrize(
     "mixer_cls,atol",
     [
-        # S4D's causal convolution runs through an FFT over the whole padded
+        # The convolutional mixers run through an FFT over the whole padded
         # line, so a changed future perturbs the *rounding* of the past by
         # ~1e-15 while the mathematics stays causal. Measured: 2.6e-15 under a
         # magnitude-100 future perturbation, vs 48 after the cut. The Mamba
         # recurrence touches the past not at all, so it is held to bitwise.
+        (S4Mixer, 1e-12),
         (S4DMixer, 1e-12),
         (MambaMixer, 0.0),
     ],
@@ -102,3 +103,79 @@ def test_mixer_options_reach_every_layer():
 def test_s4d_rejects_an_odd_state_size():
     with pytest.raises(ValueError, match="even"):
         S4DMixer(8, d_state=7)
+
+
+# -- the S4 kernel against an independent dense reference ----------------------
+
+
+def test_the_s4_kernel_equals_dense_state_space_powers():
+    """The frequency-domain DPLR computation (Cauchy resolvent + Woodbury +
+    irfft) against the thing it claims to equal: materialize A = Λ - PP*,
+    bilinear-discretize, and take matrix powers. Evaluating the transfer
+    function at the L-th roots of unity yields the L-periodized kernel, hence
+    the (I - dA^L)^{-1} aliasing factor. Machine-precision equality expected —
+    measured 4.6e-16 — because both sides are exact linear algebra."""
+    from torch_dimensions.mixers.ssm import _S4Kernel
+
+    torch.manual_seed(0)
+    h_width, n_state, length = 3, 8, 24
+    kern = _S4Kernel(h_width, d_state=n_state).double()
+    with torch.no_grad():
+        k_freq = kern(length)
+        dt = torch.exp(kern.log_dt)
+        lam = -torch.exp(kern.log_A_real) + 1j * kern.A_imag
+        b = torch.view_as_complex(kern.B)
+        c = torch.view_as_complex(kern.C)
+        p = torch.view_as_complex(kern.P)
+        rows = []
+        for h in range(h_width):
+            lam_f = torch.cat([lam[h], lam[h].conj()])
+            p_f = torch.cat([p[h], p[h].conj()])
+            b_f = torch.cat([b[h], b[h].conj()])
+            c_f = torch.cat([c[h], c[h].conj()])
+            a_f = torch.diag(lam_f) - torch.outer(p_f, p_f.conj())
+            eye = torch.eye(n_state, dtype=a_f.dtype)
+            half = dt[h] / 2
+            inv = torch.linalg.inv(eye - half * a_f)
+            d_a = inv @ (eye + half * a_f)
+            d_b = inv @ (dt[h] * b_f)
+            alias = torch.linalg.inv(eye - torch.linalg.matrix_power(d_a, length))
+            state = alias @ d_b
+            row = []
+            for _ in range(length):
+                row.append((c_f @ state).real)
+                state = d_a @ state
+            rows.append(torch.stack(row))
+        k_dense = torch.stack(rows)
+    assert torch.allclose(k_freq, k_dense, atol=1e-12), (
+        f"max diff {(k_freq - k_dense).abs().max().item():.2e}"
+    )
+
+
+# -- the explicit N-D names ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "nd_cls,base_name", [(td.S4ND, "S4"), (td.S4DND, "S4D"), (td.MambaND, "Mamba")]
+)
+def test_the_nd_names_build_their_own_lattice(nd_cls, base_name):
+    model = nd_cls(8, 4, shape=(3, 4), names=("h", "w"))
+    assert model.lattice.rank == 2 and model.lattice.time
+    out = model(torch.randn(2, 5, 3, 4, 8))
+    assert out.shape == (2, 5, 3, 4, 8)
+    assert model.to_spec()["model"]["kind"] == nd_cls.__name__
+
+
+def test_the_nd_names_refuse_ambiguity_and_absence():
+    with pytest.raises(ValueError, match="needs a lattice"):
+        td.S4ND(8, 4)
+    with pytest.raises(ValueError, match="not both"):
+        td.S4ND(8, 4, lattice=td.Lattice(shape=(3, 4)), shape=(3, 4))
+    with pytest.raises(ValueError, match="dim=3"):
+        td.MambaND(8, 4, shape=(3, 4), dim=3)
+    with pytest.raises(ValueError, match="no spatial axes"):
+        td.S4DND(8, 4, lattice=td.Lattice(shape=(), time=True))
+
+
+def test_dim_that_agrees_is_accepted():
+    assert td.S4ND(8, 4, shape=(3, 4), dim=2).lattice.rank == 2
