@@ -41,11 +41,26 @@ class ScanPlan:
 
     __slots__ = ("steps",)
 
+    steps: tuple[Step, ...]
+
     def __init__(self, steps: Sequence[Step]) -> None:
-        steps = tuple(Step(s.axis, bool(s.reverse)) for s in steps)
-        if not steps:
+        built = tuple(Step(s.axis, bool(s.reverse)) for s in steps)
+        if not built:
             raise ValueError("a scan plan needs at least one step")
-        object.__setattr__(self, "steps", steps)
+        object.__setattr__(self, "steps", built)
+
+    # Immutable because it is hashable. Mutating a plan would change its hash,
+    # silently losing it from any dict or set holding it — and worse, a block
+    # builds one mixer per step at construction, so a plan edited afterwards
+    # would no longer describe the layers that actually run.
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError(
+            f"ScanPlan is immutable; cannot set {name!r}. "
+            "Build a new plan with ScanPlan.from_list(...)."
+        )
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError(f"ScanPlan is immutable; cannot delete {name!r}")
 
     # -- constructors -------------------------------------------------------
 

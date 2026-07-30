@@ -231,3 +231,22 @@ def test_to_dict_is_plain_json_types():
 def test_from_dict_needs_a_steps_key():
     with pytest.raises(KeyError, match="steps"):
         ScanPlan.from_dict({"layers": []})
+
+
+def test_a_plan_cannot_be_mutated_after_construction():
+    """It is hashable, so it must be immutable. A mutated plan changes its own
+    hash — silently losing it from any dict — and desyncs from the mixers a
+    block already built one-per-step from it."""
+    plan = ScanPlan.cyclic(("a", "b"), 4)
+    with pytest.raises(AttributeError, match="immutable"):
+        plan.steps = ()
+    with pytest.raises(AttributeError, match="immutable"):
+        del plan.steps
+    with pytest.raises(AttributeError):
+        plan.anything_else = 1
+
+
+def test_a_plan_survives_use_as_a_dict_key():
+    plan = ScanPlan.cyclic(("a", "b"), 4)
+    store = {plan: "value"}
+    assert store[ScanPlan.cyclic(("a", "b"), 4)] == "value"

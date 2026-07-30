@@ -92,6 +92,20 @@ class Lattice:
                 raise ValueError("valid mask selects no cells")
 
         self._cache: dict[str, torch.Tensor] = {}
+        self._frozen = True
+
+    # A lattice is a value object, and blocks derive buffers from it at
+    # construction — ``AxialScan`` registers its cell mask once, and the
+    # derived ``flat_idx`` is cached here. Mutating a field afterwards would
+    # leave both stale and silently misplace data, so mutation is refused.
+    # Build a new lattice, or use :meth:`to` to move devices.
+    def __setattr__(self, name: str, value: object) -> None:
+        if getattr(self, "_frozen", False):
+            raise AttributeError(f"Lattice is immutable; cannot set {name!r}. Construct a new one.")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError(f"Lattice is immutable; cannot delete {name!r}")
 
     # -- structure ----------------------------------------------------------
 
@@ -128,7 +142,9 @@ class Lattice:
     @property
     def n_valid(self) -> int:
         """Number of cells that exist. Equals :attr:`n_cells` when dense."""
-        return self.n_cells if self.is_dense else int(self.valid.sum())
+        if self.valid is None:
+            return self.n_cells
+        return int(self.valid.sum())
 
     @property
     def device(self) -> torch.device | None:

@@ -140,17 +140,30 @@ def test_renormalization_makes_a_uniform_kernel_average_only_present_cells():
 
 
 def test_without_renormalization_structural_zeros_dilute_the_result():
-    """The control: this is what the renormalization is correcting."""
+    """The control that gives the test above its meaning.
+
+    Needs a *row-stochastic* kernel to say anything: with an unnormalized
+    all-ones kernel the contraction is a sum rather than a mean, and a sum has
+    no dilution to show.
+    """
     valid = torch.tensor([[True, True, True], [True, False, False]])
     lat = Lattice(shape=(2, 3), valid=valid)
-    x = torch.ones(1, 2, 3, 1, dtype=torch.float64) * lat.mask().to(torch.float64)
-    ones = torch.ones(3, 3, dtype=torch.float64)
+    mask = lat.mask().to(torch.float64)
+    x = torch.ones(1, 2, 3, 1, dtype=torch.float64) * mask
+    uniform = torch.full((3, 3), 1 / 3, dtype=torch.float64)  # rows sum to 1
 
-    plain = axial_contract(x, lat, 1, ones)
-    assert torch.allclose(plain[0, 1], torch.ones(3, 1, dtype=torch.float64))
-    assert not torch.allclose(plain[0, 1] / 3, out_row := plain[0, 1])  # noqa: F841
-    # Unrenormalized, the mean over the line would be 1/3 rather than 1.
-    assert torch.allclose(plain[0, 1] / 3, torch.full((3, 1), 1 / 3, dtype=torch.float64))
+    plain = axial_contract(x, lat, 1, uniform)
+    renormed = axial_contract(x, lat, 1, uniform, valid=mask)
+    one = torch.ones(3, 1, dtype=torch.float64)
+
+    # Row 0: all three cells present, so both agree on the true mean of 1.
+    assert torch.allclose(plain[0, 0], one)
+    assert torch.allclose(renormed[0, 0], one)
+
+    # Row 1: only one cell present. Unrenormalized it is averaged over three
+    # slots, two of which are structural zeros -> 1/3. That is the dilution.
+    assert torch.allclose(plain[0, 1], one / 3)
+    assert torch.allclose(renormed[0, 1], one)
 
 
 @pytest.mark.parametrize("rank", [2, 3])
@@ -209,3 +222,37 @@ def test_gradcheck_passes_through_the_contraction():
 
     x = torch.randn(1, *lat.shape, 2, dtype=torch.float64, requires_grad=True)
     assert torch.autograd.gradcheck(fn, (x,), fast_mode=True)
+
+
+def test_a_signed_kernel_does_not_explode_when_the_mass_cancels():
+    """`clamp_min` assumes a non-negative mass. A signed kernel — LeakyReLU
+    scores, as upstream CaFA uses by default — can cancel to zero while the
+    numerator stays nonzero, and clamping to +eps then divides by ~0."""
+    lat = Lattice(shape=(2, 4), valid=torch.tensor([[1, 1, 0, 0], [1, 1, 1, 1]]).bool())
+    mask = lat.mask().to(torch.float64)
+    x = torch.randn(1, 2, 4, 3, dtype=torch.float64) * mask
+    signed = torch.tensor(
+        [
+            [1.0, -1.0, 0.5, 0.5],
+            [-1.0, 1.0, 0.5, 0.5],
+            [0.5, 0.5, 1.0, -1.0],
+            [0.5, 0.5, -1.0, 1.0],
+        ],
+        dtype=torch.float64,
+    )
+    out = axial_contract(x, lat, 1, signed, valid=mask)
+    assert torch.isfinite(out).all()
+    # Row 0's mass cancels exactly; the output must stay the same order of
+    # magnitude as the input rather than blowing up by ~1e6.
+    assert out.abs().max() < 10 * x.abs().max(), out.abs().max().item()
+
+
+def test_a_genuinely_dead_line_is_still_zero_under_the_guard():
+    """Leaving degenerate lines unscaled must not resurrect them: with no
+    present cells the numerator is zero, so the output stays zero."""
+    lat = Lattice(shape=(2, 2), valid=torch.tensor([[True, True], [False, False]]))
+    mask = lat.mask().to(torch.float64)
+    x = torch.randn(1, 2, 2, 3, dtype=torch.float64) * mask
+    out = axial_contract(x, lat, 1, torch.rand(2, 2, dtype=torch.float64), valid=mask)
+    assert torch.isfinite(out).all()
+    assert out[0, 1].abs().max() == 0.0

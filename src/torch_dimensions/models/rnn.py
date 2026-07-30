@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import partial
+from typing import cast
 
 import torch
 import torch.nn as nn
@@ -74,7 +75,7 @@ class _RNNFamily(nn.Module):
 
     @property
     def plan(self) -> ScanPlan:
-        return self.nd.plan
+        return cast(ScanPlan, self.nd.plan)
 
     def to_spec(self) -> dict:
         """A JSON-able description of this model's N-D architecture.

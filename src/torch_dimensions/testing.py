@@ -184,7 +184,9 @@ def check_block(
     # 4. Kronecker identity --------------------------------------------------
     record(
         "Kronecker identity (kernel family)",
-        lambda: (_ for _ in ()).throw(_Skip("kernel family lands in Phase 6")),
+        lambda: (_ for _ in ()).throw(
+            _Skip("needs a block exposing its per-axis kernels; see tests/test_kernel.py")
+        ),
     )
 
     # 5. mask invariance -----------------------------------------------------

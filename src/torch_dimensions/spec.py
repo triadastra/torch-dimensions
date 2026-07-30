@@ -15,7 +15,7 @@ taken before any data exists.
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
@@ -82,8 +82,8 @@ def plan_spec(plan: ScanPlan, lat: Lattice) -> list[dict[str, Any]]:
     return [
         {
             "layer": i,
-            "axis": lat.axis_names[step.axis],
-            "axis_index": step.axis,
+            "axis": lat.axis_names[cast(int, step.axis)],
+            "axis_index": cast(int, step.axis),
             "reverse": step.reverse,
         }
         for i, step in enumerate(resolved)
@@ -110,7 +110,7 @@ def _directions(plan: ScanPlan, lat: Lattice) -> dict[str, str]:
     resolved = plan.resolve(lat) if not plan.is_resolved() else plan
     seen: dict[int, set[bool]] = {}
     for s in resolved:
-        seen.setdefault(s.axis, set()).add(s.reverse)
+        seen.setdefault(cast(int, s.axis), set()).add(s.reverse)
     out = {}
     for axis, dirs in seen.items():
         out[lat.axis_names[axis]] = (
@@ -126,8 +126,9 @@ def spec(model: nn.Module) -> dict[str, Any]:
     model in the scan family has. Anything else raises rather than emitting a
     half-filled document.
     """
-    if hasattr(model, "to_spec"):
-        return model.to_spec()
+    describe = getattr(model, "to_spec", None)
+    if callable(describe):
+        return cast(dict, describe())
     raise TypeError(
         f"{type(model).__name__} does not describe itself; implement to_spec() "
         "or pass one of the library's models"
@@ -136,23 +137,19 @@ def spec(model: nn.Module) -> dict[str, Any]:
 
 def scan_model_spec(model: nn.Module) -> dict[str, Any]:
     """The spec for a scan-family model. Used by the models' ``to_spec``."""
-    lat: Lattice = model.lattice
-    nd = model.nd
+    lat = cast(Lattice, model.lattice)
+    nd: Any = model.nd  # Module.__getattr__ erases the type
     plan: ScanPlan = nd.plan
 
     mixers = [
-        {
-            "layer": i,
-            "type": type(m).__name__,
-            "n_params": _n_params(m),
-        }
+        {"layer": i, "type": type(m).__name__, "n_params": _n_params(m)}
         for i, m in enumerate(nd.mixers)
     ]
     layers = plan_spec(plan, lat)
     for layer, mixer in zip(layers, mixers, strict=True):
         layer.update({"mixer": mixer["type"], "n_params": mixer["n_params"]})
 
-    d_model = nd.d_model
+    d_model: int = nd.d_model
     in_proj = getattr(model, "in_proj", None)
     d_input = in_proj.in_features if isinstance(in_proj, nn.Linear) else d_model
 

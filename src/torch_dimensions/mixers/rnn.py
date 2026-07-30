@@ -11,6 +11,9 @@ to control.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import ClassVar
+
 import torch
 import torch.nn as nn
 
@@ -18,7 +21,9 @@ __all__ = ["GRUMixer", "LSTMMixer"]
 
 
 class _RNNMixer(nn.Module):
-    _cls: type[nn.RNNBase]
+    # Callable rather than `type[nn.RNNBase]`: RNNBase.__init__ takes a `mode`
+    # argument that its LSTM/GRU subclasses supply themselves.
+    _cls: ClassVar[Callable[..., nn.RNNBase]]
 
     def __init__(self, d_model: int, num_layers: int = 1, dropout: float = 0.0) -> None:
         super().__init__()

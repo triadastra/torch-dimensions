@@ -258,3 +258,26 @@ def test_round_trips_hold_for_arbitrary_lattices(sizes, time, density, seed):
         assert inv == tuple(torch.argsort(torch.tensor(perm)).tolist())
         seq, restore = lat.to_sequence(dense, axis)
         assert torch.equal(lat.from_sequence(seq, restore), dense)
+
+
+def test_a_lattice_cannot_be_mutated_after_construction():
+    """Blocks derive buffers from a lattice at construction and `flat_idx` is
+    cached, so a field changed afterwards leaves both stale — `n_valid` would
+    disagree with `flat_idx` and scatter would misplace data."""
+    lat = Lattice(shape=(2, 2), valid=torch.tensor([[True, True], [True, False]]))
+    assert lat.n_valid == 3 and lat.flat_idx.tolist() == [0, 1, 2]
+    with pytest.raises(AttributeError, match="immutable"):
+        lat.valid = torch.zeros(2, 2, dtype=torch.bool)
+    with pytest.raises(AttributeError, match="immutable"):
+        lat.shape = (9, 9)
+    with pytest.raises(AttributeError, match="immutable"):
+        del lat.valid
+    # unchanged, and still self-consistent
+    assert lat.n_valid == 3 and lat.flat_idx.tolist() == [0, 1, 2]
+
+
+def test_to_returns_a_new_lattice_rather_than_mutating():
+    lat = Lattice(shape=(2, 2), valid=torch.tensor([[True, False], [True, True]]))
+    moved = lat.to("cpu")
+    assert moved is not lat
+    assert moved.n_valid == lat.n_valid

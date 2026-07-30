@@ -66,10 +66,16 @@ def axial_contract(
 
     if valid is not None:
         mass, _ = lattice.to_sequence(valid.expand(*x.shape[:-1], 1), axis)  # (M, A, 1)
-        out = out / (kernel @ mass).clamp_min(_EPS)
-        # Lines with no present cells have a zero numerator; the clamp keeps
-        # them finite and the caller's mask zeroes them.
-        out = torch.nan_to_num(out)
+        den = kernel @ mass
+        # Guard the magnitude, not the lower bound. `clamp_min` assumes the
+        # denominator is a non-negative mass, which holds only for a
+        # non-negative kernel. A signed kernel — LeakyReLU-gated scores, say —
+        # can drive this to zero by cancellation while the numerator stays
+        # nonzero, and clamping to +eps then divides by ~0 and explodes by
+        # orders of magnitude. Leaving degenerate lines unscaled is the honest
+        # fallback: a genuinely dead line has a zero numerator and stays zero.
+        den = torch.where(den.abs() < _EPS, torch.ones_like(den), den)
+        out = torch.nan_to_num(out / den)
 
     return lattice.from_sequence(out, restore)
 
