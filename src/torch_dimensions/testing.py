@@ -151,7 +151,11 @@ def check_block(
 
     # 2. gradients -----------------------------------------------------------
     def _grads():
-        lat = _lattice(min(ranks) if len(ranks) == 1 else 2, time=time)
+        # A rank the caller actually asked for. Hardcoding rank 2 "for speed"
+        # gradchecked a lattice the factory was never claimed to support —
+        # ranks=(3, 4) would build and differentiate a rank-2 block behind the
+        # caller's back.
+        lat = _lattice(2 if 2 in ranks else min(ranks), time=time)
         block = _build(factory, lat, 2, seed)
         x = _input(lat, 2, 1, seq, seed).requires_grad_(True)
         block(x).pow(2).mean().backward()
@@ -168,6 +172,8 @@ def check_block(
     def _equivalence():
         if reference is None:
             raise _Skip("no `reference` given")
+        if 1 not in ranks:
+            raise _Skip("rank 1 not in `ranks`; the equivalence claim is a rank-1 claim")
         lat = _lattice(1, time=time)
         block = _build(factory, lat, d_model, seed)
         x = _input(lat, d_model, batch, seq, seed)

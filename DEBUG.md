@@ -39,6 +39,12 @@ Their generalizable lessons are folded into §A without identifying details.
 | 9 | `data/` — `Sample`/`Batch` unpicklable, `DataLoader(num_workers>0)` hangs | high | targeted probe | fixed |
 | 10 | `models/rnn.py` — `plan` silently overrode `n_layers` | medium | targeted probe | fixed |
 | 11 | `compose/kernel.py` — `nan_to_num` laundered input NaNs | medium | targeted probe | fixed |
+| 12 | `compose/kernel.py` — absolute epsilon vs relative cancellation | high | targeted probe | fixed |
+| 13 | `lattice.py` — `mask()` was a view; `valid` aliased the caller's tensor | high | targeted probe | fixed |
+| 14 | `data/collate.py` — targets dropped when the first sample lacked one | medium | targeted probe | fixed |
+| 15 | `data/window.py` — `split_at_time` on unsorted times: silent nonsense | medium | targeted probe | fixed |
+| 16 | `testing.py` — conformance checks ran at ranks the caller excluded | medium | audit | fixed |
+| 17 | `compose/scan.py` — `chunk=0` errored from deep inside `range()` | low | targeted probe | fixed |
 
 Severity is "what would this have cost if it reached a user", not "how hard was
 it to fix". Every one of #1–#5 is silent: no exception, no NaN, just wrong
@@ -338,6 +344,97 @@ properly. Same shape as #3: ask what a ``nan_to_num`` is for, and if the
 answer is "nothing anymore", it is hiding something else.
 **Fix.** Removed. A NaN that arrives must leave.
 **Guarded by** `test_a_nan_in_the_input_is_not_silently_laundered`.
+
+---
+
+## 12. The renormalizer's epsilon was absolute; cancellation is relative
+
+The #3 fix guarded ``|den| < 1e-6``. A signed float32 kernel row of
+``[1.0, -0.9999]`` over two present cells leaves a denominator of ~1e-4 —
+small enough to amplify by 1e4, large enough to sail past any tiny fixed
+threshold. Measured: input max 252, output max 1.8M, a ~7,000x blow-up in the
+library's *default* dtype. The prediction that half precision would be the
+vulnerable dtype was exactly backwards: fp16/bf16 round the near-cancellation
+to exact zero, which the old guard caught, and came out bounded.
+
+**Cause.** The fix for #3 repeated #3's mistake one level up: it guarded a
+threshold instead of the phenomenon. The phenomenon is cancellation, and
+cancellation is relative.
+**Fix.** Compare the signed mass against the absolute mass that went into it
+(``|kernel| @ mass``); a line is degenerate when almost everything cancelled.
+A genuinely *small* mass still renormalizes exactly, because the numerator
+carries the same factor.
+**Guarded by** `test_float32_near_cancellation_does_not_explode`.
+`test_a_genuinely_small_mass_still_renormalizes_exactly` passes pre-fix — it
+pins the new guard against overreach, in the sense #1/#3 taught us to state.
+
+---
+
+## 13. `mask()` returned a view of `valid`, and `valid` aliased the caller
+
+Two directions of the same aliasing. ``mask(torch.bool)`` was
+``valid.reshape(...).to(bool)`` — a **view**, so writing into "your" mask
+corrupted the lattice through it. And ``valid.to(torch.bool)`` returns the
+caller's own tensor when it is already bool, so a caller who reused or edited
+that tensor after construction desynced the cached ``flat_idx`` — measured:
+``flat_idx`` still listing 3 cells while ``n_valid`` said 2, which is
+``scatter`` misplacing data, the exact failure #2 was fixed to prevent.
+
+**Cause.** #2 froze the *attributes* and left the *tensors* shared. A value
+object holding mutable buffers is only a value if it owns them.
+**Fix.** Clone ``valid`` at construction; ``mask()`` builds a fresh tensor per
+call (callers buffer it at module construction — there was nothing worth
+caching).
+**Guarded by** `test_mask_is_a_copy_not_a_view_of_valid`,
+`test_the_callers_valid_tensor_is_not_aliased`.
+
+---
+
+## 14. `collate_lattice` keyed target presence off `samples[0]`
+
+A batch mixing horizon-0 samples with targeted ones either silently dropped
+every target (first sample lacked one) or crashed mid-stack. Under a shuffled
+loader, *which* of the two you get changes per batch.
+
+**Fix.** Target presence must be unanimous; a mixed batch raises.
+**Guarded by** `test_collate_refuses_mixed_target_presence`, both orderings.
+
+---
+
+## 15. `split_at_time` trusted its times to be sorted
+
+Unsorted timestamps produced a silently nonsensical train/test split — the
+quietest possible leakage bug, in the function whose entire job is preventing
+leakage. ``LatticeTable.times`` happens to be sorted, which is exactly the
+assumption-holds-in-one-configuration shape of §A1: the function is public and
+takes any sequence.
+
+**Fix.** Sortedness is checked; unsorted input raises.
+**Guarded by** `test_split_at_time_refuses_unsorted_times`.
+
+---
+
+## 16. The conformance suite tested ranks the caller never requested
+
+``check_block(factory, ranks=(3, 4))`` gradchecked a **rank-2** lattice —
+hardcoded "for speed" — and would have run the rank-1 equivalence check on a
+rank-1 one. A factory that is only valid at its stated ranks failed checks it
+should pass, and the passing checks partly measured a configuration nobody
+asked about.
+
+**Fix.** The gradient check uses a requested rank; the equivalence check skips
+with a reason when rank 1 was not requested, per the suite's own
+skips-are-not-passes rule.
+**Guarded by** `test_checks_run_only_at_ranks_the_caller_requested`.
+
+---
+
+## 17. `chunk=0` failed as `range() arg 3 must not be zero`
+
+Not wrong, just useless: the contract violation surfaced three frames deep
+with no mention of ``chunk``. Boundaries state their contracts;
+``axial_apply`` now validates ``chunk >= 1`` itself.
+**Guarded by** `test_chunk_must_be_positive`.
 
 ---
 

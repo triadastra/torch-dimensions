@@ -100,7 +100,15 @@ class LatticeWindow:
         return self._derive(before), self._derive(after)
 
     def split_at_time(self, times: Sequence, value) -> tuple[LatticeWindow, LatticeWindow]:
-        """:meth:`split` by an actual timestamp rather than an index."""
+        """:meth:`split` by an actual timestamp rather than an index.
+
+        ``times`` must be sorted — a scan for the first timestamp past the cut
+        is meaningless otherwise, and unsorted input previously produced a
+        silently nonsensical split rather than an error.
+        """
+        for prev, cur in zip(times, times[1:], strict=False):
+            if cur < prev:
+                raise ValueError(f"times must be sorted; got {cur!r} after {prev!r}")
         for i, t in enumerate(times):
             if t >= value:
                 return self.split(i)

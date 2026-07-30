@@ -24,7 +24,11 @@ from torch_dimensions.lattice import AxisSpec, Lattice
 
 __all__ = ["axial_contract", "kron_operator"]
 
-_EPS = 1e-6
+# A line's renormalization is degenerate when its signed mass has cancelled to
+# below this fraction of its absolute mass. Relative, not absolute: an absolute
+# epsilon has no idea what scale the kernel works at — a denominator of 1e-4
+# passes any tiny fixed threshold and then amplifies by 1e4.
+_REL = 1e-3
 
 
 def axial_contract(
@@ -67,14 +71,17 @@ def axial_contract(
     if valid is not None:
         mass, _ = lattice.to_sequence(valid.expand(*x.shape[:-1], 1), axis)  # (M, A, 1)
         den = kernel @ mass
-        # Guard the magnitude, not the lower bound. `clamp_min` assumes the
-        # denominator is a non-negative mass, which holds only for a
-        # non-negative kernel. A signed kernel — LeakyReLU-gated scores, say —
-        # can drive this to zero by cancellation while the numerator stays
-        # nonzero, and clamping to +eps then divides by ~0 and explodes by
-        # orders of magnitude. Leaving degenerate lines unscaled is the honest
-        # fallback: a genuinely dead line has a zero numerator and stays zero.
-        den = torch.where(den.abs() < _EPS, torch.ones_like(den), den)
+        # Degeneracy is *cancellation*, and cancellation is relative. A signed
+        # kernel — LeakyReLU-gated scores, say — can cancel its mass to a tiny
+        # residual that any absolute epsilon waves through and that then
+        # amplifies by orders of magnitude; a genuinely small mass, by
+        # contrast, divides out exactly because the numerator carries the same
+        # factor. So compare the signed mass against the absolute mass that
+        # went into it, and leave a line unscaled when almost everything
+        # cancelled. `<=` and not `<`: a dead line has both at exactly zero,
+        # and its numerator is zero too, so unscaled keeps it zero.
+        den_abs = kernel.abs() @ mass
+        den = torch.where(den.abs() <= _REL * den_abs, torch.ones_like(den), den)
         # No nan_to_num here. The where-guard already keeps |den| >= eps, so
         # this division cannot create a fresh NaN or inf — the only NaNs that
         # could reach a nan_to_num are ones already in `x`, and zeroing those
@@ -94,4 +101,7 @@ def kron_operator(kernels: Sequence[torch.Tensor]) -> torch.Tensor:
     be *checked* against the thing it claims to equal, rather than against
     another call to itself.
     """
+    kernels = list(kernels)
+    if not kernels:
+        raise ValueError("need at least one kernel; the empty product has no operator shape")
     return reduce(torch.kron, kernels)

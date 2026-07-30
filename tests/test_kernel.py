@@ -269,3 +269,41 @@ def test_a_nan_in_the_input_is_not_silently_laundered():
     x[0, 1, 2] = float("nan")  # a present cell diverged upstream
     out = axial_contract(x, lat, 0, torch.randn(4, 4, dtype=torch.float64), valid=mask)
     assert bool(out.isnan().any()), "an input NaN vanished into finite output"
+
+
+def test_float32_near_cancellation_does_not_explode():
+    """The absolute-epsilon guard waved through a denominator of ~1e-4 —
+    small enough to amplify by 1e4, large enough to pass any tiny fixed
+    threshold — and float32 outputs blew up ~7000x. Degeneracy is
+    cancellation, and cancellation is *relative* to the absolute mass."""
+    lat = Lattice(shape=(2, 4), valid=torch.tensor([[1, 1, 0, 0], [1, 1, 1, 1]]).bool())
+    mask = lat.mask().to(torch.float32)
+    x = (torch.randn(1, 2, 4, 3) * 100) * mask
+    near_cancel = torch.tensor(
+        [
+            [1.0, -0.9999, 0.5, 0.5],
+            [-1.0, 1.0001, 0.5, 0.5],
+            [0.5, 0.5, 1.0, -1.0],
+            [0.5, 0.5, -1.0, 1.0],
+        ]
+    )
+    out = axial_contract(x, lat, 1, near_cancel, valid=mask)
+    assert torch.isfinite(out).all()
+    assert out.abs().max() < 10 * x.abs().max(), out.abs().max().item()
+
+
+def test_a_genuinely_small_mass_still_renormalizes_exactly():
+    """The relative guard must not overreach: a tiny but uncancelled mass
+    divides out exactly, because the numerator carries the same factor."""
+    lat = Lattice(shape=(3,), valid=torch.tensor([True, False, False]))
+    mask = lat.mask().to(torch.float64)
+    x = torch.randn(2, 3, 4, dtype=torch.float64) * mask
+    tiny = torch.full((3, 3), 1e-6, dtype=torch.float64)  # small, all-positive
+    out = axial_contract(x, lat, 0, tiny, valid=mask)
+    # one present cell, mass 1e-6, numerator 1e-6 * x -> renormalizes to x
+    assert torch.allclose(out[:, 0], x[:, 0], atol=1e-9)
+
+
+def test_kron_operator_refuses_an_empty_kernel_list():
+    with pytest.raises(ValueError, match="at least one kernel"):
+        kron_operator([])

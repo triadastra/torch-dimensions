@@ -194,3 +194,31 @@ def test_lattice_helper_builds_a_genuinely_sparse_mask():
     lat = td.testing._lattice(3, sparse=True, seed=0)
     assert 0 < lat.n_valid < lat.n_cells
     assert isinstance(lat, Lattice)
+
+
+def test_checks_run_only_at_ranks_the_caller_requested():
+    """The gradient check hardcoded rank 2 "for speed", so ranks=(3, 4)
+    gradchecked a rank-2 block the factory never claimed to support — and a
+    factory valid only at its stated ranks failed a check it should pass."""
+
+    def rank3_only(lat, d_model):
+        assert lat.rank in (3, 4), f"built at unrequested rank {lat.rank}"
+        plan = td.ScanPlan.cyclic(lat.axis_names, lat.n_axes)
+        return td.AxialScan(
+            mixer=lambda: torch.nn.Linear(d_model, d_model),
+            plan=plan,
+            lattice=lat,
+            d_model=d_model,
+        )
+
+    report = td.testing.check_block(
+        rank3_only,
+        ranks=(3, 4),
+        # A reference forces the equivalence check to decide; it must skip
+        # (its claim is rank-1 and rank 1 was not requested), not build a
+        # rank-1 lattice the factory refuses.
+        reference=lambda block, x: block(x),
+        raise_on_failure=False,
+    )
+    assert not report.failed, str(report)
+    assert any("rank 1" in r.detail for r in report.skipped), str(report)

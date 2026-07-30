@@ -87,7 +87,11 @@ class Lattice:
                 raise ValueError(
                     f"valid mask has shape {tuple(self.valid.shape)}, expected {self.shape}"
                 )
-            self.valid = self.valid.to(torch.bool)
+            # Clone, don't alias. `.to(torch.bool)` returns the caller's own
+            # tensor when it is already bool, and a caller who later reuses or
+            # edits that tensor would silently desync every cache derived from
+            # it here — the exact misplacement this class exists to prevent.
+            self.valid = self.valid.to(torch.bool).clone()
             if not bool(self.valid.any()):
                 raise ValueError("valid mask selects no cells")
 
@@ -280,13 +284,17 @@ class Lattice:
         return flat[..., self.flat_idx, :]
 
     def mask(self, dtype: torch.dtype = torch.bool) -> torch.Tensor:
-        """Validity mask shaped to broadcast over ``(B, [T,] *shape, H)``."""
-        key = f"mask_{dtype}"
-        if key not in self._cache:
-            base = torch.ones(self.shape, dtype=torch.bool) if self.valid is None else self.valid
-            lead = (1, 1) if self.time else (1,)
-            self._cache[key] = base.reshape(*lead, *self.shape, 1).to(dtype)
-        return self._cache[key]
+        """Validity mask shaped to broadcast over ``(B, [T,] *shape, H)``.
+
+        Always a fresh tensor. The cached version of this returned — for the
+        bool case — a reshaped *view* of ``valid``, so a caller writing into
+        "their" mask corrupted the lattice through it. Callers hold or buffer
+        the result anyway (it is built at module construction, not per
+        forward), so there is nothing worth caching.
+        """
+        base = torch.ones(self.shape, dtype=torch.bool) if self.valid is None else self.valid
+        lead = (1, 1) if self.time else (1,)
+        return base.reshape(*lead, *self.shape, 1).to(dtype, copy=True)
 
     def valid_counts(self, axis: AxisSpec) -> torch.Tensor:
         """Existing cells at each position of ``axis``, shape ``(axis_size,)``.

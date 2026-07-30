@@ -388,3 +388,24 @@ def test_dataloader_with_worker_processes():
     dl = DataLoader(_small_dataset(), batch_size=2, num_workers=2, collate_fn=collate_lattice)
     batch = next(iter(dl))
     assert batch.x.shape == (2, 3, 2, 3, 4) and batch.y.shape == (2, 1, 2, 3, 4)
+
+
+def test_collate_refuses_mixed_target_presence():
+    """Keying off samples[0] silently dropped every target whenever the first
+    sample happened to lack one."""
+    from torch_dimensions.data.source import Sample
+
+    a = Sample(x=torch.zeros(3, 2), window=None)
+    b = Sample(x=torch.zeros(3, 2), y=torch.ones(1, 2), window=None)
+    with pytest.raises(ValueError, match="mixed-horizon"):
+        collate_lattice([a, b])
+    with pytest.raises(ValueError, match="mixed-horizon"):
+        collate_lattice([b, a])
+
+
+def test_split_at_time_refuses_unsorted_times():
+    """An unsorted timestamp list used to produce a silently nonsensical
+    split — the quietest possible leakage bug."""
+    w = LatticeWindow(6, input_len=2, horizon=1)
+    with pytest.raises(ValueError, match="sorted"):
+        w.split_at_time([3, 1, 2, 5, 4, 6], 4)

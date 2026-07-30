@@ -416,3 +416,11 @@ def test_rnn_accepts_a_plan_with_the_default_n_layers(recwarn):
     lat = Lattice(shape=(2, 3))
     assert len(LSTM(4, lattice=lat, plan=ScanPlan.from_list([0, 1, 0])).plan) == 3
     assert len(recwarn) == 0
+
+
+def test_chunk_must_be_positive():
+    """chunk=0 used to surface as `range() arg 3 must not be zero` from deep
+    inside; the contract should be stated at the boundary."""
+    lat = Lattice(shape=(3, 4))
+    with pytest.raises(ValueError, match="chunk"):
+        axial_apply(torch.randn(2, 3, 4, 5), lat, 0, lambda s: s, chunk=0)

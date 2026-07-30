@@ -52,6 +52,8 @@ def axial_apply(
     mixers have no such limit, so this defaults to off; the kernel adapters
     that need it set it themselves rather than exposing a magic constant.
     """
+    if chunk is not None and chunk < 1:
+        raise ValueError(f"chunk must be >= 1 or None; got {chunk}")
     seq, restore = lattice.to_sequence(x, axis)
     if reverse:
         seq = seq.flip(1)

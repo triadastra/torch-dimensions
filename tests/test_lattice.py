@@ -281,3 +281,22 @@ def test_to_returns_a_new_lattice_rather_than_mutating():
     moved = lat.to("cpu")
     assert moved is not lat
     assert moved.n_valid == lat.n_valid
+
+
+def test_mask_is_a_copy_not_a_view_of_valid():
+    """mask(bool) used to be a reshaped view of `valid`: writing into "your"
+    mask corrupted the lattice through it."""
+    lat = Lattice(shape=(2, 2), valid=torch.tensor([[True, True], [True, False]]))
+    lat.mask()[0, 0, 0, 0] = False
+    assert bool(lat.valid[0, 0]), "mutating the returned mask reached lat.valid"
+
+
+def test_the_callers_valid_tensor_is_not_aliased():
+    """A caller who reuses the tensor they passed as `valid` must not desync
+    the lattice's caches — flat_idx would misplace scatter/gather data."""
+    v = torch.tensor([[True, True], [True, False]])
+    lat = Lattice(shape=(2, 2), valid=v)
+    assert lat.flat_idx.tolist() == [0, 1, 2]
+    v[0, 0] = False  # the caller's own tensor, edited after construction
+    assert lat.n_valid == 3
+    assert lat.flat_idx.tolist() == [0, 1, 2]
