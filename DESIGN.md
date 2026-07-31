@@ -1,6 +1,6 @@
 # torch-dimensions — Design
 
-**Status:** Phases 0–6 built (`Lattice`, `ScanPlan`, `AxialScan`, `LSTM`/`GRU`, conformance suite, data layer, and the kernel family: `td.axial_attention` / `td.cafa` with the hybrid form), plus Phase 7's portable core (`S4`/`S4D`/`Mamba` — pure-torch mixers cross-validated against the upstream reference kernels, running on CPU/CUDA/MPS, with explicit N-D names `S4ND`/`S4DND`/`MambaND`). Remaining: fused-kernel fast paths, registry/config/save-load, benchmarks, viewer. See [PLAN.md](PLAN.md) for build order.
+**Status:** Phases 0–6 built (`Lattice`, `ScanPlan`, `AxialScan`, `LSTM`/`GRU`, conformance suite, data layer, and the kernel family: `td.axial_attention` / `td.cafa` with the hybrid form), plus Phase 7's portable core (`S4`/`S4D`/`Mamba` — pure-torch mixers cross-validated against the upstream reference kernels, running on CPU/CUDA/MPS, with explicit N-D names `S4ND`/`S4DND`/`MambaND`). Phase 8 built: `td.build` from dict or YAML, the model registry, and `save`/`load` checkpoints that rebuild their own model, validity mask included. Remaining: fused-kernel fast paths, acceptance-against-a-paper, benchmarks, viewer. See [PLAN.md](PLAN.md) for build order.
 **Positioning:** composition layer. We depend on `mamba-ssm` / `flash-linear-attention` / `state-spaces/s4` for 1-D kernels. We own the N-D structure, the registry, the config surface, and the `nn.Module` contract.
 
 ---

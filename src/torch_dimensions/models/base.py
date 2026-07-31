@@ -96,9 +96,37 @@ class LatticeModel(nn.Module):
             **method_kwargs,
         )
 
+        # The construction recipe, recorded so a checkpoint can rebuild this
+        # model without the user re-specifying anything (td.save / td.load).
+        # Plain JSON-able types throughout — the validity mask becomes a
+        # nested list — so a config can also live in YAML unchanged. n_layers
+        # is recorded as the plan's true depth: the plan is the schedule, and
+        # a recipe that could disagree with itself would not be a recipe.
+        from torch_dimensions.config import lattice_to_dict, nd_method_name
+
+        self.config: dict = {
+            "d_model": d_model,
+            "n_layers": len(plan),
+            "lattice": None if lattice is None else lattice_to_dict(self.lattice),
+            "plan": plan.to_dict(),
+            "nd_method": nd_method_name(nd_method),
+            "d_input": d_input,
+            "dropout": dropout,
+            "chunk": chunk,
+            "mixer_kwargs": dict(mixer_kwargs) if mixer_kwargs else {},
+            **method_kwargs,
+        }
+
     @property
     def plan(self) -> ScanPlan:
         return cast(ScanPlan, self.nd.plan)
+
+    def save(self, path) -> None:
+        """Write this model — architecture and weights — to one checkpoint
+        file that :func:`torch_dimensions.load` can rebuild it from."""
+        from torch_dimensions.config import save
+
+        save(self, path)
 
     def to_spec(self) -> dict:
         """A JSON-able description of this model's N-D architecture.

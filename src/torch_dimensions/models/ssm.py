@@ -172,6 +172,9 @@ def _nd_variant(base: type[LatticeModel], cls_name: str) -> type[LatticeModel]:
         ):
             lat = _nd_lattice(cls_name, lattice, shape, names, valid, time, dim)
             super().__init__(d_model, n_layers, lat, **kw)
+            # The N-D name's declaration is part of its recipe: a rebuild
+            # must satisfy the same mandatory-dim contract it was built under.
+            self.config["dim"] = lat.rank
 
     ND.__name__ = ND.__qualname__ = cls_name
     ND.__doc__ = (

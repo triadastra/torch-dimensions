@@ -25,6 +25,7 @@ from torch_dimensions.compose import (
     register_nd_method,
     resolve_nd_method,
 )
+from torch_dimensions.config import MODELS, build, list_models, load, register_model, save
 from torch_dimensions.lattice import Lattice, Restore
 from torch_dimensions.models.rnn import GRU, LSTM
 from torch_dimensions.models.ssm import S4, S4D, S4DND, S4ND, Mamba, MambaND
@@ -42,6 +43,7 @@ __all__ = [
     "S4D",
     "S4DND",
     "S4ND",
+    "MODELS",
     "ND_METHODS",
     "AxialKernel",
     "AxialScan",
@@ -50,15 +52,20 @@ __all__ = [
     "ScanPlan",
     "Step",
     "axial_apply",
+    "build",
     "axial_attention",
     "axial_contract",
     "axial_scan",
     "cafa",
     "kron_operator",
     "data",
+    "list_models",
+    "load",
     "mixers",
     "testing",
+    "register_model",
     "register_nd_method",
+    "save",
     "resolve_nd_method",
     "spec",
 ]
