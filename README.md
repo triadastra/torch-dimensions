@@ -7,8 +7,8 @@ attention over arbitrary lattices, behind one API.
 import torch_dimensions as td
 
 model = td.S4ND(d_model=64, n_layers=12, dim=2, shape=(32, 32))
-loss = model(x).pow(2).mean()   # x: (B, T, 32, 32, 64)
-loss.backward()                 # ordinary autograd; nothing custom to call
+loss = model(x).pow(2).mean()  # x: (B, T, 32, 32, 64)
+loss.backward()  # ordinary autograd; nothing custom to call
 ```
 
 > **Status: 0.1.** Built and tested: `Lattice`, `ScanPlan`, the scan and kernel
@@ -48,21 +48,21 @@ no source implementation handles.
 axes folds to the identity, so the 1-D case is the N-D case with nothing to do.
 
 ```python
-td.Mamba(64, n_layers=12)                        # a sequence model
-td.Mamba(64, 12, lattice=lat)                    # the same class, N-dimensional
-td.MambaND(64, 12, dim=2, shape=(32, 32))        # the explicit N-D name; dim is
-                                                 # mandatory and checked — dim=1
-                                                 # is refused as "that's just Mamba"
+td.Mamba(64, n_layers=12)  # a sequence model
+td.Mamba(64, 12, lattice=lat)  # the same class, N-dimensional
+td.MambaND(64, 12, dim=2, shape=(32, 32))  # the explicit N-D name; dim is
+# mandatory and checked — dim=1
+# is refused as "that's just Mamba"
 ```
 
 **The method of multidimensionality is one argument.** Registered names or your
 own function, on equal footing:
 
 ```python
-td.LSTM(64, 12, lattice=lat, method=td.axial_scan)        # the RNN sweeps every axis
-td.LSTM(64, 12, lattice=lat, method=td.cafa)              # CaFA across space, RNN along time
+td.LSTM(64, 12, lattice=lat, method=td.axial_scan)  # the RNN sweeps every axis
+td.LSTM(64, 12, lattice=lat, method=td.cafa)  # CaFA across space, RNN along time
 td.S4ND(64, 12, dim=3, shape=s, method=td.axial_attention)
-td.Mamba(64, 12, lat, method=my_traversal)                # yours, no registration needed
+td.Mamba(64, 12, lat, method=my_traversal)  # yours, no registration needed
 ```
 
 **Direction is a schedule, not a flag.** `ScanPlan` is data — printable,
@@ -71,7 +71,7 @@ while space does not:
 
 ```python
 plan = td.ScanPlan.cyclic(("time", "h", "w"), n_layers=12, bidirectional=("h", "w"))
-td.Mamba(64, lattice=lat, plan=plan)             # .paired() is official Mamba-ND's schedule
+td.Mamba(64, lattice=lat, plan=plan)  # .paired() is official Mamba-ND's schedule
 ```
 
 **Lattices with absent cells are first-class.** Mark which cells exist and
@@ -86,15 +86,17 @@ windowing, a source protocol, and a collate that keeps metadata out of batches:
 
 ```python
 table = td.data.from_table(coords, times, values, names=("store", "sku"))
-ds = td.data.LatticeDataset(td.data.TensorSource(table.series, table.lattice),
-                            td.data.LatticeWindow(len(table), input_len=28, horizon=7))
+ds = td.data.LatticeDataset(
+    td.data.TensorSource(table.series, table.lattice),
+    td.data.LatticeWindow(len(table), input_len=28, horizon=7),
+)
 ```
 
 **Config in, checkpoint out.** Everything above as plain data, and checkpoints
 that rebuild their own model — validity mask included, outputs bitwise equal:
 
 ```python
-model = td.build("model.yaml")     # or a dict; unknown keys are a hard error
+model = td.build("model.yaml")  # or a dict; unknown keys are a hard error
 model.save("run.td")
 same = td.load("run.td")
 ```
