@@ -37,6 +37,17 @@ all = ["torch-dimensions[mamba,fla]"]
 Homepage = "https://github.com/triadastra/torch-dimensions"
 Source = "https://github.com/triadastra/torch-dimensions"
 
+[tool.hatch.build.targets.sdist]
+# The sdist is the library, not the repo: without this, viewer/node_modules
+# (35 MB of JS toolchain) rides along into every pip install from source.
+include = [
+  "src",
+  "tests",
+  "examples",
+  "*.md",
+  "LICENSE",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/torch_dimensions"]
 

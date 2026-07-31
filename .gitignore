@@ -12,3 +12,5 @@ venv/
 htmlcov/
 .DS_Store
 dist/
+node_modules/
+viewer/dist/
