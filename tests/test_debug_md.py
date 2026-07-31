@@ -51,6 +51,16 @@ def test_every_cited_commit_resolves():
 
     if not (ROOT / ".git").exists():
         pytest.skip("not a git checkout (sdist or archive export)")
+    shallow = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--is-shallow-repository"],
+        capture_output=True,
+        text=True,
+    )
+    if shallow.stdout.strip() == "true":
+        # A shallow clone is missing old commits by design, not by rewrite.
+        # Skipping visibly beats failing wrongly — and beats passing silently,
+        # which is why CI fetches full history to run this for real.
+        pytest.skip("shallow clone: cited commits predate the fetch depth")
     for sha in sorted(cited):
         proc = subprocess.run(
             ["git", "-C", str(ROOT), "cat-file", "-t", sha],
