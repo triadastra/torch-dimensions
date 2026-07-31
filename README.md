@@ -50,9 +50,11 @@ axes folds to the identity, so the 1-D case is the N-D case with nothing to do.
 ```python
 td.Mamba(64, n_layers=12)  # a sequence model
 td.Mamba(64, 12, lattice=lat)  # the same class, N-dimensional
-td.MambaND(64, 12, dim=2, shape=(32, 32))  # the explicit N-D name; dim is
-# mandatory and checked — dim=1
-# is refused as "that's just Mamba"
+
+# the explicit N-D name: dim is mandatory and checked against the lattice,
+# and dim=1 is refused — one spatial axis is just Mamba, and code reading
+# "MambaND" must not be running Mamba
+td.MambaND(64, 12, dim=2, shape=(32, 32))
 ```
 
 **The method of multidimensionality is one argument.** Registered names or your
