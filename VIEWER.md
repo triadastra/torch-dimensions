@@ -2,7 +2,7 @@
 
 Companion to [DESIGN.md](DESIGN.md) and [PLAN.md](PLAN.md). This one covers the GUI: what it shows, what it deliberately does not, and how it gets built.
 
-**Status:** planned. The architecture spec (`model.to_spec()`) is built; the React app is not.
+**Status:** V0 and V1 built. The architecture spec (`model.to_spec()`) and the static viewer (`viewer/` — Vite + React + react-three-fiber; sample specs, file loading, layer stepping, sweep animation, ranks 1–3 literal, rank 4 stacked) are working. V2 (`td.viz.show`, wheel bundling) is next.
 
 ---
 
@@ -63,7 +63,7 @@ The base `pip install torch-dimensions` stays exactly as it is — torch and not
 
 **V0 — spec.** `model.to_spec()`, versioned, tested against the library's own models. *Done.*
 
-**V1 — static architecture viewer.** Vite + React + react-three-fiber. Load a spec (file or paste), render the lattice, step through layers, animate the sweep. Rank 1–3 literal, 4–5 stacked. No Python server yet — it reads a JSON file, which makes it developable and testable entirely standalone.
+**V1 — static architecture viewer.** Vite + React + react-three-fiber. Load a spec (file or paste), render the lattice, step through layers, animate the sweep. Rank 1–3 literal, 4–5 stacked. No Python server yet — it reads a JSON file, which makes it developable and testable entirely standalone. *Built:* `viewer/` — `npm install && npm run dev`. Three bundled sample specs (2-D sparse LSTM, 3-D paired-schedule Mamba-ND, 4-D S4D exercising the stacking); a time sweep breathes uniformly (no lattice direction to draw), the kernel family flashes all axes at once rather than pretending to sweep (§7 Q1 answered by idiom, not schema), and the never-swept-axes warning renders red in the sidebar. One hard-won rule: the WebGL canvas is never remounted — swap specs by rebuilding the instanced mesh and recentering the camera, or the context is lost and the scene goes permanently black.
 
 **V2 — `td.viz.show(model)`.** The static server, browser launch, and the wheel-bundling pipeline. This is the packaging work, deliberately separated from the rendering work so neither blocks the other.
 

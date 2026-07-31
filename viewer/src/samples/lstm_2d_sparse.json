@@ -1,0 +1,148 @@
+{
+ "format": "torch-dimensions/architecture",
+ "version": 1,
+ "model": {
+  "kind": "LSTM",
+  "d_model": 32,
+  "d_input": 32,
+  "n_layers": 6,
+  "n_params": 51072
+ },
+ "nd_method": {
+  "name": "AxialScan",
+  "family": "scan"
+ },
+ "lattice": {
+  "shape": [
+   6,
+   8
+  ],
+  "names": [
+   "time",
+   "store",
+   "sku"
+  ],
+  "time": true,
+  "rank": 2,
+  "n_axes": 3,
+  "axes": [
+   {
+    "name": "time",
+    "size": null,
+    "dynamic": true
+   },
+   {
+    "name": "store",
+    "size": 6,
+    "dynamic": false
+   },
+   {
+    "name": "sku",
+    "size": 8,
+    "dynamic": false
+   }
+  ],
+  "cells": {
+   "total": 48,
+   "present": 27,
+   "dense": false,
+   "present_rle": [
+    0,
+    2,
+    3,
+    5,
+    1,
+    1,
+    3,
+    3,
+    2,
+    7,
+    2,
+    1,
+    1,
+    1,
+    5,
+    4,
+    1,
+    1,
+    3,
+    2
+   ]
+  }
+ },
+ "layers": [
+  {
+   "layer": 0,
+   "axis": "time",
+   "axis_index": 0,
+   "reverse": false,
+   "mixer": "LSTMMixer",
+   "n_params": 8448
+  },
+  {
+   "layer": 1,
+   "axis": "store",
+   "axis_index": 1,
+   "reverse": false,
+   "mixer": "LSTMMixer",
+   "n_params": 8448
+  },
+  {
+   "layer": 2,
+   "axis": "sku",
+   "axis_index": 2,
+   "reverse": false,
+   "mixer": "LSTMMixer",
+   "n_params": 8448
+  },
+  {
+   "layer": 3,
+   "axis": "time",
+   "axis_index": 0,
+   "reverse": false,
+   "mixer": "LSTMMixer",
+   "n_params": 8448
+  },
+  {
+   "layer": 4,
+   "axis": "store",
+   "axis_index": 1,
+   "reverse": true,
+   "mixer": "LSTMMixer",
+   "n_params": 8448
+  },
+  {
+   "layer": 5,
+   "axis": "sku",
+   "axis_index": 2,
+   "reverse": true,
+   "mixer": "LSTMMixer",
+   "n_params": 8448
+  }
+ ],
+ "sweeps": {
+  "directions": {
+   "time": "forward",
+   "store": "both",
+   "sku": "both"
+  },
+  "unswept_axes": []
+ },
+ "io": {
+  "input": [
+   "B",
+   "T",
+   6,
+   8,
+   32
+  ],
+  "output": [
+   "B",
+   "T",
+   6,
+   8,
+   32
+  ],
+  "cells_per_step": 48
+ }
+}
