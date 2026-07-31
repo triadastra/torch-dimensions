@@ -11,3 +11,4 @@ venv/
 .coverage
 htmlcov/
 .DS_Store
+dist/

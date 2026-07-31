@@ -4,9 +4,35 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] — 2026-07-31
+
+The first release: the full portable core.
 
 ### Added
+- **Models, 1-D and N-D under one name:** `LSTM`, `GRU`, `S4` (full DPLR),
+  `S4D`, `Mamba` — plus the explicit N-D names `S4ND`, `S4DND`, `MambaND`,
+  which make `dim` mandatory and refuse `dim=1` as the 1-D model in disguise.
+  The SSM mixers are pure torch (CPU/CUDA/MPS), verified against the upstream
+  reference kernels: S4D bitwise, S4 at 3e-8 (and machine-precision against a
+  dense state-space reference in CI), the Mamba scan at 1e-6.
+- **Methods of multidimensionality:** `td.axial_scan`, `td.axial_attention`,
+  and `td.cafa` (Kronecker-factorized, per-axis kernels), selectable per model
+  via `method=` / `nd_method=`, including the hybrid form — kernels across the
+  lattice, the model's own mixer along time, causal along time by construction.
+- **Phase 3–4:** `AxialScan` with per-layer pre-norm residuals; the conformance
+  suite as public API (`td.testing.check_block`, `td.testing.check_trainable`
+  with a negative control that must fail).
+- **Phase 5 data layer:** `from_coords`/`from_table`, `LatticeWindow`,
+  the `LatticeSource` protocol, `collate_lattice`.
+- **Phase 8:** `td.build` from dict or YAML with hard errors on unknown keys;
+  the model registry; `save`/`load` checkpoints that rebuild their own model —
+  validity mask included, outputs bitwise equal, incompatible format versions
+  refused.
+- **Device suite** running against whatever accelerator exists (MPS or CUDA),
+  and a seeded fuzz suite checking core invariants against independent slow
+  references.
+- [DEBUG.md](DEBUG.md): all 18 bugs found while building this, what caught
+  each, and the recurring patterns — with its citations enforced by a test.
 - Architecture design ([DESIGN.md](DESIGN.md)) and phased build plan ([PLAN.md](PLAN.md)).
 - Phase 0 packaging skeleton: `src/` layout, `torch>=2.4` as the only required
   dependency, kernel backends behind optional extras, ruff + pytest + CPU-only CI.

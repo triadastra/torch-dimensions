@@ -32,7 +32,7 @@ from torch_dimensions.models.ssm import S4, S4D, S4DND, S4ND, Mamba, MambaND
 from torch_dimensions.plan import ScanPlan, Step
 from torch_dimensions.spec import spec
 
-__version__ = "0.0.0"
+__version__ = "0.1.0"
 
 __all__ = [
     "GRU",
