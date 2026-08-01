@@ -150,6 +150,17 @@ The test suite is the product as much as the models are:
   [DEBUG.md](DEBUG.md) with what caught it, and the citations in that file are
   themselves tested.
 
+## Guides
+
+- **[Adding a mixer](docs/adding-a-mixer.md)** — the extension point that
+  matters most: a 1-D sequence model becomes an N-D one by satisfying one shape
+  contract. Worked example, conformance report, mistakes to expect.
+- **[Adding an nd_method](docs/adding-a-method.md)** — changing *how* the axes
+  are handled, including the two bugs the conformance suite found in this
+  project's own example strategy.
+- **[CUDA verification checklist](docs/cuda-checklist.md)** — the procedure for
+  the device this library has never actually run on.
+
 ## Install
 
 ```bash
