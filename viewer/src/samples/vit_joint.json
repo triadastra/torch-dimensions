@@ -1,0 +1,167 @@
+{
+ "format": "torch-dimensions/architecture",
+ "io": {
+  "cells_per_step": 64,
+  "input": [
+   "B",
+   8,
+   8,
+   96
+  ],
+  "output": [
+   "B",
+   8,
+   8,
+   96
+  ]
+ },
+ "lattice": {
+  "axes": [
+   {
+    "dynamic": false,
+    "name": "row",
+    "size": 8
+   },
+   {
+    "dynamic": false,
+    "name": "col",
+    "size": 8
+   }
+  ],
+  "cells": {
+   "dense": true,
+   "present": 64,
+   "present_rle": [
+    0,
+    64
+   ],
+   "total": 64
+  },
+  "n_axes": 2,
+  "names": [
+   "row",
+   "col"
+  ],
+  "rank": 2,
+  "shape": [
+   8,
+   8
+  ],
+  "time": false
+ },
+ "layers": [
+  {
+   "axes": [
+    "row",
+    "col"
+   ],
+   "axis": null,
+   "axis_index": null,
+   "joins_time": false,
+   "kind": "flatten",
+   "layer": 0,
+   "mixer": "AttentionMixer",
+   "n_params": 74496,
+   "reverse": false,
+   "tokens": 64
+  },
+  {
+   "axes": [
+    "row",
+    "col"
+   ],
+   "axis": null,
+   "axis_index": null,
+   "joins_time": false,
+   "kind": "flatten",
+   "layer": 1,
+   "mixer": "AttentionMixer",
+   "n_params": 74496,
+   "reverse": false,
+   "tokens": 64
+  },
+  {
+   "axes": [
+    "row",
+    "col"
+   ],
+   "axis": null,
+   "axis_index": null,
+   "joins_time": false,
+   "kind": "flatten",
+   "layer": 2,
+   "mixer": "AttentionMixer",
+   "n_params": 74496,
+   "reverse": false,
+   "tokens": 64
+  },
+  {
+   "axes": [
+    "row",
+    "col"
+   ],
+   "axis": null,
+   "axis_index": null,
+   "joins_time": false,
+   "kind": "flatten",
+   "layer": 3,
+   "mixer": "AttentionMixer",
+   "n_params": 74496,
+   "reverse": false,
+   "tokens": 64
+  },
+  {
+   "axes": [
+    "row",
+    "col"
+   ],
+   "axis": null,
+   "axis_index": null,
+   "joins_time": false,
+   "kind": "flatten",
+   "layer": 4,
+   "mixer": "AttentionMixer",
+   "n_params": 74496,
+   "reverse": false,
+   "tokens": 64
+  },
+  {
+   "axes": [
+    "row",
+    "col"
+   ],
+   "axis": null,
+   "axis_index": null,
+   "joins_time": false,
+   "kind": "flatten",
+   "layer": 5,
+   "mixer": "AttentionMixer",
+   "n_params": 74496,
+   "reverse": false,
+   "tokens": 64
+  }
+ ],
+ "model": {
+  "d_input": 96,
+  "d_model": 96,
+  "kind": "ViT",
+  "n_layers": 6,
+  "n_params": 454368
+ },
+ "nd_method": {
+  "family": "flatten",
+  "name": "Flatten"
+ },
+ "sweeps": {
+  "contracted_axes": [],
+  "coverage": null,
+  "directions": {},
+  "joint_axes": [
+   "row",
+   "col"
+  ],
+  "pinned_axes": [],
+  "unswept_axes": []
+ },
+ "version": 2
+}

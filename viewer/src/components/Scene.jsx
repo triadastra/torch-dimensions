@@ -10,6 +10,7 @@ const BASE = new THREE.Color("#33415e");
 const SWEPT = new THREE.Color("#4a5b80");
 const FRONT = new THREE.Color("#f5a623");
 const KERNEL = new THREE.Color("#7c5cff");
+const JOINT = new THREE.Color("#2dd4bf");
 
 // Per-frame wavefront colouring. anim is a mutable ref shared with the app:
 // { layer: int, progress: 0..1 } — progress lives outside React state so the
@@ -43,16 +44,20 @@ function Lattice({ parsed, layout, anim }) {
     const progress = anim.current.progress;
     // The family, not the class name: a second kernel-family method would
     // have sniffed as a scan and been drawn with a travelling wavefront.
-    const isKernel = spec.nd_method.family === "kernel";
+    const family = spec.nd_method.family;
+    const atOnce = family === "kernel" || family === "flatten";
+    const tint = family === "flatten" ? JOINT : KERNEL;
     const axis = layer ? latticeAxisOf(layer, spec) : null;
     const color = new THREE.Color();
 
     for (let i = 0; i < count; i++) {
-      if (isKernel) {
-        // The kernel family contracts every spatial axis at once: one
-        // simultaneous flash per layer, not a travelling front.
+      if (atOnce) {
+        // Neither of these families has a direction. The kernel family
+        // contracts every spatial axis at once; the joint family puts every
+        // cell in one sequence. One simultaneous flash per layer, not a
+        // travelling front.
         const pulse = Math.sin(progress * Math.PI);
-        color.copy(BASE).lerp(KERNEL, 0.65 * pulse);
+        color.copy(BASE).lerp(tint, 0.65 * pulse);
       } else if (axis === null) {
         // A time sweep has no lattice direction; the whole grid breathes.
         const pulse = 0.5 - 0.5 * Math.cos(progress * 2 * Math.PI);
@@ -94,10 +99,8 @@ function SweepArrow({ parsed, layout, anim }) {
     const { spec } = parsed;
     const layer = spec.layers[anim.current.layer];
     const axis = layer ? latticeAxisOf(layer, spec) : null;
-    // The family, not the class name: a second kernel-family method would
-    // have sniffed as a scan and been drawn with a travelling wavefront.
-    const isKernel = spec.nd_method.family === "kernel";
-    if (axis === null || isKernel) {
+    const family = spec.nd_method.family;
+    if (axis === null || family === "kernel" || family === "flatten") {
       g.visible = false;
       return;
     }

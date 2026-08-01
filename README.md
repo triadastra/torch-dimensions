@@ -1,7 +1,7 @@
 # torch-dimensions
 
-N-dimensional sequence models for PyTorch — state-space models, RNNs, and axial
-attention over arbitrary lattices, behind one API.
+N-dimensional models for PyTorch — state-space models, RNNs, transformers and
+convolutions over arbitrary lattices, behind one API.
 
 ```python
 import torch_dimensions as td
@@ -11,14 +11,15 @@ loss = model(x).pow(2).mean()  # x: (B, T, 32, 32, 64)
 loss.backward()  # ordinary autograd; nothing custom to call
 ```
 
-> **Status: 0.1.** Built and tested: `Lattice`, `ScanPlan`, the scan and kernel
-> composition families, `LSTM`/`GRU`, `S4`/`S4D`/`Mamba` (portable, pure torch,
-> verified against the upstream reference kernels), the data layer, the
-> conformance suite, config/save/load, the architecture viewer, and the device
-> suite (CPU, MPS; CUDA is untested — see
-> [docs/cuda-checklist.md](docs/cuda-checklist.md)).
+> **Status: 0.1.** Built and tested: `Lattice`, `ScanPlan`, the scan, kernel
+> and joint composition families, `LSTM`/`GRU`, `S4`/`S4D`/`Mamba` (portable,
+> pure torch, verified against the upstream reference kernels),
+> `Transformer`/`ViT`, `CNN`/`TCN`, the data layer, the conformance suite,
+> config/save/load, the architecture viewer, and the device suite (CPU, MPS;
+> CUDA is untested — see [docs/cuda-checklist.md](docs/cuda-checklist.md)).
 > [RESULTS.md](RESULTS.md) has the reproductions, [BENCHMARKS.md](BENCHMARKS.md)
-> the measured costs, [DESIGN.md](DESIGN.md) the architecture, [PLAN.md](PLAN.md)
+> the measured costs, [LTI.md](LTI.md) which mixers commute across axes and
+> which do not, [DESIGN.md](DESIGN.md) the architecture, [PLAN.md](PLAN.md)
 > what remains, and [DEBUG.md](DEBUG.md) every bug found on the way and what
 > caught it.
 
@@ -45,11 +46,11 @@ the same object:
 | TCN, N-D | dilated causal conv | `td.axial_scan` — dilation doubles per *axis* |
 | Forecasting hybrids | any of the above along time | kernel across the lattice, mixer along time |
 
-The last three are the ones that make the claim more than a slogan. A
+The ViT and convolution rows are what make that claim more than a slogan. A
 convolutional network is not a sequence model — no state, no direction, no
 "so far" — and a Vision Transformer's whole trick is *not* factorizing the
-grid. Both fit without either side bending, which is the evidence that the
-abstraction is about lattices rather than about sequences.
+grid at all. Both fit without either side bending, which is the evidence that
+the abstraction is about lattices rather than about sequences.
 
 Write that abstraction once and N-D RNNs, N-D transformers, and N-D SSMs all
 fall out of it — including on lattices where **not every cell exists**, which
@@ -79,7 +80,27 @@ td.LSTM(64, 12, lattice=lat, method=td.cafa)  # CaFA across space, RNN along tim
 td.S4ND(64, 12, dim=3, shape=s, method=td.axial_attention)
 td.Mamba(64, 12, lat, method=my_traversal)  # yours, no registration needed
 td.Transformer(64, 12, lat)  # attention as the swept mixer — the other axial transformer
+td.Transformer(64, 12, lat, method=td.flatten)  # every cell attends to every cell
 ```
+
+**Convolutions and vision transformers, same abstraction.** Two families that
+had to be added without special cases, or the claim above was empty:
+
+```python
+td.CNN(64, 6, lat)  # separable N-D conv: provably one conv with a rank-1 kernel
+td.TCN(64, 6, lat)  # causal, dilated — and the dilation doubles per *axis*
+td.receptive_field(td.TCN(64, 6, lat))
+# {'h': {'span': 13, 'size': 32, 'covers': False, 'layers': 2}, ...}  <- it cannot
+# see across the lattice; the question no N-D paper answers, answered before training
+
+vit = td.ViT(192, 6, image=(32, 32), patch=4, in_channels=3)  # joint attention
+axial_vit = td.ViT(192, 6, image=(32, 32), patch=4, method=td.axial_scan)
+# identical parameter counts; one argument apart
+```
+
+Which mixers this composition is *safe* to reorder is a measured question, not
+an assumed one — [LTI.md](LTI.md) has the table, and the answer is narrower
+than the folklore.
 
 **Direction is a schedule, not a flag.** `ScanPlan` is data — printable,
 serializable, testable — and bidirectionality is per-axis, so time stays causal

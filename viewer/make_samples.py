@@ -64,11 +64,20 @@ def cafa_hybrid():
     return td.LSTM(32, 5, lat, d_input=1, method=td.cafa)
 
 
+def vit_joint():
+    """The joint family: a ViT's patch grid, where every cell is one token and
+    no axis is swept. Nothing travels, so the scene pulses instead."""
+    return td.ViT(
+        96, 6, image=(32, 32), patch=4, in_channels=3, n_heads=4, names=("row", "col")
+    )
+
+
 SAMPLES = {
     "lstm_2d_sparse": lstm_2d_sparse,
     "mamba_3d": mamba_3d,
     "s4d_4d": s4d_4d,
     "cafa_hybrid": cafa_hybrid,
+    "vit_joint": vit_joint,
 }
 
 

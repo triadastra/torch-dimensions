@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "torch-dimensions"
 version = "0.1.0"
-description = "N-dimensional sequence models for PyTorch: SSMs, RNNs, and transformers over arbitrary lattices"
+description = "N-dimensional models for PyTorch: SSMs, RNNs, transformers and convolutions over arbitrary lattices"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "triadastra" }]
-keywords = ["pytorch", "state-space-models", "mamba", "s4", "axial-attention", "multidimensional"]
+keywords = ["pytorch", "state-space-models", "mamba", "s4", "axial-attention", "vision-transformer", "multidimensional"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",

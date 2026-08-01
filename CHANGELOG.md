@@ -7,6 +7,35 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Convolutional family — `td.CNN` and `td.TCN`.** The first mixers that are
+  not sequence models at all: no state, no direction, no "so far". Sweeping a
+  1-D convolution per axis is a *separable* convolution, exactly equal (linear,
+  no bias) to one N-D convolution whose kernel is the outer product of the
+  per-axis kernels — checked against `F.conv2d`/`F.conv3d` at 1e-12, with a
+  nonlinearity as the negative control. `td.TCN`'s dilation doubles with the
+  number of times **its own axis** has been swept, so receptive field grows
+  exponentially per axis; a scan layer passes `sweep=` only to mixer factories
+  whose signature names it.
+- **`td.receptive_field(model)`** — per-axis span against axis size, so "can
+  this model see across the lattice at all" is answerable before training.
+  `inf` for RNNs, SSMs and attention; a real constraint for convolutions.
+- **`td.ViT` and `td.PatchEmbed`** — rank-generic patch embedding (a 3-D volume
+  patchifies with the same code) plus the transformer stack over the patch
+  lattice. Factorized positional embedding by default (`r·A` parameters
+  instead of `A^r`), ViT's full table one argument away. Per-patch features
+  out; no class token and no head, the same boundary every other model keeps.
+- **`td.flatten`** — the fourth method of multidimensionality and the honest
+  baseline for the others: every axis folded into one sequence, no
+  factorization, which is what ViT actually does. The one composition where a
+  sparse lattice is genuinely cheaper — absent cells are dropped from the
+  sequence rather than masked within it.
+- **`td.testing.check_lti`** and **LTI.md** — measure whether a mixer is linear
+  and time-invariant, and what that does to N-D composition. Never raises: no
+  mixer is supposed to be LTI. The document corrects a piece of folklore this
+  project repeated — LTI does **not** imply the sweep order is free. A
+  multichannel convolution is a matrix-valued filter and its per-offset channel
+  matrices do not commute (measured order gap 3e-01); only a scalar-valued
+  filter `A ⊗ b` commutes (3e-16). What LTI does buy is exact separability.
 - **`td.Transformer`** — attention as the swept mixer, which makes "N-D
   Transformer" literal and gives both constructions in the literature a name:
   `td.Transformer` sweeps attention along one axis per layer, while
@@ -73,6 +102,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and unused since the first commit.
 
 ### Fixed
+- **The spec described a model the library never runs.** For a kernel-family
+  model (`method=td.cafa` / `td.axial_attention`) it claimed one spatial sweep
+  per layer — sweeps that do not happen, since every layer contracts *all* the
+  spatial axes and the mixer runs along time only — and `"family"` was the
+  hardcoded string `"scan"`. The viewer already compensated by sniffing the
+  class name, which is a bug report about the producer. Spec version 1 → 2:
+  layers carry `kind`, the `axes` they actually mix, and `contracted`; sweeps
+  gained `contracted_axes` and list directions only for axes a mixer genuinely
+  sweeps (DEBUG.md #26).
 - A stale local training run was baked into the viewer bundle and loaded *in
   preference to* the model passed to `show()` (DEBUG.md #19).
 - `check_block`'s gradient step built at `d_model=2` regardless of the caller,

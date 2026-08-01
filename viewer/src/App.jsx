@@ -6,6 +6,7 @@ import cafaHybrid from "./samples/cafa_hybrid.json";
 import lstm2d from "./samples/lstm_2d_sparse.json";
 import mamba3d from "./samples/mamba_3d.json";
 import s4d4d from "./samples/s4d_4d.json";
+import vitJoint from "./samples/vit_joint.json";
 import { parseSpec } from "./spec.js";
 
 // Regenerate with `python viewer/make_samples.py`.
@@ -14,6 +15,7 @@ const SAMPLES = {
   "Mamba-ND · 3-D, paired schedule": mamba3d,
   "S4D · 4-D (dimensional stacking)": s4d4d,
   "CaFA · kernel family (no wavefront)": cafaHybrid,
+  "ViT · joint attention over patches": vitJoint,
 };
 
 const LAYER_SECONDS = 2.2;

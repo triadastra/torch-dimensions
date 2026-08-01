@@ -10,7 +10,7 @@ Companion to [DESIGN.md](DESIGN.md). That document says *what* the library is; t
 
 ---
 
-## Current position (2026-08-01, second pass)
+## Current position (2026-08-02, third pass)
 
 **Track A:** Phases 0–11 complete except where noted. **9 and 10 closed this pass** — reproductions with numbers (sMNIST 99.53%, psMNIST 97.79%, a sparse-lattice baseline that had no published prior) and benchmarks that contradicted two of the design's own predictions. v0.1.0 is live on PyPI. Phase 12 (autoregressive stepping) is designed and is now the largest single piece of unbuilt core.
 **Track B (viewer):** V1, V1.5 and **V2 done** — `td.viz.show(model)` ships inside the wheel. V3 (shape flow) is next and unstarted.
@@ -18,9 +18,11 @@ Companion to [DESIGN.md](DESIGN.md). That document says *what* the library is; t
 **Track D (ecosystem):** both extension-point guides written and executed by tests; no docs site, no notebooks, no tech report.
 **Track E (research):** parked by design.
 
-Next up, in order of value: **run the CUDA checklist** (fifteen minutes, and it converts the project's largest unverified claim), **three seeds per RESULTS.md row** (every row is currently n=1), **Phase 12 AR stepping**, **Viewer V3**.
+Next up, in order of value: **run the CUDA checklist** (fifteen minutes, and it converts the project's largest unverified claim), **three seeds per RESULTS.md row** (every row is currently n=1), **a ViT/CNN reproduction row** so the new families meet the same standard as the old ones, **Phase 12 AR stepping**, **Viewer V3**.
 
-What this pass changed, in one line each: 23 bugs now documented (four new, two found by *looking at what shipped* rather than at the build); ranks 5–6 tested so the README caveat could be deleted; the Kronecker conformance check runs for the first time; `td.Transformer` completes the family the README table always claimed; coverage floored at 95% (measured 97%).
+**Third pass added** the non-sequence families (Phase 7b): `td.CNN`, `td.TCN`, `td.ViT`, and `td.flatten` as a fourth method of multidimensionality — plus LTI.md, which measured a claim this plan had been making without evidence and found it wrong. Two more bugs documented (#26 the spec describing a model that never runs, #27 absent cells reaching the output through the residual stream), 27 total.
+
+What the second pass changed, in one line each: 23 bugs now documented (four new, two found by *looking at what shipped* rather than at the build); ranks 5–6 tested so the README caveat could be deleted; the Kronecker conformance check runs for the first time; `td.Transformer` completes the family the README table always claimed; coverage floored at 95% (measured 97%).
 
 ---
 
@@ -78,7 +80,7 @@ Pure data. No tensors, no modules.
 - [x] Immutable and hashable together (DEBUG.md #1).
 - [x] Plan algebra: `+`, `* k`, `.reversed()` (layer order) and `.flipped()` (sweep direction), named apart because calling either one "reversed" alone is how they get confused. The identity that earns it: `p + p.flipped()` is bidirectional everywhere `p` swept at all.
 - [x] `plan.coverage(lattice)` — per-axis sweep counts, directions, layer indices, `unswept` and `pinned`. It never warns, because a report that warns cannot be used to decide whether to warn; `spec()` now derives its sweeps section from it and gained `pinned_axes` for free.
-- [ ] Schedule catalog: named constructors for the published schemes beyond Mamba-ND's paired (e.g. S4ND's simultaneous-separable as a degenerate plan, zigzag variants) with citations.
+- [ ] Schedule catalog: named constructors for the published schemes beyond Mamba-ND's paired (e.g. S4ND's simultaneous-separable as a degenerate plan, zigzag variants) with citations. **Read LTI.md first:** "simultaneous" is only equivalent to "sequential in any order" for scalar-valued filters, so a degenerate-plan constructor has to say which order it collapses to.
 - [ ] Property test: for every constructor, every axis mentioned is swept ≥ 1 time or the warning fires — fuzz over axis counts 1–8 and layer counts 1–64.
 
 **Coverage:** constructors, resolution, serialization, algebra, coverage reporting, and the aliasing signature are fully tested (even *and* odd axis counts — one parity finds nothing). Not covered: exotic published schedules.
@@ -184,6 +186,27 @@ Building a lattice from data is lattice construction and belongs here; running a
 - [ ] Sequential-scan speedup for the portable Mamba path: block-parallel (associative) scan in pure torch — the O(A) python loop is correct and honest, and a log-depth scan would make the portable path usable for long 1-D sequences too.
 
 **Coverage:** the three shipped mixers are verified against upstream references *and* independent in-repo references, on CPU/MPS, ranks 1–3, all conformance checks. Not covered: any fused kernel, Mamba-2/3 as mixers, CUDA execution anywhere.
+
+---
+
+## Phase 7b — Convolutional and vision families · M · **done this pass**
+
+Added because the abstraction's claim is about *lattices*, not sequences, and until now every mixer in the library was a sequence model. These two are the falsification test: a convolution has no state and no notion of "so far", and a Vision Transformer's whole trick is *not* factorizing the grid. Both fit without either side bending.
+
+- [x] `ConvMixer` — 1-D convolution along the swept axis; causal or centred; optional depthwise-separable; `activation=None` gives a strictly LTI operator. Even kernels refused when centred (a window with no centre would shift the output half a step along one axis).
+- [x] `TCNMixer` / `td.TCN` — the published TCN defaults, causal and bitwise so. **Dilation grows per axis, not per layer**: layer 6 of a rank-3 cyclic plan is the third sweep of *its own* axis and dilates by 4, not 64. `AxialScan` passes `sweep=` only to factories whose signature names it, which is what kept the feature invisible to every other mixer — and what let `TCNMixer` swallow it into `**kw` and run at dilation 1 everywhere until a test looked at the schedule.
+- [x] `td.CNN` — the separable N-D convolutional network, proven equal to a full N-D convolution with a rank-1 kernel (`F.conv2d`/`F.conv3d`, 1e-12, negative control included).
+- [x] `td.receptive_field(model)` — per-axis span against axis size. Refuses the kernel family explicitly rather than duck-typing to a confident wrong number.
+- [x] `td.flatten` — the fourth nd_method: no factorization, every axis in one sequence. The baseline the axial methods exist to beat, and the only composition where a sparse lattice is *cheaper* rather than merely masked.
+- [x] `td.ViT` + `td.PatchEmbed` — rank-generic patching (a 3-D volume uses the same code), factorized positional embedding by default. Tested: ViT and axial-ViT have identical parameter counts and different outputs.
+- [x] **LTI.md** — `check_lti` measures linearity and time-invariance for every shipped mixer, and the N-D consequences are measured rather than asserted. This corrected the project's own folklore; see the coverage note.
+- [ ] Multi-head is inherited from `AttentionMixer`; `ConvMixer` has no grouped-channel option beyond depthwise.
+- [ ] A ViT reproduction row in RESULTS.md (CIFAR-10 at toy scale) — the family is tested but has no published-comparison number, which is the same standard Phase 9 held the others to.
+- [ ] `join_time=False` is untested against a real video task; it is exercised only synthetically.
+
+**Coverage:** both families pass full conformance at ranks 1–3, dense + sparse, plus separability, causality, dilation schedule, receptive field, config round-trip and learnability. Not covered: any reproduction number, grouped convolutions, video.
+
+**What LTI.md corrected.** The received claim — repeated in this project's own working notes, and the implicit basis for Phase 2's "S4ND's simultaneous-separable as a degenerate plan" item — is that LTI mixers commute across axes, so for an LTI mixer the sweep order carries no information. False for every multichannel network: a `groups=1` convolution is a *matrix-valued* filter, offset `j` carrying its own channel matrix, and those commute only if the matrices do. Measured order gap for a perfectly linear, perfectly time-invariant conv: **3e-01**. Build the filter as a channel matrix times a spatial filter and it drops to **3e-16**. So `ScanPlan` matters for a linear CNN too, and "separable" and "order-free" are different claims — only the first one follows from LTI.
 
 ---
 

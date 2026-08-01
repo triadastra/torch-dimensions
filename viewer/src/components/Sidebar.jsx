@@ -386,6 +386,12 @@ export default function Sidebar({
             </span>
           </div>
         ))}
+        {(spec.sweeps.joint_axes ?? []).map((axis) => (
+          <div key={axis} style={S.row}>
+            <span style={S.key}>{axis}</span>
+            <span style={{ color: "#5eead4" }}>⊕ joint</span>
+          </div>
+        ))}
         {(spec.sweeps.contracted_axes ?? []).map((axis) => (
           <div key={axis} style={S.row}>
             <span style={S.key}>{axis}</span>
@@ -416,7 +422,8 @@ export default function Sidebar({
         // "one axis, one arrow" was drawing sweeps that never happen — the
         // spec used to claim them (DEBUG.md #26).
         const kernel = l.kind === "kernel";
-        const isTime = !kernel && latticeAxisOf(l, spec) === null;
+        const joint = l.kind === "flatten";
+        const isTime = !kernel && !joint && latticeAxisOf(l, spec) === null;
         return (
           <div
             key={i}
@@ -424,7 +431,14 @@ export default function Sidebar({
             onClick={() => onSelectLayer(i)}
           >
             <span style={{ color: "#8b95a8", width: 28 }}>L{i}</span>
-            {kernel ? (
+            {joint ? (
+              <>
+                <b style={{ color: "#5eead4" }}>{(l.axes ?? []).join(" ⊕ ")}</b>
+                <span style={S.key}>
+                  {l.tokens ? `${l.tokens} tokens` : ""}
+                </span>
+              </>
+            ) : kernel ? (
               <>
                 <b style={{ color: "#c39bd8" }}>
                   {(l.contracted ?? []).join(" ⊗ ")}

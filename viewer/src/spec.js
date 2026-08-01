@@ -40,8 +40,12 @@ export function parseSpec(json) {
   return { spec: json, shape, cells };
 }
 
-// Which lattice axis (index into shape) a layer sweeps, or null for time.
+// Which lattice axis (index into shape) a layer sweeps, or null when it
+// sweeps none. `axis_index` is null for the joint family, which sweeps
+// nothing at all — without this guard `null - 0` is 0 and the scene draws a
+// travelling wavefront along the first axis for a model that has no direction.
 export function latticeAxisOf(layer, spec) {
+  if (layer.axis_index == null) return null;
   if (spec.lattice.time && layer.axis_index === 0) return null;
   return layer.axis_index - (spec.lattice.time ? 1 : 0);
 }

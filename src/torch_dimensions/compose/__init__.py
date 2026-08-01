@@ -5,7 +5,7 @@ model's 1-D mixer and the lattice, and returns a module. Signature::
 
     nd_method(mixer, plan, lattice, d_model, *, dropout, chunk, **kw) -> nn.Module
 
-Three strategies fit that contract, and they differ in *who handles which
+Four strategies fit that contract, and they differ in *who handles which
 axis*:
 
 ``td.axial_scan``
@@ -16,7 +16,14 @@ axis*:
     product. The operator *is* the kernel, so there is no mixer slot: axial
     attention and CaFA are their own thing, not an LSTM wearing a hat.
 
-hybrid — the same two names, given a mixer (Phase 6)
+``td.flatten``
+    No factorization at all: every axis folds into one sequence and the mixer
+    sees the whole lattice. What a Vision Transformer does, and the baseline
+    the axial methods exist to beat — most expressive, quadratic in *cells*
+    rather than in axis length, and the only method where a sparse lattice is
+    genuinely cheaper rather than merely masked.
+
+hybrid — the same two kernel names, given a mixer (Phase 6)
     The mixer owns the sequence axis; a kernel-family operator owns the
     lattice axes. Attention or CaFA mixes across the grid at each timestep,
     then the RNN or SSM runs along time. This is the shape of most real
