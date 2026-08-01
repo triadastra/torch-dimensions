@@ -1,7 +1,7 @@
 # torch-dimensions — Design
 
-**Status:** Phases 0–6 built (`Lattice`, `ScanPlan`, `AxialScan`, `LSTM`/`GRU`, conformance suite, data layer, and the kernel family: `td.axial_attention` / `td.cafa` with the hybrid form), plus Phase 7's portable core (`S4`/`S4D`/`Mamba` — pure-torch mixers cross-validated against the upstream reference kernels, running on CPU/CUDA/MPS, with explicit N-D names `S4ND`/`S4DND`/`MambaND`). Phase 8 built: `td.build` from dict or YAML, the model registry, and `save`/`load` checkpoints that rebuild their own model, validity mask included. Remaining: fused-kernel fast paths, acceptance-against-a-paper, benchmarks, viewer. See [PLAN.md](PLAN.md) for build order.
-**Positioning:** composition layer. We depend on `mamba-ssm` / `flash-linear-attention` / `state-spaces/s4` for 1-D kernels. We own the N-D structure, the registry, the config surface, and the `nn.Module` contract.
+**Status:** Phases 0–11 built. `Lattice` (with sub-lattices), `ScanPlan` (with algebra and coverage reporting), both composition families, the conformance suite, the data layer, `td.build`/`save`/`load` (torch or safetensors), and the portable mixers — `LSTM`/`GRU`, `S4`/`S4D`/`Mamba` cross-validated against the upstream reference kernels, and `Transformer` (attention as the swept mixer). Reproductions are in [RESULTS.md](RESULTS.md), measured costs in [BENCHMARKS.md](BENCHMARKS.md), and the viewer ships inside the wheel (`td.viz.show`). Verified on CPU and Apple Silicon; **CUDA has never been executed** — see [docs/cuda-checklist.md](docs/cuda-checklist.md). Remaining: fused-kernel fast paths and autoregressive stepping. See [PLAN.md](PLAN.md).
+**Positioning:** composition layer. We own the N-D structure, the registry, the config surface, and the `nn.Module` contract. The 1-D kernels are ours too now, in portable pure torch — the plan was to depend on `mamba-ssm` / `flash-linear-attention` / `state-spaces/s4`, and writing derivative implementations instead is what makes the library work on a laptop at all. Those packages return as *optional fast paths*, held to agreeing with the portable reference.
 
 ---
 
@@ -17,7 +17,7 @@ Every model in scope is the same object:
 | MDRNN / Grid-LSTM | `nn.LSTM` / `nn.GRU` | sequential, one axis per layer |
 | RNN + axial attention | `nn.LSTM` / `nn.GRU` | hybrid — kernel across the lattice, mixer along time |
 | S4ND | S4 FFT conv | separable — per-axis kernel, outer product |
-| Axial Transformer | attention | per-axis kernel, contracted in turn |
+| Axial Transformer | attention | `td.Transformer` (attention sweeps each axis) or per-axis kernels contracted in turn |
 | Factorized axial attention | factorized axial cross-attn | per-axis kernel, Kronecker contraction |
 
 Nobody has written this down as one abstraction. Every repo above hardcodes its own axis bookkeeping. That is the entire product: **N-D RNNs, N-D transformers, and N-D SSMs fall out of one mechanism**, which is why the user-facing API can be as small as `S4(dim=2, layers=12)`.
@@ -54,7 +54,7 @@ loss.backward()  # plain autograd; nothing custom to call
 
 Autograd is free. Composed torch ops give backward automatically; the upstream kernels already ship their own `autograd.Function`. There is no `model.backwards()` — you call `.backward()` on the loss, as with any torch model.
 
-`LSTM` and `AxialTransformer` take the same constructor shape. That is the point.
+`LSTM` and `Transformer` take the same constructor shape. That is the point.
 
 There is no `LSTMND`. `td.LSTM(d_model, n_layers)` with no lattice is an ordinary sequence model; adding `lattice=` makes the same class N-dimensional, because a lattice with no spatial axes has an identity permutation and the 1-D case is the N-D case with nothing to fold. How the extra axes are handled is `nd_method`'s business. Strategies are plain functions exported at top level — `td.axial_scan`, later `td.axial_attention` and `td.cafa` — and a user's own function sits on exactly the same footing. Names are accepted too, but only because YAML cannot hold a callable.
 
@@ -152,7 +152,7 @@ torch_dimensions/
     ssm.py            Mamba2, Mamba3, S4, S5   (thin adapters over upstream kernels)
     rnn.py            LSTM, GRU                (adapters over torch.nn)
     attn.py           self-attn, cross-attn, factorized axial kernel
-  models/             MambaND, S4ND, AxialTransformer, LSTM, GRU
+  models/             MambaND, S4ND, Transformer, LSTM, GRU
   data/               LatticeSource protocol, long-format tables, windowing, collate
   registry.py         register / build / list
   config.py           dataclass schemas + YAML loader + save/load
@@ -179,7 +179,7 @@ One parametrized suite every registered block must pass. This is what keeps an N
 
 ## 7. v0.1 scope
 
-**In:** `Lattice` (dense + sparse), `ScanPlan`, `AxialScan`, `AxialKernel`, mixers for LSTM/GRU/attention (pure torch, no optional deps) and Mamba-2/S4 (adapters), models `LSTM`/`GRU`/`AxialTransformer`/`MambaND`/`S4ND`, the `data/` construction layer (§8), registry, config, save/load, conformance suite. Ranks 1–4.
+**In:** `Lattice` (dense + sparse), `ScanPlan`, `AxialScan`, `AxialKernel`, mixers for LSTM/GRU/attention (pure torch, no optional deps) and Mamba-2/S4 (adapters), models `LSTM`/`GRU`/`Transformer`/`MambaND`/`S4ND`, the `data/` construction layer (§8), registry, config, save/load, conformance suite. Ranks 1–6 (5 and 6 verified after the fact; nothing counts axes).
 
 **Deferred, deliberately:**
 
