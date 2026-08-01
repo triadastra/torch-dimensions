@@ -160,6 +160,12 @@ The test suite is the product as much as the models are:
 - **Trainability is tested, not asserted.** `td.testing.check_trainable`
   fits a task that genuinely needs axial mixing, on fresh data, scored held-out,
   with a negative control that must fail.
+- **The N-D composition is verified against a published N-D method.** S4ND
+  does not sweep — it outer-products one kernel per axis and applies a single
+  N-D FFT. Our one-axis-per-layer sweep reproduces that operator to **1.8e-17**
+  at ranks 2 and 3, with a negative control. A plan of sweeps reproducing
+  exactly a model never written as a sweep is the strongest evidence the
+  premise gets.
 - **Verified against the sources.** The S4D kernel is bitwise-identical to
   upstream's; the full S4 (DPLR) kernel matches upstream at 3e-8 and a dense
   state-space reference at machine precision; the Mamba scan matches

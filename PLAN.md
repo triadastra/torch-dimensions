@@ -20,7 +20,7 @@ Companion to [DESIGN.md](DESIGN.md). That document says *what* the library is; t
 
 Next up, in order of value: **run the CUDA checklist** (fifteen minutes, and it converts the project's largest unverified claim), **three seeds per RESULTS.md row** (every row is currently n=1), **a ViT/CNN reproduction row** so the new families meet the same standard as the old ones, **Phase 12 AR stepping**, **Viewer V3**.
 
-**Third pass added** the non-sequence families (Phase 7b): `td.CNN`, `td.TCN`, `td.ViT`, and `td.flatten` as a fourth method of multidimensionality — plus LTI.md, which measured a claim this plan had been making without evidence and found it wrong. Two more bugs documented (#26 the spec describing a model that never runs, #27 absent cells reaching the output through the residual stream), 27 total.
+**Third pass added** the non-sequence families (Phase 7b), the first verification of our *composition* against a published N-D method (Phase 7c: S4ND at 1.8e-17): `td.CNN`, `td.TCN`, `td.ViT`, and `td.flatten` as a fourth method of multidimensionality — plus LTI.md, which measured a claim this plan had been making without evidence and found it wrong. Two more bugs documented (#26 the spec describing a model that never runs, #27 absent cells reaching the output through the residual stream), 27 total.
 
 What the second pass changed, in one line each: 23 bugs now documented (four new, two found by *looking at what shipped* rather than at the build); ranks 5–6 tested so the README caveat could be deleted; the Kronecker conformance check runs for the first time; `td.Transformer` completes the family the README table always claimed; coverage floored at 95% (measured 97%).
 
@@ -207,6 +207,57 @@ Added because the abstraction's claim is about *lattices*, not sequences, and un
 **Coverage:** both families pass full conformance at ranks 1–3, dense + sparse, plus separability, causality, dilation schedule, receptive field, config round-trip and learnability. Not covered: any reproduction number, grouped convolutions, video.
 
 **What LTI.md corrected.** The received claim — repeated in this project's own working notes, and the implicit basis for Phase 2's "S4ND's simultaneous-separable as a degenerate plan" item — is that LTI mixers commute across axes, so for an LTI mixer the sweep order carries no information. False for every multichannel network: a `groups=1` convolution is a *matrix-valued* filter, offset `j` carrying its own channel matrix, and those commute only if the matrices do. Measured order gap for a perfectly linear, perfectly time-invariant conv: **3e-01**. Build the filter as a channel matrix times a spatial filter and it drops to **3e-16**. So `ScanPlan` matters for a linear CNN too, and "separable" and "order-free" are different claims — only the first one follows from LTI.
+
+---
+
+## Phase 7c — Verification against the published N-D methods · S · **started**
+
+Every mixer in this library is checked against its source; the **composition**
+never was. That is the part the library claims as its own, so it was the part
+resting on internal consistency alone.
+
+The policy, arrived at by trying the alternative: **transcribe the paper's
+composition rule as a test oracle; do not vendor the paper's code as a
+dependency.** An upstream 1-D block satisfies the mixer contract and adapts
+cleanly (Track C2); an upstream N-D model carries a config framework, a
+trainer, a rank-specific einsum table and a license question, all to run
+twenty lines of arithmetic. `kron_operator` and the dense state-space
+reference already set this precedent.
+
+- [x] **S4ND** — its composition is not a sweep: one kernel per axis, outer
+  product in Fourier, one N-D FFT. Our sequential one-axis-per-layer sweep
+  reproduces it at **1.8e-17**, rank 2 and rank 3, with a channel-mixing
+  negative control. `tests/test_published_composition.py`. This is the
+  strongest evidence for the premise: the plan reproduces exactly a model that
+  was never written as a sweep.
+- [x] **Mamba-ND** — *not* blocked on CUDA after all. `Block.__init__` takes
+  `mixer_cls` as an argument, so the selective scan is injected: give it our
+  portable `MambaMixer` and the whole N-D scan runs on MPS. Their block with
+  `n_dim_pos=1` is **bitwise identical** to `td.axial_apply` on CPU and MPS
+  across all six order/direction combinations, and `ScanPlan.paired`
+  reproduces their 12-layer schedule exactly, layer for layer. The repo still
+  **ships no LICENSE file**, so it stays un-vendored and the harness imports
+  it from a local clone (`dossier/verify_mamba_nd.py`).
+- [x] Upstream S4ND runs on MPS too, once `pytorch_lightning` is stubbed and
+  the Cauchy kernel falls back to pure torch. Verified against *their*
+  kernels, not a transcription: bitwise at rank 3 on CPU, 4.7e-10 on MPS
+  (`dossier/verify_s4nd.py`, numbers in `dossier/README.md`).
+- [ ] **Axial Transformer** — `lucidrains/axial-attention` is MIT and pure
+  torch, so this one can be checked numerically here.
+- [ ] **CaFA** — the pooled per-axis kernels against the paper's formulation.
+- [ ] A dossier section recording each comparison's number, as Phase 7 does
+  for the 1-D mixers.
+
+**Coverage:** two of four published N-D methods verified numerically against
+their own running code, on CPU and MPS. The CI test needs no vendored code and
+no upstream clone; the dossier scripts need a clone and are not packaged.
+
+**A method neither we nor the papers name.** Mamba-ND scans the last
+`n_dim_pos` axes of a per-layer ordering *as one sequence*, batching the rest.
+`n_dim_pos=1` is `td.axial_scan`; `n_dim_pos=rank` is `td.flatten`; their
+published configs use the values in between (`factorization='hw_t'` →
+`(2, 2, 4)`). Our two methods are the endpoints of a spectrum whose interior
+we cannot currently express. See Track E.
 
 ---
 
@@ -405,6 +456,14 @@ The library emits a versioned JSON spec (`td.spec`, SPEC_VERSION 1); the viewer 
 - [ ] **Learned schedules**: differentiable relaxation over sweep order (soft mixture of axis sweeps annealed to a hard plan). Research-grade; the `ScanPlan`-as-data design is what makes it even expressible.
 - [ ] **Hierarchical / nested lattices** (multi-resolution grids, lattice-of-lattices): the S4ND paper's multi-scale appendix and weather models both want this; `Lattice.merge/slice` (Phase 1) is the substrate.
 - [ ] **Masked-pretraining utilities**: random cell masking as a training-time lattice transform — the `valid` machinery already guarantees inertia; the utility is three functions and a tutorial, but only after Phase 9 proves the supervised story.
+- [ ] **Partial flattening** — scan a *subset* of axes jointly, batching the
+  rest, which is what Mamba-ND actually does (`n_dim_pos`, and its published
+  configs use the middle values). `td.axial_scan` and `td.flatten` are the two
+  endpoints; the interior is a real method used by a real paper and this
+  library has no name for it. Probably one `axes=` argument on `flatten`
+  rather than a new strategy — the design question is how a plan expresses
+  "these three axes together, that one batched", and whether the answer is a
+  plan step over a *set* of axes.
 - [ ] **Continuous-time lattices**: irregular timestamps per cell (the `dt` in SSMs is *built* for this — S4's continuous-time parameterization applied per-observation). The biggest research swing in the list; would make td the only library doing irregular N-D series natively.
 
 ---

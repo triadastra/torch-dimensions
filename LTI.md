@@ -114,6 +114,24 @@ FFT over all axes is available. The joint kernel still depends on the order —
 separability and order-independence are different claims, and only the first
 one holds.
 
+**Checked against S4ND itself, not just against the theory.** S4ND does not
+sweep: it builds one 1-D kernel per axis, outer-products them in Fourier
+space, and applies a single N-D FFT convolution. Transcribing that composition
+as an oracle and feeding it our own kernels:
+
+```
+tests/test_published_composition.py
+    our sequential per-axis sweep vs S4ND's simultaneous N-D kernel
+    rank 2 and rank 3, max relative difference 1.8e-17
+```
+
+So a plan of one-axis-per-layer sweeps reproduces, exactly, a model that was
+never written as a sweep. That is the strongest single piece of evidence for
+the library's premise, and it is available *because* S4ND's kernels are
+diagonal in channels — the scalar-filter case above. The negative control in
+that file gives the axes a channel-mixing filter and the identity dies, which
+is the same correction stated in the other direction.
+
 Two things follow for free:
 
 - **Parameter cost.** A separable stack is `r·k` parameters where a full N-D
