@@ -7,6 +7,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Kernel-family options from the CaFA reference implementation**:
+  `qk_norm=` (RMS-normalize query and key; no new parameters) and
+  `kernel_residual=` (a learnable `gamma * I` added to the kernel *before* the
+  gate, so a contraction starts near the identity and has to learn to mix).
+  Both default to off, so existing models are bit-for-bit unchanged.
 - **Convolutional family — `td.CNN` and `td.TCN`.** The first mixers that are
   not sequence models at all: no state, no direction, no "so far". Sweeping a
   1-D convolution per axis is a *separable* convolution, exactly equal (linear,

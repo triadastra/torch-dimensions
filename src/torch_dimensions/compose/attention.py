@@ -65,6 +65,20 @@ class AxialKernel(nn.Module):
         per_line: per-line scores (axial attention) vs pooled per-axis
             kernels (CaFA).
         gate: ``"softmax"`` or ``"leaky_relu"``.
+        qk_norm: RMS-normalize the query and key before their product. Costs
+            nothing and stops the scores' scale drifting with feature norm,
+            which is why the CaFA reference implementation offers it.
+        kernel_residual: add a learnable ``gamma * I`` to the kernel *before*
+            the gate, so a contraction starts near "keep your own value" and
+            has to learn to mix. Taken from CaFA's ``LowRankKernel``, where it
+            is on by default; here it is off by default so existing models are
+            unchanged. ``gamma`` initializes to ``1/sqrt(d_model)``, as theirs
+            does.
+
+    Two options CaFA has that this does *not* copy: rotary position embedding
+    on the query and key (this uses a learned relative-position bias table
+    instead) and their spherical quadrature weights, which are a property of
+    the sphere rather than of the method.
     """
 
     def __init__(
@@ -76,6 +90,8 @@ class AxialKernel(nn.Module):
         *,
         per_line: bool = True,
         gate: str = "softmax",
+        qk_norm: bool = False,
+        kernel_residual: bool = False,
         dropout: float = 0.0,
         norm: bool = True,
         residual: bool = True,
@@ -89,6 +105,8 @@ class AxialKernel(nn.Module):
         self.d_model = d_model
         self.per_line = per_line
         self.gate = gate
+        self.qk_norm = qk_norm
+        self.kernel_residual = kernel_residual
         self.residual = residual
         self.chunk = chunk
 
@@ -107,6 +125,13 @@ class AxialKernel(nn.Module):
         sizes = [lattice.axis_size(a) for a in self.spatial_axes]
         self.bias = nn.ParameterList(
             nn.Parameter(torch.zeros(a, a)) for _ in range(n) for a in sizes
+        )
+        # One gamma per (layer, axis), like the per-axis kernels it scales.
+        # Initialized to 1/sqrt(d_model) — CaFA's value.
+        self.gamma = (
+            nn.ParameterList(nn.Parameter(torch.tensor(h**-0.5)) for _ in range(n * n_ax))
+            if kernel_residual
+            else None
         )
         self.out = nn.ModuleList(nn.Linear(h, h) for _ in range(n))
         self.norms = nn.ModuleList(nn.LayerNorm(h) for _ in range(n)) if norm else None
@@ -144,6 +169,16 @@ class AxialKernel(nn.Module):
             return x
         return x * self.cell_mask.to(x.dtype)
 
+    def _qk_norm(self, x: torch.Tensor) -> torch.Tensor:
+        """RMS-normalize the last dimension, or pass through.
+
+        No learnable scale: the score already has one in `scale`, and a second
+        would be the same parameter twice.
+        """
+        if not self.qk_norm:
+            return x
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + 1e-6)
+
     def _kernel(self, layer: int, j: int, axis: int, h: torch.Tensor) -> torch.Tensor:
         """Build the ``(M, A, A)`` operator for one axis of one layer."""
         lat = self.lattice
@@ -153,8 +188,8 @@ class AxialKernel(nn.Module):
 
         if self.per_line:
             seq, _ = lat.to_sequence(h, axis)  # (M, A, H)
-            q = self.q[idx](seq)
-            k = self.k[idx](seq)
+            q = self._qk_norm(self.q[idx](seq))
+            k = self._qk_norm(self.k[idx](seq))
             scores = q @ k.transpose(1, 2) * scale + bias
         else:
             # Pool over the *other spatial* axes only. Batch stays batch, and
@@ -168,8 +203,8 @@ class AxialKernel(nn.Module):
             counts = lat.valid_counts(axis).to(h.dtype).to(h.device)
             pooled = h.sum(reduce_dims) if reduce_dims else h  # (B, [T,] A, H)
             pooled = pooled / counts.unsqueeze(-1)
-            q = self.q[idx](pooled)
-            k = self.k[idx](pooled)
+            q = self._qk_norm(self.q[idx](pooled))
+            k = self._qk_norm(self.k[idx](pooled))
             scores = q @ k.transpose(-1, -2) * scale + bias  # (B, [T,] A, A)
             a = scores.shape[-1]
             # Expand to one kernel per folded line. The fold orders leading
@@ -185,6 +220,14 @@ class AxialKernel(nn.Module):
             else:
                 scores = scores.reshape(-1, 1, a, a).expand(-1, lines_per, a, a)
             scores = scores.reshape(-1, a, a)
+
+        if self.gamma is not None:
+            # `gamma * I`, added before the gate exactly as CaFA does — after
+            # the gate it would be a different model, since softmax is not
+            # additive. A contraction therefore starts near the identity and
+            # has to learn to mix, rather than starting fully mixed.
+            eye = torch.eye(scores.shape[-1], device=scores.device, dtype=scores.dtype)
+            scores = scores + self.gamma[idx] * eye
 
         if self.gate == "softmax":
             return F.softmax(scores, dim=-1)

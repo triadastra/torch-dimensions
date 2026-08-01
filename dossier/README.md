@@ -19,6 +19,7 @@ directory holding them (default `~/Desktop/Safe/code/github/external`):
 pip install hydra-core einops timm        # genuine imports, dev-only
 python dossier/verify_s4nd.py
 python dossier/verify_mamba_nd.py
+# CaFA: MIT, clone from https://github.com/BaratiLab/CaFA
 ```
 
 Neither repo is vendored. `_shims.py` makes them *importable*; it copies
@@ -87,6 +88,49 @@ argument, so the selective scan is injected. Give it our portable
 way — `mmcv`, `mmengine`, `mmaction`, `prettytable`, `timm`'s registry,
 `mamba_ssm`'s Triton norms — is imported for the *backbone*, not the scan.
 **Mamba-ND's schedule needs no CUDA; its packaging does.**
+
+### CaFA — factorized attention
+
+[BaratiLab/CaFA](https://github.com/BaratiLab/CaFA) (Li, Zhou, Patil, Barati
+Farimani, [arXiv:2405.07395](https://arxiv.org/abs/2405.07395)), **MIT** — so
+unlike Mamba-ND this one could be vendored; it still is not, because it does
+not need to be.
+
+Their contraction (`FABlockS2`) is two sequential per-axis einsums:
+
+```python
+u = einsum("bhij,bhjmc->bhimc", k_lat, u) * pi / n_lat
+u = einsum("bhlm,bhimc->bhilc", k_long, u) * 2 * pi / n_lon
+```
+
+That is `axial_contract` applied axis by axis. Checked directly, float64:
+**2.0e-16 relative** — machine precision. Their `PoolingReducer` also pools
+"all spatial dimensions but the first", which is the same pooling rule ours
+uses.
+
+The differences are all *features*, not composition:
+
+| | CaFA | torch-dimensions |
+|---|---|---|
+| rank | **2, hardcoded** (`to_lat`, `to_long`) | any |
+| heads | multi-head | single — still open |
+| q/k normalization | RMSNorm option | added (`qk_norm=`) |
+| kernel residual | `K + gamma·I`, on by default | added (`kernel_residual=`) |
+| positional | RoPE + Bessel radial basis | learned relative-position bias |
+| row normalization | `normalize_to_one` — **crashes** | per-line renormalization with a relative cancellation guard |
+| sparse lattices | none | masked and renormalized |
+| domain | sphere (quadrature weights, area weighting) | domain-agnostic |
+
+Two things worth stating plainly. Their `normalize_to_one=True` path raises
+`AttributeError: 'LowRankKernel' object has no attribute 'use_softmax'` —
+`__init__` guards on an attribute that is never assigned, so a documented
+option is unreachable. And `FABlockS2` names its two axes in its fields, so
+CaFA is a 2-D model by construction; the rank-generality is ours.
+
+What we took: `qk_norm` and `kernel_residual`, both off by default so existing
+models are bit-for-bit unchanged. What we did not: RoPE (we have a learned
+bias table) and the spherical quadrature weights, which are a property of the
+sphere rather than of the method.
 
 ## A method we do not have
 

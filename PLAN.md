@@ -153,7 +153,8 @@ Building a lattice from data is lattice construction and belongs here; running a
 - [x] A mixer on a time-less lattice refused as dead weight.
 - [x] `td.axial_attention`, `td.cafa` as strategies; registered by name; `method=` as the short spelling of `nd_method=`.
 - [x] Module-level Kronecker equivalence for CaFA — closed, via the `kernels=` adapter in `check_block`. Worth recording *what* the adapter returns: CaFA pools the current activation, so the second axis's kernel is built from the first axis's output. The factors are the ones actually applied, not the ones a static reading predicts.
-- [ ] Multi-head kernels (currently single-head per axis) — heads are the difference between this and what a Transformer person expects to configure.
+- [ ] Multi-head kernels (currently single-head per axis) — heads are the difference between this and what a Transformer person expects to configure, and the CaFA reference carries them, so this is now a confirmed gap rather than a suspected one. The contraction is the work: a per-head kernel means contracting feature slices independently, which `axial_contract` takes one call per head to express.
+- [x] `qk_norm` and `kernel_residual` (`K + gamma*I` before the gate), both from CaFA's `LowRankKernel` and both defaulted off so existing models are bitwise unchanged. The residual is the interesting one: it starts a contraction near "keep your own value" instead of fully mixed.
 - [x] `td.Transformer` / `AttentionMixer` — attention as the swept mixer, which makes "N-D Transformer" literal and gives both constructions in the literature a name. Non-causal by default (a mixer is not told which axis it sweeps, so masking "the future" of a spatial axis is meaningless); the causal mask is tested bitwise in both directions.
 - [x] Cost model, measured rather than derived: BENCHMARKS.md's "Where factorization starts winning". The answer was **not** what this line assumed — per-line attention is faster everywhere below ~50 cells per axis, and factorization only leads at 64³.
 - [ ] `gate="softmax"` temperature / learned-per-axis option (CaFA paper ablates this).
@@ -244,7 +245,13 @@ reference already set this precedent.
   (`dossier/verify_s4nd.py`, numbers in `dossier/README.md`).
 - [ ] **Axial Transformer** — `lucidrains/axial-attention` is MIT and pure
   torch, so this one can be checked numerically here.
-- [ ] **CaFA** — the pooled per-axis kernels against the paper's formulation.
+- [x] **CaFA** — [BaratiLab/CaFA](https://github.com/BaratiLab/CaFA), MIT.
+  Their contraction is two sequential per-axis einsums, which `axial_contract`
+  reproduces at **2.0e-16 relative** (float64). `FABlockS2` is hardcoded to
+  two named axes, so the rank-generality is ours. Adopted their `qk_norm` and
+  their `K + gamma*I` kernel residual (both off by default); declined RoPE and
+  the spherical quadrature weights. Their `normalize_to_one=True` path raises
+  `AttributeError` — a guard on an attribute never assigned.
 - [ ] A dossier section recording each comparison's number, as Phase 7 does
   for the 1-D mixers.
 
