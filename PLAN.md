@@ -262,8 +262,8 @@ Generation over a lattice: process one timestep at a time with carried state, so
 **The shape of it.** Autoregression is a property of the *time* axis only — the spatial axes are fully materialized at every step. So the primitive is
 
 ```python
-state = model.init_state(batch)             # per-layer, opaque
-y_t, state = model.step(x_t, state)         # x_t: (B, *shape, H) — one timestep
+state = model.init_state(batch)  # per-layer, opaque
+y_t, state = model.step(x_t, state)  # x_t: (B, *shape, H) — one timestep
 ```
 
 and a layer's behavior at step time follows from what it sweeps: a layer sweeping **time** consumes and updates its slice of the state; a layer sweeping a **spatial** axis runs exactly its normal forward on the single timestep (nothing to carry). The kernel family needs no new mechanism at all — its spatial kernels are already timestep-local, which the causality test proves today.

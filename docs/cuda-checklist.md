@@ -99,6 +99,7 @@ Open an issue with the output of:
 
 ```python
 import torch, torch_dimensions as td
+
 print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))
 print(td.__version__)
 ```

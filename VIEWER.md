@@ -5,7 +5,7 @@ Companion to [DESIGN.md](DESIGN.md) and [PLAN.md](PLAN.md). This one covers the 
 **Status: V0, V1, V1.5 and V2 built.** The architecture spec (`model.to_spec()`), the static viewer (`viewer/` — Vite + React + react-three-fiber; sample specs, file loading, layer stepping, sweep animation, ranks 1–3 literal, rank 4 stacked), live-run mode with start/pause/stop controls, and **`td.viz.show(model)` serving a bundle that ships inside the wheel** all work.
 
 ```python
-td.viz.show(model)   # a model, a spec dict, a spec JSON, or a checkpoint
+td.viz.show(model)  # a model, a spec dict, a spec JSON, or a checkpoint
 ```
 
 No node, no network, no build step at install time. V3 (shape flow) is next.

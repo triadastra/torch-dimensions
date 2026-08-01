@@ -47,7 +47,7 @@ class EMAMixer(nn.Module):
         self.decay_logit = nn.Parameter(torch.full((d_model,), logit(a0)))
         self.out = nn.Linear(d_model, d_model)
 
-    def forward(self, x):                      # (M, A, H)
+    def forward(self, x):  # (M, A, H)
         a = torch.sigmoid(self.decay_logit)
         state, out = torch.zeros_like(x[:, 0]), []
         for t in range(x.shape[1]):
@@ -70,6 +70,7 @@ axis bookkeeping is not.
 ```python
 from torch_dimensions.models.base import LatticeModel
 
+
 class EMA(LatticeModel):
     _mixer = EMAMixer
 ```
@@ -87,6 +88,7 @@ new mixer is held to the standard the built-ins are held to.
 ```python
 def factory(lattice, d_model, plan=None):
     return EMA(d_model, len(lattice.axis_names), lattice, plan=plan)
+
 
 report = td.testing.check_block(factory, reference=reference)
 print(report)
@@ -139,8 +141,9 @@ learning test without a negative control measures capacity, not learning.
 
 ```python
 td.register_model("ema", EMA)
-model = td.build({"kind": "ema", "d_model": 32, "n_layers": 8,
-                  "lattice": {"shape": [4, 5, 3], "time": True}})
+model = td.build(
+    {"kind": "ema", "d_model": 32, "n_layers": 8, "lattice": {"shape": [4, 5, 3], "time": True}}
+)
 ```
 
 Registration is what lets a config file or a checkpoint *name* your model, so
@@ -149,10 +152,8 @@ it can rebuild itself. Everything else works without it.
 ## 6. Use it at any rank
 
 ```python
-lattice = td.Lattice(shape=(4, 5, 3), names=("depth", "row", "col"),
-                     valid=observed, time=True)
-plan = td.ScanPlan.paired(lattice.axis_names, n_layers=8,
-                          bidirectional=("depth", "row", "col"))
+lattice = td.Lattice(shape=(4, 5, 3), names=("depth", "row", "col"), valid=observed, time=True)
+plan = td.ScanPlan.paired(lattice.axis_names, n_layers=8, bidirectional=("depth", "row", "col"))
 model = EMA(d_model=32, lattice=lattice, plan=plan, d_input=2)
 
 print(plan.coverage(lattice))

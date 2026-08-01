@@ -1,5 +1,10 @@
 # Contributing
 
+**Before pushing, run `bash scripts/check.sh`.** It is exactly what CI
+runs, in the same order — including `ruff format --check .`, which formats the
+Python inside Markdown code blocks and has caught this repo's own docs more
+than once. Running a narrower command locally is how a build goes red.
+
 ## Setup
 
 ```bash
@@ -8,7 +13,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-`torch` is the only required dependency. Kernel backends live behind extras (`[mamba]`, `[fla]`, `[s4]`); install them only if you are working on those adapters.
+`torch` is the only required dependency. Kernel backends and optional containers live behind extras (`[mamba]`, `[fla]`, `[safetensors]`); install them only if you are working on those paths.
 
 ```bash
 ruff check . && ruff format .

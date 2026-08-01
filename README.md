@@ -104,7 +104,7 @@ that rebuild their own model — validity mask included, outputs bitwise equal:
 
 ```python
 model = td.build("model.yaml")  # or a dict; unknown keys are a hard error
-model.save("run.td")            # or "run.safetensors", which cannot execute code
+model.save("run.td")  # or "run.safetensors", which cannot execute code
 same = td.load("run.td")
 ```
 

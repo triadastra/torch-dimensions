@@ -8,9 +8,9 @@ some axes belong to a different operator entirely.
 This is the argument the library exists to make one flag:
 
 ```python
-td.LSTM(64, 12, lattice, method=td.axial_scan)       # sweep every axis
-td.LSTM(64, 12, lattice, method=td.cafa)             # kernels across space, RNN along time
-td.LSTM(64, 12, lattice, method=my_strategy)         # yours, no registration
+td.LSTM(64, 12, lattice, method=td.axial_scan)  # sweep every axis
+td.LSTM(64, 12, lattice, method=td.cafa)  # kernels across space, RNN along time
+td.LSTM(64, 12, lattice, method=my_strategy)  # yours, no registration
 ```
 
 The worked example is [`examples/custom_method.py`](../examples/custom_method.py),
@@ -71,6 +71,7 @@ reimplement it.
 def factory(lat, d_model, plan=None):
     return td.LSTM(d_model, len(lat.axis_names) + 1, lat, plan=plan, method=pyramid)
 
+
 report = td.testing.check_block(factory)
 ```
 
@@ -114,8 +115,8 @@ recorded as DEBUG.md #4 (a published implementation whose every axis was
 silently pinned to one direction). Assert on coverage in your own tests:
 
 ```python
-assert cov["time"].backward == 0          # time must stay causal
-assert not cov.unswept                    # every axis gets mixing
+assert cov["time"].backward == 0  # time must stay causal
+assert not cov.unswept  # every axis gets mixing
 ```
 
 ## Register it (only for config files)
