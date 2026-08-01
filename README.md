@@ -14,9 +14,12 @@ loss.backward()  # ordinary autograd; nothing custom to call
 > **Status: 0.1.** Built and tested: `Lattice`, `ScanPlan`, the scan and kernel
 > composition families, `LSTM`/`GRU`, `S4`/`S4D`/`Mamba` (portable, pure torch,
 > verified against the upstream reference kernels), the data layer, the
-> conformance suite, config/save/load, and the device suite (CPU, CUDA, MPS).
-> See [DESIGN.md](DESIGN.md) for the architecture, [PLAN.md](PLAN.md) for what
-> remains, and [DEBUG.md](DEBUG.md) for every bug found on the way and what
+> conformance suite, config/save/load, the architecture viewer, and the device
+> suite (CPU, MPS; CUDA is untested — see
+> [docs/cuda-checklist.md](docs/cuda-checklist.md)).
+> [RESULTS.md](RESULTS.md) has the reproductions, [BENCHMARKS.md](BENCHMARKS.md)
+> the measured costs, [DESIGN.md](DESIGN.md) the architecture, [PLAN.md](PLAN.md)
+> what remains, and [DEBUG.md](DEBUG.md) every bug found on the way and what
 > caught it.
 
 ## Why
@@ -80,7 +83,7 @@ td.Mamba(64, lattice=lat, plan=plan)  # .paired() is official Mamba-ND's schedul
 their values can never influence any output — tested bitwise:
 
 ```python
-lat = td.Lattice(shape=(14, 1263), names=("port", "commodity"), valid=observed, time=True)
+lat = td.Lattice(shape=(12, 6), names=("station", "pollutant"), valid=observed, time=True)
 ```
 
 **Real data in, one call.** Long-format rows to a lattice-shaped series, plus
@@ -99,9 +102,20 @@ that rebuild their own model — validity mask included, outputs bitwise equal:
 
 ```python
 model = td.build("model.yaml")  # or a dict; unknown keys are a hard error
-model.save("run.td")
+model.save("run.td")            # or "run.safetensors", which cannot execute code
 same = td.load("run.td")
 ```
+
+**Look at it.** The viewer ships inside the wheel — no node, no build step:
+
+```python
+td.viz.show(model)  # a model, a spec dict, a spec JSON, or a checkpoint
+```
+
+The lattice is rendered as cubes with absent cells genuinely absent, the sweep
+wavefront animates per layer, and rank ≥ 4 stacks dimensionally. Train under it
+with `examples/viewer_live.py` and the panel gets run controls and a loss
+curve. See [VIEWER.md](VIEWER.md).
 
 ## Correct on purpose
 
@@ -118,10 +132,19 @@ The test suite is the product as much as the models are:
   upstream's; the full S4 (DPLR) kernel matches upstream at 3e-8 and a dense
   state-space reference at machine precision; the Mamba scan matches
   `selective_scan_ref` at 1e-6.
-- **Portable by construction.** Pure torch throughout: CPU, CUDA, and Apple
-  Silicon (MPS) — the device suite runs against whatever accelerator exists.
-  Fused CUDA kernels are a planned fast path, not a requirement.
-- Every bug found in building this — 18 so far — is documented in
+- **Portable by construction.** Pure torch throughout, so the device suite
+  runs against whatever accelerator exists — verified on CPU and Apple Silicon
+  (MPS). CUDA *should* work and has never been run: that is a design claim, not
+  a test result, until someone works through
+  [docs/cuda-checklist.md](docs/cuda-checklist.md). Fused CUDA kernels are a
+  planned fast path, not a requirement.
+- **Reproductions and benchmarks, with hardware attached.** sMNIST at 99.53%
+  with `td.S4D` ([RESULTS.md](RESULTS.md)); the fold, the families and the
+  factorization crossover measured rather than asserted
+  ([BENCHMARKS.md](BENCHMARKS.md)), including the two results that came out
+  against the design's own predictions.
+- Every bug found in building this — 22 so far, including four found in this
+  library's own examples and shipped artifacts — is documented in
   [DEBUG.md](DEBUG.md) with what caught it, and the citations in that file are
   themselves tested.
 

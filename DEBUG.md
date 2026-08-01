@@ -9,6 +9,11 @@ the techniques that caught them (§B) caught them in code that was already
 passing a green test suite — as did the later entries, found by re-running
 those same techniques against code the suite already blessed.
 
+The last four (#19–#22) came from a different direction and are worth reading
+together: two were found by *looking at what shipped* rather than at what the
+build said, and two were found by running this library's own conformance suite
+against this library's own documentation, where it failed twice.
+
 Every citation here is live. The pre-fix code for each fixed bug is one
 `git checkout` away, so each **Reproduce** block below lets you watch the guard
 fire — and each was *run before being written down*, which is how two citations
@@ -46,6 +51,10 @@ Their generalizable lessons are folded into §A without identifying details.
 | 16 | `testing.py` — conformance checks ran at ranks the caller excluded | medium | audit | fixed |
 | 17 | `compose/scan.py` — `chunk=0` errored from deep inside `range()` | low | targeted probe | fixed |
 | 18 | `lattice.py` — device lattice could not index CPU tensors | medium | device probe (MPS) | fixed |
+| 19 | viewer bundle — a stale local training run shipped inside the wheel | medium | looking at the artifact | fixed |
+| 20 | `benchmarks/bench.py` — a memory column that measured the driver, not the model | medium | reading the output | fixed before publishing |
+| 21 | `examples/custom_method.py` — a strategy that indexed an empty axis list at rank 1 | low | conformance suite | fixed |
+| 22 | `examples/custom_method.py` — a schedule derived from *storage* order, not sweep order | high | conformance suite | fixed |
 
 Severity is "what would this have cost if it reached a user", not "how hard was
 it to fix". Every one of #1–#5 is silent: no exception, no NaN, just wrong
@@ -461,6 +470,84 @@ both mismatch directions.
 
 ---
 
+## 19. A stale training run shipped inside the viewer bundle
+
+`td.viz.show` serves a static bundle built from `viewer/`. Vite copies
+everything in `viewer/public/` into that build, and the live-training script
+writes `viewer/public/run.json` there — so the first bundle carried a training
+run from this laptop, and the viewer loaded **it in preference to the model
+passed to `show()`**. The feature's central promise ("show me *this* model")
+was broken by a file nobody thought of as part of the feature.
+
+Found by opening the served page and reading the sidebar: the model card said
+`Mamba, 18 layers, 4x5x6x4` for a model built as `S4DND, 8 layers, 4x5x6`.
+Every automated check passed — the bundle built, the server served, the tests
+(as written at that moment) were green.
+
+This is the 35 MB sdist (`node_modules` in a released tarball) one directory
+over, and the same lesson: **the thing that ships is the thing to inspect.**
+`twine check` passes bloated tarballs happily and a build log says nothing
+about what a page will render.
+
+**Fix.** `viewer/install_bundle.py` strips `run.json` from the copied bundle
+and says so. **Guarded by**
+`test_no_local_training_run_rides_along_in_the_bundle`, which asserts the
+served `/run.json` is a 404, plus a publish-workflow step that greps the
+built *wheel* for `viz/static/index.html` rather than trusting the build.
+
+---
+
+## 20. A benchmark column that measured something else entirely
+
+The Phase 10 benchmark table had a `peak MB` column reading
+`torch.mps.driver_allocated_memory()` on MPS — which is the whole process's
+driver allocation, not the model's. It reported **18 GB for a 25,000-parameter
+model**, and would have been published in BENCHMARKS.md as a memory
+measurement.
+
+Nothing failed. The number was plausible in shape (a float, in MB, varying
+between rows) and absurd only if you knew what it should be. It was caught by
+reading the generated table and asking why two models three orders of
+magnitude apart in size used the same memory.
+
+**Fix.** Only CUDA tracks an allocation high-water mark, so the column reads
+`n/a` everywhere else, and `peak_memory_mb`'s docstring records why the
+plausible substitute was removed. **A number that is not what its header
+claims is worse than a blank** — a blank invites a question, a wrong number
+answers it.
+
+---
+
+## 21 & 22. The conformance suite found both bugs in its own documentation's example
+
+While writing `docs/adding-a-method.md`, the example strategy — thirty lines
+that rewrite a schedule — was run through `check_block`. Two failures:
+
+```
+[FAIL] shape is preserved — ZeroDivisionError: integer division or modulo by zero
+[FAIL] output is covariant with axis storage order
+```
+
+**#21** was `others[(i // 2) % len(others)]` on a rank-1 lattice, where the
+only axis *is* the dominant one and `others` is empty. Low severity, instant
+diagnosis, and caught by the cheapest check in the suite at the rank people
+skip because "rank 1 is trivial".
+
+**#22** is the interesting one, and it is the canonical N-D bug in a single
+line: the strategy took its axis order from `lattice.axis_names`, so the same
+model over the same data *laid out differently* produced a different schedule.
+No exception, no NaN, no loss curve that looks wrong — just a model whose
+behaviour depends on storage order rather than on the sweep order it was
+asked for. This is the same shape as #4 (bidirectional aliasing) and it is why
+the covariance check exists at all.
+
+Both are fixed in the example, and both are now *described in the guide* as
+what the suite caught, with a test that reproduces the broken version to prove
+the check still fails it. The most useful thing a conformance suite can do for
+a documentation page is embarrass it.
+
+---
+
 ## Not bugs
 
 Two things that look like defects and are not. Recorded so they are not
@@ -536,3 +623,12 @@ Ranked by yield in this project.
 6. **Adversarial edge cases on guards.** Ask what a clamp, an epsilon, or a
    `nan_to_num` is protecting against, then construct the case it *isn't*.
    That is exactly how #3 was found.
+7. **Looking at the artifact rather than the process.** #19 and #20 were both
+   invisible to every automated check and obvious within seconds of *reading
+   the output*: a served page whose sidebar described the wrong model, a table
+   claiming 18 GB for a 25k-parameter model. Build logs, green suites and
+   `twine check` all report on the process. Open the page, read the table,
+   list the wheel.
+8. **Running the conformance suite on the examples.** #21 and #22 were in this
+   project's own documentation, in code written to *demonstrate* correctness.
+   The suite found both in one run.
