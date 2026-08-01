@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import inspect
 import json
+import warnings
+from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +38,7 @@ __all__ = [
     "build",
     "list_models",
     "load",
+    "read_config",
     "register_model",
     "save",
 ]
@@ -70,6 +73,7 @@ MODELS: dict[str, type[nn.Module]] = {}
 def _ensure_registry() -> None:
     if not MODELS:
         MODELS.update(_models())
+        _load_entry_points()
 
 
 def register_model(name: str, cls: type[nn.Module]) -> None:
@@ -180,14 +184,25 @@ def _accepted_keys(cls: type[nn.Module], cfg: dict[str, Any]) -> set[str]:
     return keys
 
 
-def build(cfg: dict[str, Any] | str | Path) -> nn.Module:
-    """Construct a model from a config dict, or from a YAML file path.
+def build(cfg: dict[str, Any] | str | Path, *, weights: bool = False) -> nn.Module:
+    """Construct a model from a config dict, a YAML path, or a checkpoint.
 
     ``cfg["kind"]`` names a registered model; everything else is constructor
     keywords, with ``lattice`` and ``plan`` accepted as plain dicts. Unknown
     keys are a hard error naming the key and listing the accepted ones — a
     silently ignored typo is a silently different model.
+
+    Given a checkpoint path, this builds the *architecture* it records and
+    leaves the weights alone — "the same model, freshly initialized" is a
+    thing people want often enough (a second seed, a fine-tune baseline) that
+    it should not require unpacking the file by hand. ``weights=True`` is
+    exactly :func:`load`; config-with-weights and config-only are a flag, not
+    two APIs.
     """
+    if isinstance(cfg, (str, Path)) and Path(cfg).suffix in (".td", ".pt", ".safetensors"):
+        if weights:
+            return load(cfg)
+        cfg = read_config(cfg)
     if isinstance(cfg, (str, Path)):
         try:
             import yaml
@@ -219,6 +234,54 @@ def build(cfg: dict[str, Any] | str | Path) -> nn.Module:
     if cfg.get("plan") is not None:
         cfg["plan"] = _plan_from(cfg["plan"], cfg.get("lattice"), cfg.get("n_layers"))
     return cls(**cfg)
+
+
+def read_config(path: str | Path) -> dict[str, Any]:
+    """The construction recipe out of a checkpoint, without the weights.
+
+    Useful on its own: it is what a checkpoint claims to be, in plain data, and
+    reading it does not require the architecture to still exist.
+    """
+    if _is_safetensors(path):
+        from safetensors import safe_open
+
+        with safe_open(str(path), framework="pt") as fh:
+            meta = fh.metadata() or {}
+        if meta.get("format") != CHECKPOINT_FORMAT:
+            raise ValueError(f"{path} is not a torch-dimensions checkpoint")
+        return {"kind": meta["kind"], **json.loads(meta["config"])}
+
+    ckpt = torch.load(path, map_location="cpu")
+    if not isinstance(ckpt, dict) or ckpt.get("format") != CHECKPOINT_FORMAT:
+        raise ValueError(f"{path} is not a torch-dimensions checkpoint")
+    return {"kind": ckpt["kind"], **ckpt["config"]}
+
+
+def _load_entry_points() -> None:
+    """Let third-party packages register model kinds without being imported.
+
+    A package advertising a ``torch_dimensions.models`` entry point has its
+    kinds available to :func:`build` and to checkpoints, and the module is
+    imported only when the registry is first consulted — an eager import of
+    every installed plugin is how an optional dependency becomes a mandatory
+    one.
+
+    A plugin that fails to import is a warning, not a crash: one broken
+    third-party package must not make this library unimportable.
+    """
+    found = entry_points(group="torch_dimensions.models")
+    for entry in found:
+        if entry.name.lower() in MODELS:
+            continue
+        try:
+            MODELS[entry.name.lower()] = entry.load()
+        except Exception as e:  # noqa: BLE001 - a broken plugin is not our crash
+            warnings.warn(
+                f"model plugin {entry.name!r} failed to load ({type(e).__name__}: {e}); "
+                "it will not be available by name",
+                UserWarning,
+                stacklevel=2,
+            )
 
 
 def _kind_of(model: nn.Module) -> str:

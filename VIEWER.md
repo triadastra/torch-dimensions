@@ -2,7 +2,13 @@
 
 Companion to [DESIGN.md](DESIGN.md) and [PLAN.md](PLAN.md). This one covers the GUI: what it shows, what it deliberately does not, and how it gets built.
 
-**Status:** V0 and V1 built. The architecture spec (`model.to_spec()`) and the static viewer (`viewer/` — Vite + React + react-three-fiber; sample specs, file loading, layer stepping, sweep animation, ranks 1–3 literal, rank 4 stacked) are working. V2 (`td.viz.show`, wheel bundling) is next.
+**Status: V0, V1, V1.5 and V2 built.** The architecture spec (`model.to_spec()`), the static viewer (`viewer/` — Vite + React + react-three-fiber; sample specs, file loading, layer stepping, sweep animation, ranks 1–3 literal, rank 4 stacked), live-run mode with start/pause/stop controls, and **`td.viz.show(model)` serving a bundle that ships inside the wheel** all work.
+
+```python
+td.viz.show(model)   # a model, a spec dict, a spec JSON, or a checkpoint
+```
+
+No node, no network, no build step at install time. V3 (shape flow) is next.
 
 ---
 
@@ -55,7 +61,9 @@ The viewer lives in `viewer/` in this repo and ships **prebuilt** inside the whe
 
 The costs are real and accepted: the release pipeline must build the bundle before building the wheel, CI grows a JS job, and the wheel gets meaningfully larger. In exchange the install experience is one line, which for a visualization tool is most of whether it gets used at all.
 
-The base `pip install torch-dimensions` stays exactly as it is — torch and nothing else. The `[gui]` extra adds only the server dependency; the bundle itself is a data file.
+The base `pip install torch-dimensions` stays exactly as it is — torch and nothing else. No `[gui]` extra was needed in the end: the server is `http.server` from the standard library, and the bundle is a data file, so `td.viz.show` works on a bare install.
+
+**What this cost, in practice.** The bundle is 1.16 MB uncompressed and the wheel is 387 KB compressed — inside the existing size guards. Hatchling honours `.gitignore`, so the (gitignored, CI-built) bundle needed an explicit `artifacts` entry; without it the wheel installs cleanly, imports cleanly, and fails only when a user runs the one command the feature exists for. The publish workflow therefore greps the built *wheel* rather than trusting the build log — and doing that is what caught DEBUG.md #19, a stale local training run baked into the bundle that the viewer loaded in preference to the model it was handed.
 
 ---
 

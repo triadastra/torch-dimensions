@@ -195,10 +195,10 @@ Building a lattice from data is lattice construction and belongs here; running a
 - [x] The round-trip proven for every model family and both composition families.
 - [x] `safetensors` as an optional container, chosen by file extension, with the config carried in its metadata — still one file, and one that cannot execute code when opened. A test asserts the written file contains no pickle.
 - [ ] Checkpoint migration policy written down: what version N promises to load from version N−1, and a stored-fixture test per released version (the fixtures directory *is* the compatibility contract).
-- [ ] `td.build` accepting a checkpoint path directly (config-with-weights vs config-only is a flag, not two APIs).
-- [ ] Registry entry points (`importlib.metadata`) so third-party packages can register model kinds without importing them eagerly.
+- [x] `td.build(checkpoint)` builds the architecture a checkpoint records and leaves the weights alone; `weights=True` is exactly `load`. Plus `td.read_config(path)` — what a checkpoint claims to be, in plain data, readable without the architecture still existing.
+- [x] Entry-point registration (`torch_dimensions.models` group): a plugin's module is imported only when the registry is first consulted, and a plugin that fails to import warns rather than making this library unimportable.
 
-**Coverage:** every shipped model round-trips config and weights bitwise. Not covered: cross-version loading (no released fixture set yet), third-party registration.
+**Coverage:** every shipped model round-trips config and weights bitwise, in both containers (torch pickle and safetensors); third-party registration and its failure path are tested. Not covered: cross-version loading — there is still no released fixture set, which is the one thing here that only time can produce.
 
 ---
 
@@ -234,7 +234,7 @@ Measure the known risks before making any performance claim.
 - [x] Chunked fold: never won here; `chunk=64` cost 3×. It is a memory valve, not a speed knob.
 - [x] Rank 1→5 at fixed cells — and the design claim was **wrong**. Cost tracks the *length of the swept axis*, not the cell count and not the rank: rank 1 costs ~95× rank 4 at the same 4,096 cells, because a sequential mixer's cost is its launch depth.
 - [x] Published as BENCHMARKS.md with the machine named and the scripts in-repo. Interpretations live in the script as a `finding` field, because regenerating overwrites the markdown and an interpretation a re-run deletes is one nobody rewrites.
-- [ ] A CI perf-smoke: one tiny timed run with a generous regression threshold (2×) — catches the accidental O(n²) without flaking on runner noise.
+- [x] A CI perf-smoke (`tests/test_perf.py`) — but on **ratios between two configurations in the same process**, not on absolute times: a loaded runner is 5× slower than a quiet laptop and an absolute threshold flakes exactly where it was meant not to. Machine speed cancels; complexity does not.
 
 **Acceptance:** met on MPS. **Coverage:** one machine, float32, forward and forward+backward. Not covered: CUDA, half precision, multi-GPU, memory (only CUDA tracks an allocation peak — see DEBUG.md #20 for the plausible substitute that was removed).
 

@@ -25,7 +25,15 @@ from torch_dimensions.compose import (
     register_nd_method,
     resolve_nd_method,
 )
-from torch_dimensions.config import MODELS, build, list_models, load, register_model, save
+from torch_dimensions.config import (
+    MODELS,
+    build,
+    list_models,
+    load,
+    read_config,
+    register_model,
+    save,
+)
 from torch_dimensions.lattice import Lattice, Restore, Sub
 from torch_dimensions.models.attention import Transformer, TransformerND
 from torch_dimensions.models.rnn import GRU, LSTM
@@ -68,6 +76,7 @@ __all__ = [
     "data",
     "list_models",
     "load",
+    "read_config",
     "mixers",
     "testing",
     "viz",
