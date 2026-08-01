@@ -213,10 +213,15 @@ Candidates, in order of feasibility on available hardware:
 - [x] **Sparse-lattice forecasting** on UCI Beijing air quality — 12 stations × 6 pollutants, hourly, a genuinely 2-D lattice. `masked` vs `zeros` arms, same data and budget, scored on present cells only so the comparison is about representation and not about which cells count. Sparsity is **induced and said to be induced**: a naturally sparse dataset confounds "is missing" with "is different", and removing cells at random isolates the variable.
 - [x] **Method comparison as one flag** — `cafa` and `axial_attention` arms of the same forecasting experiment, differing in exactly one argument.
 - [x] Each ships as a `python -m` runnable, an append-only ledger, a RESULTS.md row with hardware and wall-clock, and a CI smoke variant on synthetic data (`tests/test_repro.py`) — including the check that makes the sparse comparison mean anything: a 1e3 perturbation in an absent cell must not move the output by one bit.
-- [ ] Seed variance: every row is one seed. Three seeds per row is the next honest increment, and until then no row should be read as a mean.
+- [ ] Seed variance: every row is one seed. Three seeds per row is the next honest increment, and until then no row should be read as a mean. **This is now the blocking issue for the sparse claim**, whose arms differ by less than one percent relative.
+- [ ] **The experiment the null result implies.** Masking did not improve accuracy on a *fixed* mask — a dense model learns the mask. So the claim has to be restated and retested as the thing masking actually guarantees: train on one sparsity pattern, evaluate on a **different** one. The masked model is provably invariant (bitwise, already tested); the dense model cannot be. That is a property experiment, not a leaderboard, and it is the one that would justify the feature in a paper.
 - [ ] CIFAR-10 row (the download stalled repeatedly on this connection; the code path is tested, the number is not taken).
 
-**Acceptance:** met — RESULTS.md carries reproducible rows, each one command. **Coverage:** the sequence and sparse-lattice claims have numbers; the image rows are laptop-scale and say so; nothing here has run on CUDA.
+**Acceptance:** met — RESULTS.md carries reproducible rows, each one command.
+
+**What the numbers said, including the part that stings.** The sequence reproductions worked: 99.53% and 97.79%, both inside a point of published. The sparse-lattice experiment produced a **null result** — masking absent cells did not beat zero-filling at 30% or 60% sparsity, because a mask fixed across training and evaluation is something a dense model simply learns. The library's masking still provides what it always claimed (absent cells provably cannot influence an output, tested bitwise); what it does not provide, on this task, is a better score. Writing that down is worth more than the row that would have been quietly dropped.
+
+**Coverage:** the sequence and sparse claims have numbers at one seed each; the image rows are 2-epoch and say so; nothing here has run on CUDA, and no row is a mean.
 
 **Risk:** dataset licensing and download flakiness — vendor nothing; download scripts with checksums, and CI smoke uses synthetic stand-ins.
 

@@ -133,5 +133,733 @@
         "test_acc": 0.9953
       }
     ]
+  },
+  {
+    "recorded": "2026-08-01 21:12:54",
+    "config": {
+      "name": "psMNIST \u00b7 td.S4D",
+      "task": "psMNIST",
+      "model": "td.S4D d_model=128 n_layers=4 d_state=64",
+      "epochs": 20,
+      "batch": 64,
+      "lr": 0.004,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "d_model": 128,
+        "n_layers": 4,
+        "d_state": 64
+      },
+      "n_params": 201482
+    },
+    "metric": 0.9779,
+    "metric_name": "test_acc",
+    "train_loss": 1.867012566986714e-05,
+    "epochs_run": 20,
+    "seconds": 1242.8515241146088,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 1.019503503529502,
+        "test_acc": 0.9037
+      },
+      {
+        "epoch": 1,
+        "train_loss": 0.2512524011395951,
+        "test_acc": 0.9319
+      },
+      {
+        "epoch": 2,
+        "train_loss": 0.1760734540801535,
+        "test_acc": 0.9481
+      },
+      {
+        "epoch": 3,
+        "train_loss": 0.13831789504740633,
+        "test_acc": 0.9574
+      },
+      {
+        "epoch": 4,
+        "train_loss": 0.11658411616805012,
+        "test_acc": 0.9558
+      },
+      {
+        "epoch": 5,
+        "train_loss": 0.09691295961885135,
+        "test_acc": 0.9535
+      },
+      {
+        "epoch": 6,
+        "train_loss": 0.07926309957151124,
+        "test_acc": 0.9648
+      },
+      {
+        "epoch": 7,
+        "train_loss": 0.0670541784547861,
+        "test_acc": 0.9634
+      },
+      {
+        "epoch": 8,
+        "train_loss": 0.05326386128632557,
+        "test_acc": 0.9679
+      },
+      {
+        "epoch": 9,
+        "train_loss": 0.0388680445075787,
+        "test_acc": 0.9674
+      },
+      {
+        "epoch": 10,
+        "train_loss": 0.029866827461636252,
+        "test_acc": 0.9697
+      },
+      {
+        "epoch": 11,
+        "train_loss": 0.018190062720586014,
+        "test_acc": 0.965
+      },
+      {
+        "epoch": 12,
+        "train_loss": 0.010261548714764226,
+        "test_acc": 0.9687
+      },
+      {
+        "epoch": 13,
+        "train_loss": 0.005324497706405353,
+        "test_acc": 0.974
+      },
+      {
+        "epoch": 14,
+        "train_loss": 0.0018207937532818733,
+        "test_acc": 0.9755
+      },
+      {
+        "epoch": 15,
+        "train_loss": 0.00046113895704945687,
+        "test_acc": 0.9765
+      },
+      {
+        "epoch": 16,
+        "train_loss": 5.725269436768151e-05,
+        "test_acc": 0.9776
+      },
+      {
+        "epoch": 17,
+        "train_loss": 2.3626917886876312e-05,
+        "test_acc": 0.9778
+      },
+      {
+        "epoch": 18,
+        "train_loss": 1.9889431194500162e-05,
+        "test_acc": 0.9779
+      },
+      {
+        "epoch": 19,
+        "train_loss": 1.867012566986714e-05,
+        "test_acc": 0.9779
+      }
+    ]
+  },
+  {
+    "recorded": "2026-08-01 21:21:54",
+    "config": {
+      "name": "beijing forecast \u00b7 masked",
+      "task": "air quality 12\u00d76 lattice, 30% cells absent",
+      "model": "masked (sparse lattice, absent cells marked), d_model=48 n_layers=4",
+      "epochs": 8,
+      "batch": 32,
+      "lr": 0.003,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "arm": "masked",
+        "drop": 0.3,
+        "input_len": 24,
+        "horizon": 1
+      },
+      "n_params": 75793
+    },
+    "metric": 0.09069770171561024,
+    "metric_name": "test_mse",
+    "train_loss": 0.09969003814948749,
+    "epochs_run": 8,
+    "seconds": 53.57665276527405,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 0.12429044454371276,
+        "test_mse": 0.10280771360478617
+      },
+      {
+        "epoch": 1,
+        "train_loss": 0.11058912751133039,
+        "test_mse": 0.10312280827625231
+      },
+      {
+        "epoch": 2,
+        "train_loss": 0.10789536125107443,
+        "test_mse": 0.0976652552458373
+      },
+      {
+        "epoch": 3,
+        "train_loss": 0.10516011644341902,
+        "test_mse": 0.0956597646867687
+      },
+      {
+        "epoch": 4,
+        "train_loss": 0.10331131751780913,
+        "test_mse": 0.09229119711301544
+      },
+      {
+        "epoch": 5,
+        "train_loss": 0.10129238458426848,
+        "test_mse": 0.09156223169781945
+      },
+      {
+        "epoch": 6,
+        "train_loss": 0.1002149906468718,
+        "test_mse": 0.0911442020400004
+      },
+      {
+        "epoch": 7,
+        "train_loss": 0.09969003814948749,
+        "test_mse": 0.09069770171561024
+      }
+    ]
+  },
+  {
+    "recorded": "2026-08-01 21:22:42",
+    "config": {
+      "name": "beijing forecast \u00b7 zeros",
+      "task": "air quality 12\u00d76 lattice, 30% cells absent",
+      "model": "zeros (dense lattice, absent cells zero-filled), d_model=48 n_layers=4",
+      "epochs": 8,
+      "batch": 32,
+      "lr": 0.003,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "arm": "zeros",
+        "drop": 0.3,
+        "input_len": 24,
+        "horizon": 1
+      },
+      "n_params": 75793
+    },
+    "metric": 0.09039492024616762,
+    "metric_name": "test_mse",
+    "train_loss": 0.09964381899157343,
+    "epochs_run": 8,
+    "seconds": 47.69341516494751,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 0.12688694628950667,
+        "test_mse": 0.10459822003136982
+      },
+      {
+        "epoch": 1,
+        "train_loss": 0.1108298628722832,
+        "test_mse": 0.10305462564257058
+      },
+      {
+        "epoch": 2,
+        "train_loss": 0.1081484189452646,
+        "test_mse": 0.09747825146398761
+      },
+      {
+        "epoch": 3,
+        "train_loss": 0.1050991639239739,
+        "test_mse": 0.09451245861974629
+      },
+      {
+        "epoch": 4,
+        "train_loss": 0.10315448624086163,
+        "test_mse": 0.09209140566262332
+      },
+      {
+        "epoch": 5,
+        "train_loss": 0.10124808555834641,
+        "test_mse": 0.09133706177500162
+      },
+      {
+        "epoch": 6,
+        "train_loss": 0.1002069027354456,
+        "test_mse": 0.09085217074237087
+      },
+      {
+        "epoch": 7,
+        "train_loss": 0.09964381899157343,
+        "test_mse": 0.09039492024616762
+      }
+    ]
+  },
+  {
+    "recorded": "2026-08-01 21:26:18",
+    "config": {
+      "name": "beijing forecast \u00b7 cafa",
+      "task": "air quality 12\u00d76 lattice, 30% cells absent",
+      "model": "cafa (sparse lattice + td.cafa across space), d_model=48 n_layers=4",
+      "epochs": 8,
+      "batch": 32,
+      "lr": 0.003,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "arm": "cafa",
+        "drop": 0.3,
+        "input_len": 24,
+        "horizon": 1
+      },
+      "n_params": 123169
+    },
+    "metric": 0.10885638818144798,
+    "metric_name": "test_mse",
+    "train_loss": 0.12546644425317305,
+    "epochs_run": 8,
+    "seconds": 216.22911524772644,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 0.6769501242667573,
+        "test_mse": 0.4408358086239208
+      },
+      {
+        "epoch": 1,
+        "train_loss": 0.5566055977113171,
+        "test_mse": 0.24369564218954606
+      },
+      {
+        "epoch": 2,
+        "train_loss": 0.2324869351027763,
+        "test_mse": 0.13788368512283672
+      },
+      {
+        "epoch": 3,
+        "train_loss": 0.220979968417589,
+        "test_mse": 0.1840333345261487
+      },
+      {
+        "epoch": 4,
+        "train_loss": 0.23888956083486615,
+        "test_mse": 0.15041539763862435
+      },
+      {
+        "epoch": 5,
+        "train_loss": 0.17551453039050102,
+        "test_mse": 0.11789541366425428
+      },
+      {
+        "epoch": 6,
+        "train_loss": 0.1330480825615256,
+        "test_mse": 0.11473708701404658
+      },
+      {
+        "epoch": 7,
+        "train_loss": 0.12546644425317305,
+        "test_mse": 0.10885638818144798
+      }
+    ]
+  },
+  {
+    "recorded": "2026-08-01 21:29:28",
+    "config": {
+      "name": "beijing forecast \u00b7 attention",
+      "task": "air quality 12\u00d76 lattice, 30% cells absent",
+      "model": "attention (sparse lattice + td.axial_attention across space), d_model=48 n_layers=4",
+      "epochs": 8,
+      "batch": 32,
+      "lr": 0.003,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "arm": "attention",
+        "drop": 0.3,
+        "input_len": 24,
+        "horizon": 1
+      },
+      "n_params": 123169
+    },
+    "metric": 0.18399164297363974,
+    "metric_name": "test_mse",
+    "train_loss": 0.1900150083923993,
+    "epochs_run": 8,
+    "seconds": 189.35270881652832,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 0.5848252116341025,
+        "test_mse": 0.16556862118569288
+      },
+      {
+        "epoch": 1,
+        "train_loss": 1.3179108478367056,
+        "test_mse": 0.5190189957618714
+      },
+      {
+        "epoch": 2,
+        "train_loss": 0.49780906519116874,
+        "test_mse": 0.2541938387534835
+      },
+      {
+        "epoch": 3,
+        "train_loss": 0.2272672116007979,
+        "test_mse": 0.19579246870496056
+      },
+      {
+        "epoch": 4,
+        "train_loss": 0.20060610162204803,
+        "test_mse": 0.18893802789124575
+      },
+      {
+        "epoch": 5,
+        "train_loss": 0.19565170350140088,
+        "test_mse": 0.18871112831614234
+      },
+      {
+        "epoch": 6,
+        "train_loss": 0.19741515737009918,
+        "test_mse": 0.18605626090006394
+      },
+      {
+        "epoch": 7,
+        "train_loss": 0.1900150083923993,
+        "test_mse": 0.18399164297363974
+      }
+    ]
+  },
+  {
+    "recorded": "2026-08-01 21:30:46",
+    "config": {
+      "name": "beijing forecast \u00b7 masked",
+      "task": "air quality 12\u00d76 lattice, 60% cells absent",
+      "model": "masked (sparse lattice, absent cells marked), d_model=48 n_layers=4",
+      "epochs": 8,
+      "batch": 32,
+      "lr": 0.003,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "arm": "masked",
+        "drop": 0.6,
+        "input_len": 24,
+        "horizon": 1
+      },
+      "n_params": 75793
+    },
+    "metric": 0.09964046532457525,
+    "metric_name": "test_mse",
+    "train_loss": 0.10702335993550956,
+    "epochs_run": 8,
+    "seconds": 53.18805289268494,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 0.13135306162921262,
+        "test_mse": 0.1126978657801043
+      },
+      {
+        "epoch": 1,
+        "train_loss": 0.11906716274310193,
+        "test_mse": 0.11252784691751003
+      },
+      {
+        "epoch": 2,
+        "train_loss": 0.11730480624456384,
+        "test_mse": 0.10611476647582921
+      },
+      {
+        "epoch": 3,
+        "train_loss": 0.11298423849862732,
+        "test_mse": 0.10341638025235046
+      },
+      {
+        "epoch": 4,
+        "train_loss": 0.11141149253163436,
+        "test_mse": 0.10159267200665041
+      },
+      {
+        "epoch": 5,
+        "train_loss": 0.10892686696901713,
+        "test_mse": 0.10075010454112833
+      },
+      {
+        "epoch": 6,
+        "train_loss": 0.10769379747070407,
+        "test_mse": 0.10010227198627862
+      },
+      {
+        "epoch": 7,
+        "train_loss": 0.10702335993550956,
+        "test_mse": 0.09964046532457525
+      }
+    ]
+  },
+  {
+    "recorded": "2026-08-01 21:31:34",
+    "config": {
+      "name": "beijing forecast \u00b7 zeros",
+      "task": "air quality 12\u00d76 lattice, 60% cells absent",
+      "model": "zeros (dense lattice, absent cells zero-filled), d_model=48 n_layers=4",
+      "epochs": 8,
+      "batch": 32,
+      "lr": 0.003,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "arm": "zeros",
+        "drop": 0.6,
+        "input_len": 24,
+        "horizon": 1
+      },
+      "n_params": 75793
+    },
+    "metric": 0.09880558953366496,
+    "metric_name": "test_mse",
+    "train_loss": 0.10676003373376855,
+    "epochs_run": 8,
+    "seconds": 47.29446196556091,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 0.13535279812946166,
+        "test_mse": 0.11406493871049447
+      },
+      {
+        "epoch": 1,
+        "train_loss": 0.12002431938943525,
+        "test_mse": 0.11173753348941153
+      },
+      {
+        "epoch": 2,
+        "train_loss": 0.11717695334594544,
+        "test_mse": 0.10699787031520497
+      },
+      {
+        "epoch": 3,
+        "train_loss": 0.11340757681388561,
+        "test_mse": 0.10389102876863697
+      },
+      {
+        "epoch": 4,
+        "train_loss": 0.11139429029774721,
+        "test_mse": 0.10119699046693065
+      },
+      {
+        "epoch": 5,
+        "train_loss": 0.1088661555047721,
+        "test_mse": 0.09984985529021784
+      },
+      {
+        "epoch": 6,
+        "train_loss": 0.10744257461806955,
+        "test_mse": 0.09926138310269876
+      },
+      {
+        "epoch": 7,
+        "train_loss": 0.10676003373376855,
+        "test_mse": 0.09880558953366496
+      }
+    ]
+  },
+  {
+    "recorded": "2026-08-01 21:31:52",
+    "config": {
+      "name": "beijing forecast \u00b7 masked",
+      "task": "air quality 12\u00d76 lattice, 30% cells absent",
+      "model": "masked (sparse lattice, absent cells marked), d_model=48 n_layers=4",
+      "epochs": 1,
+      "batch": 32,
+      "lr": 0.003,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "arm": "masked",
+        "drop": 0.3,
+        "input_len": 24,
+        "horizon": 1
+      },
+      "n_params": 75793
+    },
+    "metric": 0.10324144319377163,
+    "metric_name": "test_mse",
+    "train_loss": 0.12353910998224396,
+    "epochs_run": 1,
+    "seconds": 6.767102956771851,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 0.12353910998224396,
+        "test_mse": 0.10324144319377163
+      }
+    ]
+  },
+  {
+    "recorded": "2026-08-01 21:31:58",
+    "config": {
+      "name": "beijing forecast \u00b7 zeros",
+      "task": "air quality 12\u00d76 lattice, 30% cells absent",
+      "model": "zeros (dense lattice, absent cells zero-filled), d_model=48 n_layers=4",
+      "epochs": 1,
+      "batch": 32,
+      "lr": 0.003,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "arm": "zeros",
+        "drop": 0.3,
+        "input_len": 24,
+        "horizon": 1
+      },
+      "n_params": 75793
+    },
+    "metric": 0.10416400324214589,
+    "metric_name": "test_mse",
+    "train_loss": 0.126078333382465,
+    "epochs_run": 1,
+    "seconds": 5.90676212310791,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 0.126078333382465,
+        "test_mse": 0.10416400324214589
+      }
+    ]
+  },
+  {
+    "recorded": "2026-08-01 21:33:19",
+    "config": {
+      "name": "mnist 2-D \u00b7 s4d_nd",
+      "task": "mnist (2-D lattice 28\u00d728)",
+      "model": "td.s4d_nd d_model=64 n_layers=4",
+      "epochs": 2,
+      "batch": 64,
+      "lr": 0.003,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "dataset": "mnist",
+        "arch": "s4d_nd",
+        "n_layers": 4
+      },
+      "n_params": 67978
+    },
+    "metric": 0.9833,
+    "metric_name": "test_acc",
+    "train_loss": 0.06922243920260115,
+    "epochs_run": 2,
+    "seconds": 69.01417589187622,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 0.4275178774498276,
+        "test_acc": 0.9753
+      },
+      {
+        "epoch": 1,
+        "train_loss": 0.06922243920260115,
+        "test_acc": 0.9833
+      }
+    ]
   }
 ]

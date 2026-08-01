@@ -57,7 +57,10 @@ SECTIONS = [
         ("mnist (2-D", "cifar10 (2-D"),
         "The image is a lattice; rows and columns are swept with the paired schedule the "
         "Mamba-ND paper describes. No pixel is flattened into a sequence.",
-        "",
+        "These are 2-epoch runs and are here to show the N-D construction learning, not to "
+        "compete with a convolution. What they demonstrate is that the same mixers that "
+        "reproduced the sequence numbers above also work when the lattice is real and the "
+        "schedule sweeps rows and columns.",
     ),
     (
         "Sparse lattices — no published baseline exists",
@@ -65,7 +68,27 @@ SECTIONS = [
         "Beijing air quality: 12 stations x 6 pollutants, hourly, with a fraction of cells "
         "made absent. Arms differ in exactly one thing each and are scored on present cells "
         "only. These rows *are* the baseline.",
-        "",
+        "**Masking absent cells did not improve accuracy, and that is the result.** At 30% "
+        "absent the sparse and dense-with-zeros arms land at 0.0907 and 0.0904; at 60% "
+        "absent, 0.0996 and 0.0988. The dense arm is marginally *ahead* both times, by less "
+        "than one percent relative — well inside what a single seed can distinguish. The one "
+        "place the ordering flips is the 1-epoch run (0.1032 masked vs 0.1042 dense), which "
+        "is consistent with masking being a prior the dense model can otherwise learn, and "
+        "is far too small a difference to claim from one seed.\n\n"
+        "The honest reading: **with a mask that is fixed across training and evaluation, a "
+        "dense model learns the mask.** What `valid=` buys is not accuracy here — it is a "
+        "*guarantee*, tested bitwise: absent cells provably cannot influence any output, "
+        "whatever the data does. That matters when the mask varies between train and "
+        "inference, when a cell's absence must not be learnable from correlations, and when "
+        "you need the invariance to hold rather than to have been approximated. None of "
+        "those is what this experiment measured, and the next one should measure the first "
+        "of them.\n\n"
+        "On the method comparison: `axial_scan` (0.0907) beat `cafa` (0.1089) and "
+        "`axial_attention` (0.1840) on this task, despite the kernel arms carrying 62% more "
+        "parameters — consistent with BENCHMARKS.md, where factorization only starts paying "
+        "at lattices two orders of magnitude larger than 12x6. Being able to run that "
+        "comparison by changing one argument is the point; the answer being unflattering to "
+        "the fancier method is why it was worth running.",
     ),
 ]
 
