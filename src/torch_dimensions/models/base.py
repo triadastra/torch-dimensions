@@ -48,6 +48,7 @@ class LatticeModel(nn.Module):
         dropout: float = 0.0,
         chunk: int | None = None,
         mixer_kwargs: dict | None = None,
+        mixer: type[nn.Module] | None = None,
         **method_kwargs,
     ) -> None:
         super().__init__()
@@ -86,8 +87,20 @@ class LatticeModel(nn.Module):
         # for no gain in purity.
         self.in_proj = nn.Linear(d_input, d_model) if d_input is not None else nn.Identity()
 
+        # `mixer=` substitutes the 1-D operator without touching anything else,
+        # which is what makes a model debuggable: swapping in
+        # `td.testing.Recorder` answers "which axis did layer 3 sweep" on the
+        # real model rather than on a reconstruction of it. The class's own
+        # `_mixer` stays the default and the recorded config still names the
+        # class, so a substituted model is visibly not the stock one.
+        mixer_cls = mixer if mixer is not None else self._mixer
+        # A substituted mixer cannot be written into the recipe — a class is
+        # not serializable — so a checkpoint would silently rebuild with the
+        # stock one and hand back a *different model* that loads without
+        # complaint. `save()` refuses instead; see config._checkpoint_header.
+        self._substituted_mixer = None if mixer is None else mixer.__name__
         self.nd = resolve_nd_method(nd_method)(
-            mixer=partial(self._mixer, d_model, **(mixer_kwargs or {})),
+            mixer=partial(mixer_cls, d_model, **(mixer_kwargs or {})),
             plan=plan,
             lattice=self.lattice,
             d_model=d_model,

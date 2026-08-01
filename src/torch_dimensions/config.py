@@ -20,6 +20,7 @@ warning.
 from __future__ import annotations
 
 import inspect
+import json
 from pathlib import Path
 from typing import Any
 
@@ -229,8 +230,11 @@ def _kind_of(model: nn.Module) -> str:
     )
 
 
-def save(model: nn.Module, path: str | Path) -> None:
-    """Write architecture and weights to one file. See :func:`load`."""
+def _is_safetensors(path: str | Path) -> bool:
+    return str(path).endswith(".safetensors")
+
+
+def _checkpoint_header(model: nn.Module) -> tuple[str, dict]:
     kind = _kind_of(model)
     config = getattr(model, "config", None)
     if config is None:
@@ -240,7 +244,64 @@ def save(model: nn.Module, path: str | Path) -> None:
             "this model was built with an unregistered nd_method callable; a checkpoint "
             "cannot name it to rebuild itself. register_nd_method() it, rebuild, then save"
         )
+    substituted = getattr(model, "_substituted_mixer", None)
+    if substituted:
+        raise ValueError(
+            f"this model was built with mixer={substituted}, which the recipe cannot record; "
+            f"loading the checkpoint would rebuild it with {type(model).__name__}'s own mixer "
+            "and return a different model that looks fine. Substituted mixers are for "
+            "debugging — save the stock model, or register a model kind for this one"
+        )
+    return kind, config
+
+
+def save(model: nn.Module, path: str | Path) -> None:
+    """Write architecture and weights to one file. See :func:`load`.
+
+    The container follows the extension. ``.safetensors`` writes the weights
+    in that format with the config carried in its metadata — still one file,
+    and one that cannot execute code when it is opened. Any other extension
+    writes a torch pickle, which stays the default only because it is the
+    format everything already reads.
+
+    A torch pickle is arbitrary code at load time. That is a real
+    supply-chain liability for a file people download from strangers, and it
+    is why `.safetensors` exists as an option here even though the library's
+    own tests exercise both.
+    """
+    kind, config = _checkpoint_header(model)
     from torch_dimensions import __version__
+
+    if _is_safetensors(path):
+        try:
+            from safetensors.torch import save_file
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "saving .safetensors needs the safetensors package: "
+                'pip install "torch-dimensions[safetensors]"'
+            ) from e
+        state = model.state_dict()
+        complex_keys = sorted(k for k, v in state.items() if v.is_complex())
+        if complex_keys:
+            raise ValueError(
+                f"safetensors cannot store complex tensors, and this model has "
+                f"{len(complex_keys)}: {complex_keys[:3]}. Save to a .td file instead."
+            )
+        save_file(
+            {k: v.detach().contiguous() for k, v in state.items()},
+            str(path),
+            metadata={
+                "format": CHECKPOINT_FORMAT,
+                "version": str(CHECKPOINT_VERSION),
+                "library": __version__,
+                "kind": kind,
+                # safetensors metadata is string-to-string, so the config
+                # travels as JSON. It round-trips through `lattice_from_dict`
+                # on the way back, exactly as the pickle path does.
+                "config": json.dumps(config),
+            },
+        )
+        return
 
     torch.save(
         {
@@ -255,21 +316,44 @@ def save(model: nn.Module, path: str | Path) -> None:
     )
 
 
+def _check_version(version: Any, library: Any) -> None:
+    if int(version) != CHECKPOINT_VERSION:
+        raise ValueError(
+            f"checkpoint format v{version} is not v{CHECKPOINT_VERSION}; "
+            "refusing to load it silently — convert it or pin the library version "
+            f"that wrote it (recorded: {library or 'unknown'})"
+        )
+
+
 def load(path: str | Path, map_location: Any = None) -> nn.Module:
     """Rebuild a model from a :func:`save` checkpoint, weights included.
 
-    Refuses — rather than guesses at — a checkpoint from an incompatible
-    format version.
+    Reads either container — the extension says which — and refuses, rather
+    than guesses at, a checkpoint from an incompatible format version.
     """
+    if _is_safetensors(path):
+        try:
+            from safetensors import safe_open
+            from safetensors.torch import load_file
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "reading .safetensors needs the safetensors package: "
+                'pip install "torch-dimensions[safetensors]"'
+            ) from e
+
+        with safe_open(str(path), framework="pt") as fh:
+            meta = fh.metadata() or {}
+        if meta.get("format") != CHECKPOINT_FORMAT:
+            raise ValueError(f"{path} is not a torch-dimensions checkpoint")
+        _check_version(meta.get("version", -1), meta.get("library"))
+        model = build({"kind": meta["kind"], **json.loads(meta["config"])})
+        model.load_state_dict(load_file(str(path), device=str(map_location or "cpu")))
+        return model
+
     ckpt = torch.load(path, map_location=map_location)
     if not isinstance(ckpt, dict) or ckpt.get("format") != CHECKPOINT_FORMAT:
         raise ValueError(f"{path} is not a torch-dimensions checkpoint")
-    if ckpt.get("version") != CHECKPOINT_VERSION:
-        raise ValueError(
-            f"checkpoint format v{ckpt.get('version')} is not v{CHECKPOINT_VERSION}; "
-            "refusing to load it silently — convert it or pin the library version "
-            f"that wrote it (recorded: {ckpt.get('library', 'unknown')})"
-        )
+    _check_version(ckpt.get("version", -1), ckpt.get("library"))
     model = build({"kind": ckpt["kind"], **ckpt["config"]})
     model.load_state_dict(ckpt["state_dict"])
     return model

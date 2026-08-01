@@ -28,10 +28,14 @@ dependencies = ["torch>=2.4"]
 [project.optional-dependencies]
 mamba = ["mamba-ssm>=2.0"]
 fla = ["flash-linear-attention"]
+# A torch pickle executes arbitrary code when it is opened. `.safetensors`
+# checkpoints do not, and `td.save`/`td.load` pick the container from the
+# file extension.
+safetensors = ["safetensors>=0.4"]
 # S4D ships built in (portable, pure torch) — no [s4] extra. The full DPLR S4
 # stays upstream; PLAN.md Phase 7 records what a vendored copy must patch.
-dev = ["pytest>=8", "pytest-cov", "ruff>=0.6", "mypy", "hypothesis", "pyyaml"]
-all = ["torch-dimensions[mamba,fla]"]
+dev = ["pytest>=8", "pytest-cov", "ruff>=0.6", "mypy", "hypothesis", "pyyaml", "safetensors>=0.4"]
+all = ["torch-dimensions[mamba,fla,safetensors]"]
 
 [project.urls]
 Homepage = "https://github.com/triadastra/torch-dimensions"
@@ -64,6 +68,17 @@ markers = [
     "mamba: requires the [mamba] extra",
 ]
 addopts = "-m 'not gpu'"
+
+[tool.coverage.run]
+source = ["torch_dimensions"]
+
+[tool.coverage.report]
+# Measured at 97% when the floor was set. The floor exists to catch a module
+# arriving with no tests at all, not to chase the last few lines — the
+# uncovered remainder is mostly `td.viz.show`'s blocking browser path, which a
+# test cannot exercise without opening a browser.
+fail_under = 95
+show_missing = true
 
 [tool.ruff]
 line-length = 100

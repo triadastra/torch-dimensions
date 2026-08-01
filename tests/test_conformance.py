@@ -270,3 +270,79 @@ def test_a_rank_five_model_trains():
         first = float(loss.detach()) if step == 0 else first
         last = float(loss.detach())
     assert last < first * 0.25, f"rank-5 model did not learn: {first:.4f} -> {last:.4f}"
+
+
+# -- the debug mixer and the source checker ----------------------------------
+
+
+def test_recorder_answers_which_axis_each_layer_swept():
+    """ "Which axis did layer 3 actually sweep" is the first question every
+    integration bug asks; this is the tool that answers it."""
+    lat = td.Lattice(shape=(3, 7), names=("h", "w"), time=True)
+    plan = td.ScanPlan.from_list([("h", False), ("w", True), ("time", False)])
+    model = td.LSTM(4, lattice=lat, plan=plan, mixer=td.testing.Recorder)
+    x = torch.randn(2, 5, 3, 7, 4)
+    out = model(x)
+
+    assert out.shape == x.shape
+    lengths = [m.calls[0].length for m in model.nd.mixers]
+    assert lengths == [3, 7, 5], f"layers swept axes of length {lengths}"
+    # the folded batch is everything else
+    assert model.nd.mixers[0].calls[0].lines == 2 * 5 * 7
+    model.nd.mixers[0].reset()
+    assert model.nd.mixers[0].calls == []
+
+
+def test_recorder_leaves_the_data_alone():
+    """It has to be the identity, or it cannot be dropped into a real model to
+    ask a question about that model."""
+    lat = td.Lattice(shape=(4,), names=("a",))
+    rec = td.testing.Recorder(6)
+    x = torch.randn(3, 4, 6)
+    assert torch.equal(rec(x), x)
+    assert lat.rank == 1
+
+
+def test_check_data_source_accepts_the_shipped_source():
+    source = td.data.TensorSource(
+        torch.randn(9, 3, 4, 2), td.Lattice(shape=(3, 4), names=("h", "w"))
+    )
+    report = td.testing.check_data_source(source)
+    assert report, str(report)
+
+
+def test_check_data_source_catches_a_source_that_lies_about_its_shape():
+    class Liar:
+        lattice = td.Lattice(shape=(3, 4), names=("h", "w"))
+
+        def __len__(self):
+            return 5
+
+        def __getitem__(self, index):
+            return torch.randn(3, 9, 9, 2)  # not the declared lattice
+
+    report = td.testing.check_data_source(Liar(), raise_on_failure=False)
+    assert not report
+    assert any("declared lattice" in r.name for r in report.failed)
+
+
+def test_check_data_source_catches_a_source_that_cannot_reach_a_worker():
+    """DEBUG.md #9: an unpicklable source does not raise under
+    DataLoader(num_workers>0) — it hangs. Finding it here is the whole point."""
+
+    class Handle:
+        lattice = td.Lattice(shape=(2,), names=("a",))
+
+        def __init__(self):
+            self.data = torch.randn(4, 2, 1)
+            self.lock = __import__("threading").Lock()  # unpicklable
+
+        def __len__(self):
+            return 4
+
+        def __getitem__(self, index):
+            return self.data[index]
+
+    report = td.testing.check_data_source(Handle(), raise_on_failure=False)
+    assert not report
+    assert any("worker" in r.name for r in report.failed)

@@ -19,6 +19,7 @@ import inspect
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import reduce
+from typing import NamedTuple
 
 import torch
 import torch.nn as nn
@@ -26,7 +27,7 @@ import torch.nn as nn
 from torch_dimensions.lattice import Lattice
 from torch_dimensions.plan import ScanPlan
 
-__all__ = ["Report", "Result", "check_block", "check_trainable"]
+__all__ = ["Recorder", "Report", "Result", "check_block", "check_data_source", "check_trainable"]
 
 Factory = Callable[..., nn.Module]
 
@@ -387,3 +388,158 @@ def check_trainable(
             "block still not converge."
         )
     return result
+
+
+class Recorder(nn.Module):
+    """A mixer that computes nothing and remembers everything.
+
+    The first question every integration bug asks is *which axis did layer 3
+    actually sweep, and in which direction* — and until now the only way to
+    answer it was a private helper in this project's own test files. It is a
+    mixer like any other, so it drops into any model in place of the real one::
+
+        model = td.LSTM(8, 6, lattice, mixer=td.testing.Recorder)
+        model(x)
+        print(model.nd.mixers[0].calls)
+        # [Call(shape=(24, 5, 8), lines=24, length=5)]
+
+    It is the identity function, so the model still runs and still has the
+    right output shape; only the mixing is gone.
+
+    What a call records is what a mixer is actually told: the folded shape.
+    A mixer never learns its axis name — that is the design — so the axis is
+    inferred by the caller from ``length`` against the lattice, which is
+    exactly the reasoning a person does by hand when a sweep goes wrong.
+    """
+
+    class Call(NamedTuple):
+        shape: tuple[int, ...]
+        lines: int
+        """The folded batch: batch times every axis except the swept one."""
+        length: int
+        """The swept axis's length — what identifies the axis on most lattices."""
+
+    def __init__(self, d_model: int, **_: object) -> None:
+        super().__init__()
+        self.d_model = d_model
+        # A parameter so that optimizers and the conformance suite's
+        # "everything gets a gradient" check have something to hold; it is
+        # multiplied by one, so the module stays the identity.
+        self.scale = nn.Parameter(torch.ones(()))
+        self.calls: list[Recorder.Call] = []
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        self.calls.append(self.Call(tuple(x.shape), int(x.shape[0]), int(x.shape[1])))
+        return x * self.scale
+
+    def reset(self) -> None:
+        self.calls.clear()
+
+    def extra_repr(self) -> str:
+        return f"d_model={self.d_model}, {len(self.calls)} calls recorded"
+
+
+def check_data_source(
+    source: object,
+    *,
+    n_probe: int = 3,
+    raise_on_failure: bool = True,
+) -> Report:
+    """Check that a custom :class:`~torch_dimensions.data.LatticeSource` behaves.
+
+    The source protocol is an extension point — a memmap, a zarr store, a
+    database cursor — and extension points deserve the same treatment mixers
+    got. A source that satisfies the *types* and gets the semantics wrong
+    produces a model that trains on subtly misaligned data and never says so.
+
+        td.testing.check_data_source(MyZarrSource(...))
+
+    What it checks: the declared lattice matches the shape actually returned;
+    slices are consistent with each other (the concatenation of two adjacent
+    slices is the slice that spans them); reads are repeatable; and the source
+    survives being pickled, because ``DataLoader(num_workers>0)`` pickles it
+    and a source holding an open file handle fails only in a worker process
+    (DEBUG.md #9 — that failure mode *hung* rather than raised).
+    """
+    rep = Report()
+
+    def record(name, fn):
+        try:
+            detail = fn()
+        except _Skip as s:
+            rep.results.append(Result(name, "skip", str(s)))
+        except Exception as e:  # noqa: BLE001
+            rep.results.append(Result(name, "fail", f"{type(e).__name__}: {e}"))
+        else:
+            rep.results.append(Result(name, "pass", detail or ""))
+
+    def _members():
+        missing = [m for m in ("lattice", "__len__", "__getitem__") if not hasattr(source, m)]
+        if missing:
+            raise AssertionError(f"missing {missing}; see td.data.LatticeSource")
+        if len(source) < 1:  # type: ignore[arg-type]
+            raise AssertionError("source is empty; nothing can be checked against it")
+        return f"{len(source)} timesteps"  # type: ignore[arg-type]
+
+    record("has the protocol's members", _members)
+
+    def _shape():
+        lat: Lattice = source.lattice  # type: ignore[attr-defined]
+        chunk = source[0 : min(n_probe, len(source))]  # type: ignore[index]
+        if not isinstance(chunk, torch.Tensor):
+            raise AssertionError(f"__getitem__ returned {type(chunk).__name__}, expected a Tensor")
+        got = tuple(chunk.shape[1:-1])
+        if got != tuple(lat.shape):
+            raise AssertionError(
+                f"returns lattice dims {got} but declares shape {tuple(lat.shape)}; "
+                "the lattice and the data disagree"
+            )
+        return f"{tuple(chunk.shape)} for {min(n_probe, len(source))} steps"
+
+    record("returned shape matches the declared lattice", _shape)
+
+    def _slices():
+        n = len(source)  # type: ignore[arg-type]
+        if n < 2:
+            raise _Skip("needs at least 2 timesteps")
+        mid = max(1, n // 2)
+        whole = source[0:n]  # type: ignore[index]
+        halves = torch.cat([source[0:mid], source[mid:n]])  # type: ignore[index]
+        if not torch.equal(whole, halves):
+            raise AssertionError(
+                "reading in two slices differs from reading in one; windows will "
+                "silently straddle the seam"
+            )
+        return f"split at {mid} of {n}"
+
+    record("adjacent slices concatenate to the whole", _slices)
+
+    def _repeatable():
+        a = source[0 : min(n_probe, len(source))]  # type: ignore[index]
+        b = source[0 : min(n_probe, len(source))]  # type: ignore[index]
+        if not torch.equal(a, b):
+            raise AssertionError("two identical reads returned different data")
+        return "two reads agree"
+
+    record("reads are repeatable", _repeatable)
+
+    def _picklable():
+        import pickle
+
+        try:
+            revived = pickle.loads(pickle.dumps(source))
+        except Exception as e:  # noqa: BLE001
+            raise AssertionError(
+                f"cannot pickle ({type(e).__name__}: {e}) — DataLoader(num_workers>0) "
+                "pickles the source, and an open file handle fails only in a worker"
+            ) from e
+        k = min(n_probe, len(source))  # type: ignore[arg-type]
+        if not torch.equal(revived[0:k], source[0:k]):  # type: ignore[index]
+            raise AssertionError("the unpickled source returns different data")
+        return "survives a worker process"
+
+    record("pickles for DataLoader workers", _picklable)
+
+    if raise_on_failure and rep.failed:
+        raise AssertionError("data source check failed:\n" + str(rep))
+    return rep

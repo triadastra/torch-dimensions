@@ -35,7 +35,7 @@ jobs:
         run: mypy
         continue-on-error: true
       - name: Test
-        run: pytest -v
+        run: pytest -v --cov --cov-report=term-missing
 
   viewer:
     # The viewer is JS and builds once; the python job must not wait on node.

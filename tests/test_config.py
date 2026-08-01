@@ -258,3 +258,14 @@ def test_a_foreign_safetensors_file_is_refused(tmp_path):
     save_file({"w": torch.zeros(2, 2)}, str(path), metadata={"format": "not-ours"})
     with pytest.raises(ValueError, match="not a torch-dimensions checkpoint"):
         td.load(path)
+
+
+def test_a_model_with_a_substituted_mixer_refuses_to_save(tmp_path):
+    """`mixer=` swaps the 1-D operator for debugging, and a class cannot go
+    into a JSON recipe — so a checkpoint would rebuild with the stock mixer and
+    return a different model that loads perfectly."""
+    model = td.LSTM(8, 2, td.Lattice(shape=(2, 2), time=True), mixer=td.testing.Recorder)
+    with pytest.raises(ValueError, match="Recorder"):
+        td.save(model, tmp_path / "wrong.td")
+    # the stock model still saves
+    td.save(td.LSTM(8, 2, td.Lattice(shape=(2, 2), time=True)), tmp_path / "fine.td")
