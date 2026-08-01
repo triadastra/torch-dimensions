@@ -166,8 +166,14 @@ def check_block(
         # ranks=(3, 4) would build and differentiate a rank-2 block behind the
         # caller's back.
         lat = _lattice(2 if 2 in ranks else min(ranks), time=time)
-        block = _build(factory, lat, 2, seed)
-        x = _input(lat, 2, 1, seq, seed).requires_grad_(True)
+        # The caller's width, not a narrower one chosen here for speed. A
+        # hardcoded `d_model=2` gradchecked a block the factory was never
+        # claimed to support, and factories with a width constraint — an
+        # attention mixer whose head count must divide `d_model` — failed a
+        # check about *gradients* with an error about heads. Same shape as the
+        # rank bug (DEBUG.md #16), one argument over.
+        block = _build(factory, lat, d_model, seed)
+        x = _input(lat, d_model, 1, seq, seed).requires_grad_(True)
         block(x).pow(2).mean().backward()
         dead = [n for n, p in block.named_parameters() if p.grad is None]
         if dead:

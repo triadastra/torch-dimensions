@@ -37,7 +37,8 @@ the same object:
 | Mamba-ND | selective scan | `td.axial_scan` — one axis per layer, alternating direction |
 | MDRNN / Grid-LSTM | `nn.LSTM` / `nn.GRU` | `td.axial_scan` |
 | S4ND | S4 kernel conv | `td.axial_scan` over the axes |
-| Axial Transformer | attention | `td.axial_attention` — per-axis kernels, contracted |
+| Axial Transformer | attention | `td.axial_scan` — attention sweeps each axis (`td.Transformer`) |
+| Axial Transformer (factorized) | attention | `td.axial_attention` — per-axis kernels, contracted |
 | CaFA / factorized axial | pooled attention | `td.cafa` — per-axis kernels, Kronecker contraction |
 | Forecasting hybrids | any of the above along time | kernel across the lattice, mixer along time |
 
@@ -68,6 +69,7 @@ td.LSTM(64, 12, lattice=lat, method=td.axial_scan)  # the RNN sweeps every axis
 td.LSTM(64, 12, lattice=lat, method=td.cafa)  # CaFA across space, RNN along time
 td.S4ND(64, 12, dim=3, shape=s, method=td.axial_attention)
 td.Mamba(64, 12, lat, method=my_traversal)  # yours, no registration needed
+td.Transformer(64, 12, lat)  # attention as the swept mixer — the other axial transformer
 ```
 
 **Direction is a schedule, not a flag.** `ScanPlan` is data — printable,
@@ -143,7 +145,7 @@ The test suite is the product as much as the models are:
   factorization crossover measured rather than asserted
   ([BENCHMARKS.md](BENCHMARKS.md)), including the two results that came out
   against the design's own predictions.
-- Every bug found in building this — 22 so far, including four found in this
+- Every bug found in building this — 23 so far, including four found in this
   library's own examples and shipped artifacts — is documented in
   [DEBUG.md](DEBUG.md) with what caught it, and the citations in that file are
   themselves tested.

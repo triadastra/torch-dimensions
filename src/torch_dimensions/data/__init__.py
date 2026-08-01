@@ -25,6 +25,7 @@ module supplies the three things it needs::
 
 from torch_dimensions.data.collate import Batch, collate_lattice
 from torch_dimensions.data.coords import CoordMap, from_coords
+from torch_dimensions.data.memmap import MemmapSource, Normalizer, masked_stats
 from torch_dimensions.data.source import LatticeDataset, LatticeSource, Sample, TensorSource
 from torch_dimensions.data.table import LatticeTable, from_table
 from torch_dimensions.data.window import LatticeWindow, Window
@@ -36,10 +37,13 @@ __all__ = [
     "LatticeSource",
     "LatticeTable",
     "LatticeWindow",
+    "MemmapSource",
+    "Normalizer",
     "Sample",
     "TensorSource",
     "Window",
     "collate_lattice",
     "from_coords",
     "from_table",
+    "masked_stats",
 ]

@@ -409,3 +409,72 @@ def test_split_at_time_refuses_unsorted_times():
     w = LatticeWindow(6, input_len=2, horizon=1)
     with pytest.raises(ValueError, match="sorted"):
         w.split_at_time([3, 1, 2, 5, 4, 6], 4)
+
+
+# -- on-disk source and masked normalization ----------------------------------
+
+
+def test_memmap_source_passes_the_source_conformance_check(tmp_path):
+    lat = td.Lattice(shape=(3, 4), names=("h", "w"))
+    series = torch.randn(20, 3, 4, 2)
+    path = td.data.MemmapSource.write(tmp_path / "series.npy", series)
+    source = td.data.MemmapSource(path, lat)
+    report = td.testing.check_data_source(source)
+    assert report, str(report)
+    assert torch.allclose(source[0:20], series, atol=1e-6)
+
+
+def test_a_memmap_source_reaches_a_worker_process(tmp_path):
+    """The failure this class exists to demonstrate: a live mmap handle either
+    fails to pickle or pickles into something invalid in the child, and under
+    DataLoader(num_workers>0) that presents as a hang (DEBUG.md #9)."""
+    import pickle
+
+    lat = td.Lattice(shape=(2, 2), names=("a", "b"))
+    series = torch.randn(6, 2, 2, 1)
+    path = td.data.MemmapSource.write(tmp_path / "s.npy", series)
+    source = td.data.MemmapSource(path, lat)
+    _ = source[0:2]  # force the handle open *before* pickling
+    revived = pickle.loads(pickle.dumps(source))
+    assert revived._array is None, "the mmap handle travelled into the pickle"
+    assert torch.allclose(revived[0:6], source[0:6])
+
+
+def test_a_memmap_source_refuses_a_file_that_is_not_its_lattice(tmp_path):
+    path = td.data.MemmapSource.write(tmp_path / "s.npy", torch.randn(5, 9, 9, 1))
+    with pytest.raises(ValueError, match="lattice dims"):
+        td.data.MemmapSource(path, td.Lattice(shape=(3, 4), names=("h", "w")))
+
+
+def test_masked_stats_ignore_absent_cells():
+    """A mean over a sparse lattice's structural zeros is dragged toward zero
+    in proportion to the sparsity, and nothing about the model then looks
+    wrong."""
+    valid = torch.tensor([[True, False], [True, True]])
+    lat = td.Lattice(shape=(2, 2), names=("a", "b"), valid=valid)
+    series = torch.full((10, 2, 2, 1), 5.0)
+    series[:, 0, 1] = 0.0  # the absent cell, zero as the library guarantees
+
+    naive = series.mean()
+    stats = td.data.masked_stats(series, lat)
+    assert abs(float(naive) - 3.75) < 1e-5, "the naive mean is dragged toward zero"
+    present = stats.mean.reshape(-1)[[0, 2, 3]]
+    assert torch.allclose(present, torch.full((3,), 5.0)), stats.mean
+
+
+def test_normalizer_round_trips():
+    lat = td.Lattice(shape=(2, 3), names=("a", "b"))
+    series = torch.randn(30, 2, 3, 2) * 4 + 7
+    stats = td.data.masked_stats(series, lat)
+    assert torch.allclose(stats.invert(stats.apply(series)), series, atol=1e-4)
+    normalized = stats.apply(series)
+    assert normalized.mean().abs() < 0.1 and abs(float(normalized.std()) - 1) < 0.2
+
+
+def test_masked_stats_treat_nan_as_absent():
+    lat = td.Lattice(shape=(2,), names=("a",))
+    series = torch.full((8, 2, 1), 3.0)
+    series[0:4, 0] = float("nan")
+    stats = td.data.masked_stats(series, lat)
+    assert torch.isfinite(stats.mean).all()
+    assert abs(float(stats.mean.reshape(-1)[0]) - 3.0) < 1e-5

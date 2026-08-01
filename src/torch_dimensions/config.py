@@ -47,12 +47,14 @@ CHECKPOINT_VERSION = 1
 def _models() -> dict[str, type[nn.Module]]:
     # Imported lazily: models import config (for recording), so importing
     # models here at module import would be circular.
+    from torch_dimensions.models.attention import Transformer
     from torch_dimensions.models.rnn import GRU, LSTM
     from torch_dimensions.models.ssm import S4, S4D, S4DND, S4ND, Mamba, MambaND
 
     return {
         "lstm": LSTM,
         "gru": GRU,
+        "transformer": Transformer,
         "s4": S4,
         "s4d": S4D,
         "mamba": Mamba,

@@ -27,6 +27,7 @@ from torch_dimensions.compose import (
 )
 from torch_dimensions.config import MODELS, build, list_models, load, register_model, save
 from torch_dimensions.lattice import Lattice, Restore, Sub
+from torch_dimensions.models.attention import Transformer, TransformerND
 from torch_dimensions.models.rnn import GRU, LSTM
 from torch_dimensions.models.ssm import S4, S4D, S4DND, S4ND, Mamba, MambaND
 from torch_dimensions.plan import AxisCoverage, Coverage, ScanPlan, Step
@@ -44,6 +45,8 @@ __all__ = [
     "S4D",
     "S4DND",
     "S4ND",
+    "Transformer",
+    "TransformerND",
     "MODELS",
     "ND_METHODS",
     "AxialKernel",

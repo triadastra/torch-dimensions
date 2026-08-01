@@ -55,6 +55,7 @@ Their generalizable lessons are folded into §A without identifying details.
 | 20 | `benchmarks/bench.py` — a memory column that measured the driver, not the model | medium | reading the output | fixed before publishing |
 | 21 | `examples/custom_method.py` — a strategy that indexed an empty axis list at rank 1 | low | conformance suite | fixed |
 | 22 | `examples/custom_method.py` — a schedule derived from *storage* order, not sweep order | high | conformance suite | fixed |
+| 23 | `testing.py` — gradcheck ran at a width the caller never asked for | low | new mixer | fixed |
 
 Severity is "what would this have cost if it reached a user", not "how hard was
 it to fix". Every one of #1–#5 is silent: no exception, no NaN, just wrong
@@ -545,6 +546,28 @@ Both are fixed in the example, and both are now *described in the guide* as
 what the suite caught, with a test that reproduces the broken version to prove
 the check still fails it. The most useful thing a conformance suite can do for
 a documentation page is embarrass it.
+
+---
+
+## 23. The gradient check substituted its own width
+
+`check_block`'s gradient step built the block at `d_model=2` regardless of what
+the caller passed, for speed. That went unnoticed for as long as every mixer
+accepted every width — and surfaced the moment `AttentionMixer` arrived, whose
+head count must divide `d_model`: a check about *gradients* failed with
+`n_heads=4 does not divide d_model=2`, about a model the caller never asked
+for.
+
+This is DEBUG.md #16 with a different argument. That entry was about ranks the
+caller excluded; this is a width the caller excluded. The pattern is the
+general one in §A: **a test harness that quietly substitutes its own
+parameters is testing something other than what it reports on** — and the
+failure mode is not always a confusing error, it can equally be a silent pass
+for a configuration nobody runs.
+
+**Fix.** Use the caller's `d_model`. **Guarded by**
+`tests/test_attention_mixer.py::test_conformance`, which cannot pass under
+the old behaviour.
 
 ---
 
