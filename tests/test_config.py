@@ -204,3 +204,57 @@ def test_configs_are_json_and_registry_is_listable():
     model = td.build(_sparse_cfg())
     assert json.loads(json.dumps(model.config)) == model.config
     assert "s4nd" in td.list_models() and "lstm" in td.list_models()
+
+
+# -- safetensors container -----------------------------------------------------
+
+safetensors = pytest.importorskip("safetensors")
+
+
+@pytest.mark.parametrize("suffix", [".td", ".safetensors"])
+def test_a_checkpoint_rebuilds_the_same_model_in_either_container(tmp_path, suffix):
+    lat = td.Lattice(
+        shape=(2, 3),
+        names=("a", "b"),
+        valid=torch.tensor([[True, False, True], [True, True, False]]),
+        time=True,
+    )
+    model = td.S4D(16, 3, lat, d_input=2).eval()
+    path = tmp_path / f"model{suffix}"
+    td.save(model, path)
+    same = td.load(path).eval()
+
+    x = torch.randn(2, 4, 2, 3, 2)
+    assert torch.equal(model(x), same(x)), "restored model is not the same model"
+    assert same.lattice.valid.tolist() == lat.valid.tolist(), "validity mask did not travel"
+
+
+def test_the_safetensors_file_holds_no_pickle(tmp_path):
+    """The reason to offer this container at all: opening it cannot run code.
+    A torch pickle starts with the zip magic and contains `data.pkl`."""
+    model = td.LSTM(8, 2, td.Lattice(shape=(2, 2), time=True))
+    path = tmp_path / "model.safetensors"
+    td.save(model, path)
+    raw = path.read_bytes()
+    assert b"data.pkl" not in raw and not raw.startswith(b"PK")
+
+
+def test_safetensors_metadata_carries_the_recipe(tmp_path):
+    from safetensors import safe_open
+
+    model = td.MambaND(16, 2, dim=2, shape=(2, 2), time=True)
+    path = tmp_path / "m.safetensors"
+    td.save(model, path)
+    with safe_open(str(path), framework="pt") as fh:
+        meta = fh.metadata()
+    assert meta["kind"] == "mamband"
+    assert json.loads(meta["config"])["d_model"] == 16
+
+
+def test_a_foreign_safetensors_file_is_refused(tmp_path):
+    from safetensors.torch import save_file
+
+    path = tmp_path / "someone_elses.safetensors"
+    save_file({"w": torch.zeros(2, 2)}, str(path), metadata={"format": "not-ours"})
+    with pytest.raises(ValueError, match="not a torch-dimensions checkpoint"):
+        td.load(path)
