@@ -69,6 +69,36 @@ const S = {
   },
 };
 
+function LossChart({ metrics }) {
+  const w = 276;
+  const h = 84;
+  const pad = 4;
+  const logs = metrics.map((m) => Math.log10(Math.max(m.loss, 1e-8)));
+  const lo = Math.min(...logs);
+  const hi = Math.max(...logs, lo + 1e-6);
+  const x = (i) => pad + (i * (w - 2 * pad)) / Math.max(metrics.length - 1, 1);
+  const y = (v) => pad + ((hi - v) * (h - 2 * pad)) / (hi - lo);
+  const line = logs.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const held = metrics
+    .map((m, i) => (m.held_out == null ? null : [i, Math.log10(Math.max(m.held_out, 1e-8))]))
+    .filter(Boolean);
+  const heldLine = held.map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  return (
+    <svg width={w} height={h} style={{ display: "block", marginTop: 6 }}>
+      <polyline points={line} fill="none" stroke="#e8963a" strokeWidth="1.6" />
+      {held.length > 1 && (
+        <polyline
+          points={heldLine}
+          fill="none"
+          stroke="#7aa2f7"
+          strokeWidth="1.4"
+          strokeDasharray="4 3"
+        />
+      )}
+    </svg>
+  );
+}
+
 export default function Sidebar({
   parsed,
   layerIndex,
@@ -79,11 +109,14 @@ export default function Sidebar({
   sampleKey,
   onSample,
   onFile,
+  live,
 }) {
   const { spec } = parsed;
   const m = spec.model;
   const cells = spec.lattice.cells;
   const dirGlyph = (r) => (r ? "←" : "→");
+  const last = live?.metrics?.length ? live.metrics[live.metrics.length - 1] : null;
+  const lastHeld = live?.metrics ? [...live.metrics].reverse().find((e) => e.held_out != null) : null;
 
   return (
     <div style={S.panel}>
@@ -108,6 +141,44 @@ export default function Sidebar({
           />
         </label>
       </div>
+
+      {live && (
+        <div style={{ ...S.card, borderColor: "#3d5a3d" }}>
+          <div style={S.row}>
+            <span style={S.key}>live training</span>
+            <b style={{ color: live.status === "done" ? "#9ece6a" : "#e8963a" }}>
+              {live.status === "done" ? "done" : "running"}
+            </b>
+          </div>
+          <div style={S.row}>
+            <span style={S.key}>device</span>
+            <span style={S.chip}>{live.device}</span>
+          </div>
+          <div style={S.row}>
+            <span style={S.key}>task</span>
+            <span style={{ fontSize: 11, color: "#8b95a8" }}>{live.task}</span>
+          </div>
+          {last && (
+            <>
+              <div style={S.row}>
+                <span style={S.key}>step</span>
+                <span>{last.step}</span>
+              </div>
+              <div style={S.row}>
+                <span style={S.key}>train loss</span>
+                <span style={{ color: "#e8963a" }}>{last.loss.toFixed(5)}</span>
+              </div>
+              {lastHeld && (
+                <div style={S.row}>
+                  <span style={S.key}>held-out</span>
+                  <span style={{ color: "#7aa2f7" }}>{lastHeld.held_out.toFixed(5)}</span>
+                </div>
+              )}
+              <LossChart metrics={live.metrics} />
+            </>
+          )}
+        </div>
+      )}
 
       <div style={S.card}>
         <div style={S.row}>

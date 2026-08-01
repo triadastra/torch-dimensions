@@ -14,6 +14,7 @@ const SAMPLES = {
 };
 
 const LAYER_SECONDS = 2.2;
+export const LIVE_KEY = "● live run";
 
 export default function App() {
   const [sampleKey, setSampleKey] = useState(Object.keys(SAMPLES)[0]);
@@ -21,6 +22,8 @@ export default function App() {
   const [layerIndex, setLayerIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [error, setError] = useState(null);
+  const [live, setLive] = useState(null);
+  const liveRunId = useRef(null);
 
   // progress is animation state, not UI state: it lives in a ref the render
   // loop mutates, so 60fps never re-renders the React tree.
@@ -70,10 +73,33 @@ export default function App() {
   const onSample = useCallback(
     (key) => {
       setSampleKey(key);
-      loadSpec(SAMPLES[key]);
+      if (key !== LIVE_KEY) loadSpec(SAMPLES[key]);
     },
     [loadSpec],
   );
+
+  // Live-run mode: a training script (examples/viewer_live.py) writes
+  // public/run.json after every optimizer step. Poll it; a new `started`
+  // stamp means a new run, which auto-selects the live entry and loads its
+  // spec once — metrics keep flowing without re-parsing the architecture.
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const r = await fetch(`/run.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        setLive(j);
+        if (j.started !== liveRunId.current) {
+          liveRunId.current = j.started;
+          setSampleKey(LIVE_KEY);
+          loadSpec(j.spec);
+        }
+      } catch {
+        /* no run.json yet — the dropdown simply has no live entry */
+      }
+    }, 700);
+    return () => clearInterval(id);
+  }, [loadSpec]);
 
   const onFile = useCallback(
     (file) => {
@@ -98,10 +124,11 @@ export default function App() {
         playing={playing}
         onTogglePlay={() => setPlaying((p) => !p)}
         onSelectLayer={selectLayer}
-        samples={SAMPLES}
+        samples={live ? { [LIVE_KEY]: null, ...SAMPLES } : SAMPLES}
         sampleKey={sampleKey}
         onSample={onSample}
         onFile={onFile}
+        live={sampleKey === LIVE_KEY ? live : null}
       />
       <div style={{ flex: 1, position: "relative" }}>
         {scene}

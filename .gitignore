@@ -14,3 +14,4 @@ htmlcov/
 dist/
 node_modules/
 viewer/dist/
+viewer/public/run.json
