@@ -142,8 +142,10 @@ lattices, the schedules, the registry, and the `nn.Module` contract. Training
 loops, optimizers, and losses are yours, permanently — `td.data` builds
 lattices from data, it never trains on them.
 
-**Not yet:** autoregressive stepping (forward-only for now), ranks ≥ 5
-(machinery is rank-generic but untested there), fused-kernel fast paths.
+**Not yet:** autoregressive stepping (forward-only for now — designed as
+[PLAN.md](PLAN.md) Phase 12 for v0.2: a `step`/`init_state` protocol with a
+parallel-vs-sequential equivalence check), ranks ≥ 5 (machinery is
+rank-generic but untested there), fused-kernel fast paths.
 
 ## License
 

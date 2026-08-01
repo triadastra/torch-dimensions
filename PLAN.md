@@ -231,6 +231,65 @@ Measure the known risk before making any performance claim: two `.contiguous()` 
 
 ---
 
+## Phase 12 — Autoregressive stepping  ·  L  ·  needs Phases 7–8  ·  v0.2
+
+Generation over a lattice: process one timestep at a time with carried state,
+so the same models that trained in parallel can roll forward step by step.
+
+**The shape of it.** Autoregression is a property of the *time* axis only —
+the spatial axes are fully materialized at every step. So the primitive is
+
+```python
+state = model.init_state(batch)             # per-layer, opaque
+y_t, state = model.step(x_t, state)         # x_t: (B, *shape, H) — one timestep
+```
+
+and a layer's behavior at step time follows from what it sweeps: a layer
+sweeping **time** consumes and updates its slice of the state; a layer
+sweeping a **spatial** axis runs exactly its normal forward on the single
+timestep (nothing to carry). The kernel family needs no new mechanism at all —
+its spatial kernels are already timestep-local, which the causality test
+proves today.
+
+**Per-mixer state, one protocol.** `Mixer.step(x, state) -> (y, state)` as an
+optional protocol method; a mixer without it simply cannot be stepped and the
+model refuses AR mode loudly at `init_state`, never at step 500.
+
+- `LSTM`/`GRU`: `(h, c)` — free, `nn.LSTM` already does this.
+- `Mamba`: conv ring buffer (`d_conv-1` inputs) + the selective-scan state —
+  mirrors upstream's inference cache.
+- `S4`/`S4D`: the recurrent view of the same SSM — materialize `(dA, dB)` from
+  the learned parameters (bilinear / ZOH, matching the kernel's
+  discretization) and step `x_{k+1} = dA x_k + dB u_k`. The DPLR case steps in
+  the diagonalized basis, so it stays O(N) per channel per step.
+
+**What AR mode must refuse.** A plan that sweeps time backward (bidirectional
+time is a statement that the future is visible — generation cannot honor it),
+and any mixer lacking `step`. Both are constructor-time errors with the usual
+pointed messages.
+
+**Acceptance — the parallel/sequential equivalence check, added to the
+conformance suite as check #8:** feed a sequence through `forward`, then feed
+it step-by-step through `step`, and the outputs must agree — bitwise for the
+RNN family, to float tolerance for the SSM family (convolution-vs-recurrence
+is the same operator computed two ways; the S4 dense-reference test already
+proves the recurrence view equals the kernel). This single check is the whole
+correctness story: it is exactly the test that catches the classic AR bugs
+(off-by-one state, leaked normalization statistics, conv buffer misalignment).
+
+**Deliberately out of scope, permanently:** sampling policy, beam search, KV
+caches for attention over time, and readout heads — those belong to the
+caller, same as training loops. `step` is the primitive; generation loops are
+five lines of user code around it.
+
+**Why v0.2 and not now:** stepping touches every mixer and freezes a state
+format into checkpoints (`save`/`load` must round-trip mid-generation state to
+be honest). Doing it after the fused-kernel fast paths would mean doing it
+twice — upstream inference caches and ours must be one design. Sequenced
+after Phase 7's fast-path adapters land.
+
+---
+
 ## Critical path
 
 ```
