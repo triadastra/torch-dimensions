@@ -1,304 +1,389 @@
 # torch-dimensions — Build Plan
 
-Companion to [DESIGN.md](DESIGN.md). That document says *what* the library is; this one says *in what order it gets built and how we know each step worked*.
+Companion to [DESIGN.md](DESIGN.md). That document says *what* the library is; this one says *in what order it gets built, how we know each step worked, and how much of the surface each step actually covers*.
 
 **Sequencing principle:** each phase ends with something runnable and tested, and the riskiest unknowns get resolved before anything is built on top of them. Concretely that means the tensor bookkeeping (`Lattice`) is proven before any model exists, the test suite exists before the hard math, and the config surface is written **last** — a config schema authored before the block signatures settle just freezes a guess.
 
-Sizes are relative (S ≈ half a day, M ≈ 1–2 days, L ≈ 3–5 days) for one person already fluent in this material.
+**Legend.** `[x]` done and verified (a test or a shipped artifact backs the tick — a tick with no evidence is not a tick). `[ ]` open. `[~]` partially done, with the gap stated inline. Sizes are relative (S ≈ half a day, M ≈ 1–2 days, L ≈ 3–5 days, XL ≈ 1–2 weeks) for one person already fluent in this material.
+
+**Coverage** lines state what fraction of the surface a phase's ticks actually exercise — ranks, dtypes, devices, densities, model families — because "phase done" and "surface covered" are different claims, and conflating them is how silent gaps ship.
 
 ---
 
-## Resolved: the name
+## Current position (2026-08-01)
 
-**`torch-dimensions`**, importing as `torch_dimensions`, conventionally aliased **`td`**:
+**Track A:** Phases 0–8 complete. Phase 11 executed early — **v0.1.0 is live on PyPI** with trusted publishing. Phases 9 (reproductions) and 10 (benchmarks) are the open core work. Phase 12 (autoregressive stepping) is designed, targeted v0.2.
+**Track B (viewer):** V1 static viewer done; live-run mode with run controls done (the V4/V5 seed). V2 (ship in wheel) next.
+**Track C (performance):** unstarted except the MPS device suite; CUDA still unverified anywhere.
+**Track D (ecosystem):** README/CHANGELOG/DEBUG.md strong; no docs site, no tutorials.
+**Track E (research):** parked by design.
 
-```python
-import torch_dimensions as td
-```
-
-Settled before Phase 0, since the name fixes the import path, the PyPI reservation, and every doc example — mechanical to change now, painful after release. Every example in the docs uses the `td` alias, and the short form is what makes the full package name affordable: `td.Lattice(...)` reads no worse than a terse package name would, without giving up a descriptive one on PyPI.
+Next up, in order of value: **Phase 9 reproduction**, **Track C CUDA verification**, **Viewer V2**, **Phase 10 benchmarks**.
 
 ---
 
-## Phase 0 — Skeleton and packaging  ·  S  ·  no deps
+# Track A — Core library
+
+## Phase 0 — Skeleton and packaging · S · no deps
 
 Make the repo installable and enforceable before any logic exists.
 
-- `pyproject.toml` (hatchling), `src/` layout so tests import the installed package rather than the working tree.
-- Dependencies: `torch>=2.4` required and **nothing else**. Optional extras: `[mamba]`, `[fla]`, `[dev]`, `[all]`. (An `[s4]` extra existed until the portable S4D landed in-tree and made it pointless.)
-- `ruff` (lint + format), `pytest`, `pytest-cov`. Type hints throughout; `mypy` advisory, not gating.
-- CI: CPU matrix on Python 3.10–3.12. GPU tests marked `@pytest.mark.gpu` and skipped.
-- `LICENSE` (Apache-2.0 — matches PyTorch, permits the adapter story), `README.md`, `CONTRIBUTING.md`.
+- [x] `pyproject.toml` (hatchling), `src/` layout so tests import the installed package rather than the working tree.
+- [x] Dependencies: `torch>=2.4` required and **nothing else**. Optional extras: `[mamba]`, `[fla]`, `[dev]`, `[all]`. (An `[s4]` extra existed until the portable S4D landed in-tree and made it pointless.)
+- [x] `ruff` (lint + format), `pytest`, `pytest-cov`. Type hints throughout; `mypy` advisory — *and executed in CI*, because "advisory" once quietly meant "never run" (DEBUG.md #7).
+- [x] CI: CPU matrix on Python 3.10–3.12, full-history checkout (DEBUG.md's citation test needs it).
+- [x] `LICENSE` (Apache-2.0), `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
+- [x] Publishing workflow: tag-triggered, PyPI trusted-publisher OIDC, sdist-size guard (the 35 MB node_modules incident, now a CI check).
+- [x] sdist scoped to the library (`src`, `tests`, `examples`, docs) — the sdist is the library, not the repo.
+- [ ] Python 3.13 in the CI matrix once torch ships stable wheels for it.
+- [ ] A `nightly` CI job against torch nightly, so upstream breakage is our alarm and not our users'.
+- [ ] Windows runner (even one smoke job) — path handling and MPS-vs-CUDA device pick are the risks.
 
-**Acceptance:** `pip install -e ".[dev]"` then `pytest` passes on a machine with no CUDA and no optional deps installed. This is a real constraint, not ceremony — it is the promise that a CPU-only user can install and import the library.
+**Coverage:** packaging is fully exercised (clean-venv wheel install is tested; PyPI install is live). CI covers Linux CPU only — macOS/MPS runs locally, Windows never.
 
----
-
-## Phase 1 — `Lattice`  ·  M  ·  needs Phase 0
-
-The foundation. Pure tensor bookkeeping, zero models, zero learnable parameters. Everything else depends on this being exactly right, which is why it comes first and gets tested harder than its line count suggests.
-
-- `shape`, `names`, `valid`, `time`; axis name → position resolution.
-- Permutation generation and inverse for "move axis `k` to sequence position".
-- Flat indices, scatter-to-dense, gather-from-dense.
-- Broadcastable validity mask, per-axis valid counts for masked pooling.
-
-**Acceptance:**
-- Permutation round-trip is the identity for every axis, ranks 1–5.
-- `gather(scatter(x)) == x` exactly, dense and sparse.
-- Inverse permutation is verified against `torch.argsort`, not hand-derived twice.
-- Property test: random shapes and random valid-masks, ranks 1–5.
-
-**Why this first:** every downstream bug in an ND model looks like "the model is bad" and is actually an axis-order bug. Isolating this layer means those bugs are impossible later rather than merely unlikely.
+**Acceptance:** `pip install -e ".[dev]"` then `pytest` passes on a machine with no CUDA and no optional deps installed. ✅ Also now: `pip install torch-dimensions` from PyPI works cold.
 
 ---
 
-## Phase 2 — `ScanPlan`  ·  S  ·  needs Phase 1
+## Phase 1 — `Lattice` · M · needs Phase 0
+
+The foundation. Pure tensor bookkeeping, zero models, zero learnable parameters.
+
+- [x] `shape`, `names`, `valid`, `time`; axis name → position resolution; degenerate `shape=()` + `time=True` sequence lattice.
+- [x] Permutation generation and inverse for "move axis `k` to sequence position"; inverse checked against `torch.argsort`, not hand-derived twice.
+- [x] Flat indices, scatter-to-dense, gather-from-dense; broadcast validity mask; per-axis valid counts for masked pooling.
+- [x] Immutable after construction (`__setattr__` refused) — a value object that is hashed from and cached from must be a value (DEBUG.md #2).
+- [x] Defensive copies: `valid` cloned on entry, `mask()` returns a fresh tensor, never a view (DEBUG.md #13).
+- [x] Device correctness: `flat_idx` indexes on the data tensor's device, both mismatch directions (DEBUG.md #18, proven on MPS).
+- [x] Property/fuzz tests: random shapes and masks, ranks 1–4, fold/scatter/permutation round-trips against independent references.
+- [ ] Extend the fuzz envelope to ranks 5–6 (the machinery is rank-generic; the claim should be tested, then the README's "ranks ≥ 5 untested" line gets deleted).
+- [ ] Stress shapes: one-cell axes everywhere, a single valid cell, a 1×1×…×1 lattice, an axis of length 10⁴ — each as an explicit edge test rather than fuzz luck.
+- [ ] `Lattice.merge` / `Lattice.slice` utilities (sub-lattice views for train/eval splits over *space*, not just time) — needed by Phase 9's real-data reproductions.
+- [ ] Serialization guarantee documented: a lattice pickled/JSON-round-tripped on one torch version loads on the next (add a stored-fixture test).
+
+**Coverage:** ranks 1–4 fuzz-tested against independent references; dense and sparse; CPU + MPS; float32/float64. Not covered: ranks ≥ 5, extreme aspect ratios, pickling across torch versions.
+
+---
+
+## Phase 2 — `ScanPlan` · S · needs Phase 1
 
 Pure data. No tensors, no modules.
 
-- `.cyclic()`, `.paired()`, `.from_list()`; `__repr__`; to/from dict.
-- Validation: every axis in the plan exists in the lattice; a warning when the plan does not visit every axis (legal, usually a mistake).
+- [x] `.cyclic()`, `.paired()`, `.from_list()`; `__repr__`; to/from dict; name-or-index axes resolved against a lattice; warning when a plan leaves an axis unswept.
+- [x] Per-axis `bidirectional` (time stays causal while space does not); the `set("time")` string-iteration trap guarded.
+- [x] Direction flips per *cycle*, not per layer — the even-axis-count aliasing that silently pins every axis one way (DEBUG.md #4; exists in published research code).
+- [x] `_warn_if_pinned`: a layer budget that cannot deliver the requested bidirectionality warns instead of silently downgrading.
+- [x] Immutable and hashable together (DEBUG.md #1).
+- [ ] Plan algebra: `plan + plan` (concatenate), `plan * k` (repeat), `plan.reversed()` — composition is currently manual list surgery.
+- [ ] A `plan.coverage(lattice)` report object (per-axis sweep counts and directions, machine-readable) — the viewer and the docs both want it; today each recomputes it.
+- [ ] Schedule catalog: named constructors for the published schemes beyond Mamba-ND's paired (e.g. S4ND's simultaneous-separable as a degenerate plan, zigzag variants) with citations.
+- [ ] Property test: for every constructor, every axis mentioned is swept ≥ 1 time or the warning fires — fuzz over axis counts 1–8 and layer counts 1–64.
 
-**Acceptance:** plans round-trip through serialization; `cyclic(axes, n)` visits each axis `⌈n/|axes|⌉` or `⌊n/|axes|⌋` times and alternates direction.
-
----
-
-## Phase 3 — `AxialScan` + LSTM mixer  ·  M  ·  needs Phases 1–2
-
-The first real block. **LSTM first, not Mamba** — `nn.LSTM` needs no optional deps, runs on CPU, and is a known-correct 1-D reference, so this phase tests the permute machinery in isolation from any kernel problem. Leading with Mamba would conflate "my axis logic is wrong" with "the Triton kernel is unhappy," which is the worst debugging position to be in.
-
-- `AxialScan`: permute → fold others into batch → mixer → unfold → inverse permute, pre-norm residual per layer.
-- Batch-fold chunking, library-owned and auto-tuned from device limits — never a user-facing constant.
-- `LSTM`, `GRU` — one class each, 1-D without a lattice and N-D with one.
-
-**Acceptance:** a single layer on a rank-1 lattice matches `nn.LSTM` **bit-for-bit**. That one test catches essentially every permutation and residual bug. Multi-layer stacks match only to floating-point tolerance, because the fold normalizes memory layout and torch's RNN kernels are layout-sensitive — expected, not a defect.
-
-**Deliverable:** a working N-dimensional LSTM — prior art as MDRNN (Graves et al. 2007) and Grid-LSTM (Kalchbrenner et al. 2015), but with no maintained modern implementation. Shippable on its own.
+**Coverage:** constructors, resolution, serialization, and the aliasing signature are fully tested (even *and* odd axis counts — one parity finds nothing). Not covered: plan composition, exotic schedules.
 
 ---
 
-## Phase 4 — Conformance suite  ·  M  ·  needs Phase 3
+## Phase 3 — `AxialScan` + RNN family · M · needs Phases 1–2
 
-Built now, before the hard math, so every later block is validated by construction rather than retrofitted. This is the single highest-leverage phase in the plan: it is what keeps an (models × ranks × sparsity) matrix from rotting.
+- [x] `axial_apply`: permute → fold → mixer → unfold → inverse permute; `reverse`; `chunk` (validated ≥ 1); shape-contract error naming `(M, A, H)`.
+- [x] `AxialScan`: pre-norm residual per layer, per-layer or shared mixers, absent cells zeroed on entry **and** after every layer.
+- [x] `LSTM`, `GRU` — one class each, 1-D without a lattice, N-D with one; no `LSTMND`.
+- [x] Single layer on a rank-1 lattice matches `nn.LSTM` **bit-for-bit**; multi-layer matches to float tolerance (fold normalizes memory layout; torch RNN kernels are layout-sensitive — expected, not a defect, and documented).
+- [x] Verified against independent references: `cumsum`, position-weighting — mixers that torch itself can check.
+- [ ] Batch-fold chunking auto-tuned from device limits rather than user-supplied — currently `chunk` is manual; the fused-kernel adapters (Track C) will force the issue.
+- [ ] A `Recorder`-style debug mixer in `td.testing` (currently a private test helper) — "which axis did layer 3 actually sweep" is the first question every integration bug asks.
+- [ ] Gradient-checkpointing option per layer (rank-4 lattices at real `d_model` will need it; measure in Phase 10 first).
 
-The seven checks are specified in [DESIGN.md §6](DESIGN.md). Packaged as `td.testing.check_block(...)` so downstream users can run it against their own mixers.
-
-**Acceptance:** `LSTM` and `GRU` pass all seven. Suite is parametrized over rank 1–4 and dense/sparse.
-
----
-
-## Phase 5 — Data: getting real data into lattice layout  ·  M  ·  needs Phase 4
-
-Scoped by one distinction: **building a lattice from data is lattice construction, which this library already owns. Running a training loop is not.** Everything here is the former.
-
-The gap is concrete. A user holding long-format rows — `(coord₀, coord₁, …, t, features…)` — must currently hand-write the coordinate-to-index mapping, infer the shape, build the valid mask, and scatter into `(B, T, *shape, H)`. That is precisely the code that silently produces a *mis-shuffled* lattice: it trains, it converges, the numbers are quietly wrong. Same bug class Phase 1 exists to eliminate, one layer up, currently unowned.
-
-Four pieces, each usable alone:
-
-- **`Lattice.from_coords(coords, names=...)`** — infer shape, valid mask, and categorical vocabularies from observed coordinates. Returns the lattice plus the mapping needed to place rows.
-- **`LatticeWindow`** — windowing over time (`input_len`, `horizon`, `stride`, split boundaries). Pure index arithmetic, no I/O, independently testable.
-- **`LatticeSource`** — a small protocol, *not* a base class. This is where customization comes from: a memory-mapped array, zarr, HDF5, or a database all batch correctly as long as they satisfy it. Ship the protocol plus two reference implementations (in-memory tensor, long-format table).
-- **`collate_lattice`** — stacks windows and keeps the `Lattice` *out* of the batch, since it is static metadata rather than per-sample data.
-
-Customization comes from composition, never from a god-class with forty constructor arguments.
-
-**Deliberately absent:** dataset downloads, normalization policy (a hook, shipping nothing), augmentation, splitting strategy, trainers, Lightning integration.
-
-**Placement rationale:** after Phase 4 so the data API is designed against a real, already-validated consumer rather than a guess — the same reasoning that puts config last. This is also the first phase that makes an end-to-end example runnable: load → model → loss → backward.
-
-**Acceptance:** a long-format table with deliberately missing combinations round-trips to a lattice and back with values landing in the right cells — verified against an independently constructed dense reference, not just a shape check. Windows tile the time axis with no gaps or overlaps beyond the requested stride. A user-supplied source satisfying only the protocol batches correctly.
+**Coverage:** ranks 1–4, dense + sparse, time on/off, forward + reverse + chunked, float64 gradcheck, MPS parity. Not covered: activation checkpointing, mixed precision (Track C), very long folded batches near memory limits.
 
 ---
 
-## Phase 6 — `AxialKernel` and axial attention  ·  L  ·  needs Phase 4
+## Phase 4 — Conformance suite · M · needs Phase 3
 
-The hardest math in the project. Three strictly ordered steps, each independently verifiable:
+The single highest-leverage phase: it is what keeps a (models × ranks × sparsity × devices) matrix from rotting.
 
-1. **Dense contraction.** Per-axis kernel, sequential contraction. Verified against the explicitly materialized Kronecker product on a small lattice — a test only possible while the lattice is small, which is exactly why it happens here.
-2. **Sparse renormalization.** Masked-mean pooling and per-line renormalization by valid-key softmax mass, for arbitrary N.
-3. **Factorized axial attention.** Per-axis Q/K from the pooled 1-D function, one shared V.
+- [x] `td.testing.check_block` — the seven checks: shape, gradients + gradcheck, rank-1 equivalence vs the bare mixer, Kronecker identity (kernel family), absent-cell inertia, axis-storage covariance, `torch.compile` (opt-in).
+- [x] Skips are recorded, never silently passed (`_Skip` is the mechanism; "we never ran that one" can never read as "that one passed").
+- [x] Checks run only at ranks the caller requested (DEBUG.md #16).
+- [x] `check_trainable`: fresh data per step, held-out scoring, and a negative control that must fail — a learning test without one measures capacity, not learning (DEBUG.md #5).
+- [x] Fuzz suite (`test_fuzz.py`): seeded, checked against slow independent references, mutation-verified.
+- [x] Device suite (`test_device.py`): runs against whatever accelerator exists (MPS locally, CUDA elsewhere), skips visibly otherwise.
+- [ ] Check #8 — parallel/sequential equivalence (lands with Phase 12; specified there).
+- [ ] Mutation-testing harness as a scheduled CI job (weekly, not per-push): auto-apply the catalog of mutations from DEBUG.md §B1, fail if any survive that previously died. Today mutation testing is a manual discipline; make it a machine's.
+- [ ] Coverage floor in CI (`pytest-cov` is installed and unused — DEBUG.md #7's shape, one tool over).
+- [ ] A public `check_data_source(source)` — the `LatticeSource` protocol has reference implementations but no conformance checker for *user* sources; the extension point deserves the same treatment mixers got.
+- [ ] Golden-file tests for `spec()` output (the viewer contract): a stored spec per model family, diffed on change, so a spec-format break is a loud diff instead of a viewer that quietly renders nonsense.
 
-Generalizing rank-locked contraction tables to arbitrary N is the largest single piece of work in the library. Use permute+matmul, not generated einsum strings.
-
-**Acceptance:** Kronecker identity holds to `1e-5` on dense; mask-invariance holds exactly on sparse; `AxialTransformer` and the factorized variant pass the full suite. Memory at rank 4 stays quadratic in axial size — the property that makes the factorized path viable where a per-line implementation exhausts memory.
-
----
-
-## Phase 7 — SSM adapters  ·  L  ·  needs Phase 4  ·  **needs a GPU (Mamba only)**
-
-- Thin adapters over `mamba-ssm` (Mamba-2), `state-spaces/s4`, and Mamba-3.
-- Defensive imports: a missing optional dep unregisters that block and leaves everything else importable. A missing real implementation **fails loudly and never silently substitutes a stub**.
-- `MambaND`, `S4ND`.
-
-**S4 portability, established empirically (2026-07-30, MPS):** the full
-`S4Block` and `S4D` both run on MPS — forward, backward, and CPU-parity to
-~1.1e-6 — once three things are handled in the vendored copy, all of which a
-derivative under Apache-2.0 may do:
-
-1. Drop the `pytorch_lightning` import (used for one logging decorator).
-2. Inline `DropoutNd` in `s4d.py` (it imports a repo-internal path).
-3. Fix a **latent upstream numerical bug** in `SSMKernelDPLR._omega`: the
-   bilinear transform `z = 2(1-ω)/(1+ω)` divides by a quantity that is
-   mathematically zero at the Nyquist point (ω = -1). CPU/CUDA dodge the pole
-   by ~1e-7 of rounding error in the complex pow; MPS lands on -1 exactly and
-   the whole kernel goes NaN. Guard the denominator (the full expression
-   cancels the pole analytically, so an eps nudge reproduces what rounding
-   already does elsewhere). This must be fixed in the vendored copy regardless
-   of backend — code that works only by accident of rounding is not portable.
-
-So the GPU-only remainder of this phase is `mamba-ssm` (CUDA-only extension);
-the S4 family is coverable by the device suite (tests/test_device.py) on MPS.
-
-**Mamba portability, established empirically (2026-07-30, MPS, mamba_ssm
-2.3.2.post1 source):** the real modules run on Mac without any CUDA:
-
-- **Mamba (v1)** — `modules/mamba_simple.Mamba` with `use_fast_path=False`,
-  routing `selective_scan_fn` to upstream's own `selective_scan_ref`.
-  CPU↔MPS parity **2.98e-8**, clean gradients.
-- **Mamba2** — `modules/mamba2.Mamba2` with `use_mem_eff_path=False`, an
-  adapter impersonating `mamba_chunk_scan_combined` on top of upstream's
-  `ssd_minimal_discrete` (their own fused↔minimal test gives the mapping:
-  `x*dt, A*dt`; the adapter adds dt_bias/softplus/dt_limit, group→head
-  expansion of B/C, chunk padding, D-skip, z-gate, plus `rms_norm_ref` in
-  place of the triton gated RMSNorm). CPU↔MPS parity **4.77e-7**, and the
-  adapter itself verified against an independent hand-written sequential
-  recurrence at **8.9e-15** in float64.
-- **Import shims a vendored copy needs** (all vestigial for the math):
-  the unguarded `import selective_scan_cuda`; `triton` (needed only so
-  kernel *definitions* import — fallback paths never call them; the stub
-  must provide `autotune` attaching `.configs` and a `Config` with real
-  `num_warps`, and must be installed **after** torch imports or torch's own
-  triton detection breaks); `huggingface_hub.PyTorchModelHubMixin`; and
-  `transformers` (avoid by not executing the package `__init__`).
-- **Mamba3** — not portable today: every path runs through the triton
-  SISO/MIMO rotary kernels and upstream ships **no reference
-  implementation**. A Mac-capable derivative means writing the rotary
-  trapezoidal recurrence in torch from the paper and verifying on a CUDA
-  box; budget it as its own task, not an adapter.
-
-Working harness and probes preserved in the session scratchpad; the
-chunk-scan adapter above is the seed of `adapters/mamba.py`.
-
-**Acceptance:** both pass the suite on GPU; `MambaND` on a rank-1 lattice matches a bare `Mamba2` block.
+**Coverage:** every shipped block passes all applicable checks at ranks 1–3 (RNN + SSM + kernel family), dense and sparse, CPU float64 + accelerator float32. Not covered: user-side data sources, spec golden files, automated mutation runs.
 
 ---
 
-## Phase 8 — Registry, config, and save/load  ·  M  ·  needs Phases 6–7
+## Phase 5 — Data · M · needs Phase 4
 
-Deliberately late. Now that every block signature has settled, the config schema describes reality instead of predicting it.
+Building a lattice from data is lattice construction and belongs here; running a training loop is not and never will be.
 
-- `register()` / `build()` / `list_blocks()`.
-- One dataclass schema per block; validation errors name the offending key and list valid ones.
-- YAML loader.
-- **`model.save(path)` / `td.load(path)`** — architecture *and* weights in one file, so a checkpoint reconstructs its own model without the user re-specifying the config. This belongs here rather than earlier: it is the registry plus the config schema, and it cannot exist before either.
+- [x] `from_coords` — vocabularies, shape, valid mask inferred from observed tuples; unknown values raise; encode/decode round-trip fuzz-tested.
+- [x] `from_table` — long-format rows to `(T, *shape, F)`; duplicate `(time, cell)` rows refused (a join bug must not become a plausible dataset).
+- [x] `LatticeWindow` — pure index arithmetic; split drops straddling windows on both sides; unsorted timestamps refused (a silent nonsense split is the quietest possible leakage bug — DEBUG.md #15).
+- [x] `LatticeSource` protocol + `TensorSource`; `LatticeDataset`; `collate_lattice` (ragged refused; mixed target presence refused — DEBUG.md #14; lattice kept out of the batch).
+- [x] Multiprocessing-safe: samples and batches pickle; `DataLoader(num_workers>0)` proven end-to-end (DEBUG.md #9 — it used to *hang*).
+- [ ] Reference `LatticeSource` for memory-mapped `.npy` and for zarr (behind an extra) — the protocol's promise is "a database cursor batches correctly"; two on-disk implementations would make that promise tested rather than asserted.
+- [ ] A normalization *hook* (protocol, ships nothing): per-cell statistics computed over present cells only — masked normalization is exactly the kind of thing users will get subtly wrong, and a wrong mean over absent zeros is invisible.
+- [ ] Ragged-time policy documented and tested: what a source with per-cell history lengths should do (today: build the union lattice and mask; write the recipe down with a test).
+- [ ] Streaming/windowed iteration for series too large for memory (windows over a source that only supports sequential reads).
+- [ ] An end-to-end "CSV to trained model" example with a real public dataset (feeds Phase 9 and Track D).
 
-Save/load is where a config system quietly rots, so two properties are non-negotiable. A checkpoint records the library version and refuses to load silently under an incompatible one. And a lattice's validity mask travels *with* the checkpoint — a model restored against a different sparsity pattern is a wrong model, not a warning.
-
-**Acceptance:** every model round-trips config → model → config, and save → load → identical outputs on identical input, verified bitwise. Unknown config keys are a hard error, not a silent ignore.
-
----
-
-## Phase 9 — Acceptance against a real workload  ·  M  ·  needs Phase 8
-
-**The phase that decides whether the abstraction is right.** Reproduce a published result from one of the source papers — an S4ND or Mamba-ND benchmark number on a public dataset — using only torch-dimensions blocks and config.
-
-If the numbers land, the generalization preserved semantics. If they do not, the library is wrong, and it is far better to learn that here than after release. If expressing the model requires reaching around the API into bespoke Python, the abstraction leaks and Phase 5 needs revisiting.
-
-**Acceptance:** metrics match the paper within seed noise, and the model is expressible in config alone.
+**Coverage:** in-memory paths thoroughly tested including worker processes; property-tested windowing. Not covered: on-disk sources, normalization, ragged series, >memory scale.
 
 ---
 
-## Phase 10 — Benchmarks  ·  M  ·  needs Phase 9
+## Phase 6 — Kernel family · M/L · needs Phase 4
 
-Measure the known risk before making any performance claim: two `.contiguous()` calls per layer means a 12-layer ND model does ~24 full-tensor copies, which plausibly dominates the mixer at small `d_model`.
+- [x] `axial_contract` + `kron_operator`; the factorization checked against the explicit Kronecker product, not against itself.
+- [x] Sparse renormalization with the **relative** cancellation guard — degeneracy is cancellation, and cancellation is relative to the absolute mass (DEBUG.md #3 → #12: the first fix repeated the bug one level up; float32 blew up 7,000× under an absolute epsilon).
+- [x] No NaN laundering: an input NaN must leave (DEBUG.md #11).
+- [x] `AxialKernel`: per-line scores (axial attention) or pooled per-axis kernels (CaFA); learned relative-position bias per axis; softmax or leaky_relu gate; per-line renormalization *is* masked softmax for the softmax gate.
+- [x] The hybrid form: kernels own space, the model's mixer owns time; CaFA pools over *other spatial axes only* — a kernel at time t built from the future would leak through a causal model, and the causality test holds the hybrid to bitwise on the past.
+- [x] A mixer on a time-less lattice refused as dead weight.
+- [x] `td.axial_attention`, `td.cafa` as strategies; registered by name; `method=` as the short spelling of `nd_method=`.
+- [ ] Module-level Kronecker equivalence test for CaFA (single layer, identity out-proj, gate off): the pooled per-axis kernels contracted sequentially vs `kron_operator` of the same kernels — closes the one conformance skip that remains for this family.
+- [ ] Multi-head kernels (currently single-head per axis) — heads are the difference between this and what a Transformer person expects to configure.
+- [ ] Attention **along time** as a mixer (`AttentionMixer`, causal mask) — the missing entry that makes "N-D Transformer" literal: kernel family across space + attention along time, or axial_scan with attention as the swept mixer.
+- [ ] Cost model in docs: per-axis O(A²) vs per-line O(M·A²) vs scan O(M·A), with the rank-4 memory cliff worked out — the *reason this family exists* deserves numbers (Phase 10 measures them).
+- [ ] `gate="softmax"` temperature / learned-per-axis option (CaFA paper ablates this).
 
-- Permute/copy overhead as a fraction of step time, swept over `d_model` and rank.
-- Dense vs factorized memory at ranks 2–4.
-- `torch.compile` on/off.
-
-**Acceptance:** published numbers with hardware stated. If permute overhead is material, fusing it becomes the first v0.2 item — and *only then* is writing a kernel justified.
-
----
-
-## Phase 11 — Docs and v0.1.0  ·  M  ·  needs Phase 10
-
-- README: the unification table, 10-line quickstart, honest scope limits.
-- "Adding a mixer" guide — the extension point is the product, so this page matters more than the API reference.
-- TestPyPI, then PyPI. Tag `v0.1.0`.
-
-**README must state plainly:** forward-only, no autoregressive stepping; ranks 1–4 tested; fused kernels come from upstream, not from us.
+**Coverage:** both strategies pass full conformance at ranks 1–3, dense + sparse, both gates, learnability, hybrid causality, MPS. Not covered: multi-head, attention-as-mixer, module-level Kronecker check.
 
 ---
 
-## Phase 12 — Autoregressive stepping  ·  L  ·  needs Phases 7–8  ·  v0.2
+## Phase 7 — SSM family · L · portable core done; fast paths open
 
-Generation over a lattice: process one timestep at a time with carried state,
-so the same models that trained in parallel can roll forward step by step.
+**Portable core (done):**
 
-**The shape of it.** Autoregression is a property of the *time* axis only —
-the spatial axes are fully materialized at every step. So the primitive is
+- [x] `S4DMixer` — diagonal kernel, **bitwise identical** to upstream's with copied weights.
+- [x] `S4Mixer` — the full DPLR kernel: HiPPO-LegS NPLR init, Cauchy resolvent, rank-1 Woodbury, bilinear transform with the **Nyquist-pole guard built in** (upstream survives that pole only by rounding luck; on MPS it NaNs — recorded below). Matches upstream at 3e-8; matches a dense state-space matrix-power reference at 4.6e-16 **in CI**.
+- [x] `MambaMixer` — gated conv + selective scan, mirroring the reference non-fused path; scan matches `selective_scan_ref` at 1e-6.
+- [x] `td.S4`, `td.S4D`, `td.Mamba` via the shared `LatticeModel` base; explicit N-D names `S4ND`/`S4DND`/`MambaND` with mandatory, checked `dim` (`dim=1` refused by name — one spatial axis is the 1-D model, and code reading "S4ND" must not be running S4).
+- [x] Causality tests (S4 causal to 2.6e-15 through the FFT — mathematically causal, not bitwise, and the test says exactly that; Mamba held to bitwise).
+- [x] Full conformance, learnability, device parity for all three.
+
+**S4/Mamba portability dossier (established empirically, 2026-07-30, MPS):** the upstream repos run on Mac once vendored copies drop `pytorch_lightning`/hub/`transformers` imports and fix the `_omega` Nyquist pole — full S4Block at 1.13e-6 CPU↔MPS parity, Mamba v1 at 2.98e-8, Mamba2 via an `ssd_minimal` adapter at 4.77e-7 (adapter verified against a sequential recurrence at 8.9e-15 over 40 ragged-length cases). Import shims: stub `selective_scan_cuda`, stub triton *after* torch imports with `.configs`-bearing autotune, stub the hub mixin. **Mamba3 ships no reference implementation** — every path is a 712-line triton kernel; a portable version means writing the rotary trapezoidal recurrence from the paper.
+
+**Fast paths and breadth (open):**
+
+- [ ] `mamba-ssm` fast-path adapter: when installed and on CUDA, `MambaMixer` delegates to the fused kernel; the conformance suite runs *both* paths and asserts they agree — the shim harness from the portability work is the seed.
+- [ ] `causal-conv1d` fast path for the conv (same pattern, same agreement test).
+- [ ] `Mamba2Mixer` (SSD): portable chunked implementation — the verified `chunk_scan_ref` adapter *is* this, one packaging step away — plus the triton fast path when available.
+- [ ] `Mamba3Mixer`: write the pure-torch reference from the paper (own task, XL); verify on a CUDA box against upstream triton; then it joins the family.
+- [ ] S4 options parity where they earn their keep: rank-2 low-rank correction, `legt`/`fourier` measures, learnable-vs-fixed `dt` per the paper's ablations — each lands only with a test against the dense reference.
+- [ ] `fla` (flash-linear-attention) adapter behind the existing `[fla]` extra — currently the extra installs a dependency nothing uses; that is a small dishonesty with a deadline.
+- [ ] Sequential-scan speedup for the portable Mamba path: block-parallel (associative) scan in pure torch — the O(A) python loop is correct and honest, and a log-depth scan would make the portable path usable for long 1-D sequences too.
+
+**Coverage:** the three shipped mixers are verified against upstream references *and* independent in-repo references, on CPU/MPS, ranks 1–3, all conformance checks. Not covered: any fused kernel, Mamba-2/3 as mixers, CUDA execution anywhere.
+
+---
+
+## Phase 8 — Registry, config, save/load · M · done
+
+- [x] `model.config` — the construction recipe recorded at build, plain JSON-able types, `n_layers` recorded as the plan's true depth (a recipe that could disagree with itself is not a recipe).
+- [x] `td.build(dict | yaml path)` — registry by kind (`lstm`, `gru`, `s4`, `s4d`, `mamba`, + ND names); unknown keys are a hard error naming the offender.
+- [x] `model.save(path)` / `td.load(path)` — one checkpoint file: format version, config, state dict; rebuilt model is the same model (outputs bitwise equal; validity mask included); incompatible format versions refused.
+- [x] The round-trip proven for every model family and both composition families.
+- [ ] `safetensors` as the weights container (optional dependency) — torch pickles are a supply-chain liability the ecosystem is moving away from.
+- [ ] Checkpoint migration policy written down: what version N promises to load from version N−1, and a stored-fixture test per released version (the fixtures directory *is* the compatibility contract).
+- [ ] `td.build` accepting a checkpoint path directly (config-with-weights vs config-only is a flag, not two APIs).
+- [ ] Registry entry points (`importlib.metadata`) so third-party packages can register model kinds without importing them eagerly.
+
+**Coverage:** every shipped model round-trips config and weights bitwise. Not covered: cross-version loading (no released fixture set yet), third-party registration.
+
+---
+
+## Phase 9 — Reproduce a published result · L · needs Phases 5–8 · **OPEN — the current frontier**
+
+The make-or-break test of the abstraction: a published N-D result, reproduced from a config file alone, with no code written outside this library. Until this passes, "the unification holds" is a design claim, not an empirical one.
+
+Candidates, in order of feasibility on available hardware:
+
+- [ ] **Sequential/permuted-image classification with the portable SSMs** (sMNIST/psMNIST with `td.S4D`): small, CPU/MPS-feasible, published baselines abundant. Target: within 1 point of the S4D paper's small-model number. This is the *first* reproduction because it isolates the mixer from the N-D machinery.
+- [ ] **2-D: Mamba-ND-style image classification at toy scale** (CIFAR-10 with `td.MambaND(dim=2)`, paired schedule): validates the schedule machinery against the construction the paper describes. Accept a stated-hardware small-config number, not the paper's A100 number.
+- [ ] **Sparse-lattice forecasting on a public dataset** (e.g. a public demand/traffic dataset with genuinely absent series): no published baseline exists for the sparse case — *we* set the baseline, which is the differentiator's first citable artifact. Compare dense-with-zeros vs masked-sparse handling; the claim "masking absent cells matters" gets a number.
+- [ ] **Hybrid check:** the same forecasting task with `method=td.cafa` vs `td.axial_scan` at matched parameter count — the library's whole point is that this comparison is one flag.
+- [ ] Each reproduction ships as: a config file, a `python -m` runnable, a RESULTS.md row with hardware + wall-clock + seed variance (≥ 3 seeds), and a CI smoke variant (tiny config, asserts learning happened, minutes not hours).
+
+**Acceptance:** at least two rows in RESULTS.md that someone else could reproduce with `pip install torch-dimensions` and one command each.
+
+**Risk:** dataset licensing and download flakiness — vendor nothing; download scripts with checksums, and CI smoke uses synthetic stand-ins.
+
+---
+
+## Phase 10 — Benchmarks · M · needs Phase 9 · OPEN
+
+Measure the known risks before making any performance claim.
+
+- [ ] Permute/copy overhead as a fraction of step time — two `.contiguous()` per layer means a 12-layer model does ~24 full-tensor copies; sweep over `d_model` ∈ {32…512} and rank ∈ {1…4}. If it is material, fusing becomes the first v0.2 item — and *only then* is writing a kernel justified.
+- [ ] Dense vs factorized (kernel-family) memory and time at ranks 2–4 — the O(A²)-vs-O(cells²) claim with axes on it.
+- [ ] Portable Mamba scan vs (Track C) fused path, CPU vs MPS vs CUDA — the honest "when do you need the extra" table.
+- [ ] `torch.compile` on/off across families (the conformance hook exists; the numbers do not).
+- [ ] Chunked fold (`chunk=`) sweep — find where chunking wins, feed the auto-tune item in Phase 3.
+- [ ] Scaling curve rank 1→5 at fixed cell count (does the machinery's cost grow with rank or with cells? design says cells; prove it).
+- [ ] Published as BENCHMARKS.md with hardware stated, seeds fixed, and the benchmark scripts in-repo (`benchmarks/`, excluded from the sdist).
+- [ ] A CI perf-smoke: one tiny timed run with a generous regression threshold (2×) — catches the accidental O(n²) without flaking on runner noise.
+
+**Acceptance:** published numbers with hardware stated, and every performance sentence in README/docs traceable to a row.
+
+---
+
+## Phase 11 — Docs and release · M · **v0.1.0 SHIPPED; docs open**
+
+- [x] README: the unification table, verified quickstart (every snippet executed before written), honest scope limits, "Correct on purpose" section.
+- [x] CHANGELOG discipline (Keep-a-Changelog, real 0.1.0 entry).
+- [x] PyPI: trusted publishing, tag-triggered, live — `pip install torch-dimensions` works.
+- [x] DEBUG.md as a living practice document, with its citations enforced by a test.
+- [ ] Docs site (mkdocs-material): API reference from docstrings, the design docs rendered, versioned with releases.
+- [ ] **"Adding a mixer" guide** — the extension point is the product; this page matters more than the API reference. Walk one real example end-to-end: implement, `check_block`, `check_trainable`, register, config.
+- [ ] "Adding an `nd_method`" guide (same treatment; the strategy contract in prose with the hybrid example).
+- [ ] Tutorial notebooks: (1) forecasting a real CSV end-to-end through `td.data`, (2) the method-of-multidimensionality comparison on one task, (3) sparse lattices — why masking matters, with the Phase 9 numbers.
+- [ ] Docstring pass with a doctest runner in CI (examples in docstrings that execute are examples that stay true).
+- [ ] Release automation niceties: CHANGELOG section extracted into the GitHub release notes by the publish workflow.
+
+---
+
+## Phase 12 — Autoregressive stepping · L · needs Track C fast paths · v0.2
+
+Generation over a lattice: process one timestep at a time with carried state, so the same models that trained in parallel can roll forward step by step.
+
+**The shape of it.** Autoregression is a property of the *time* axis only — the spatial axes are fully materialized at every step. So the primitive is
 
 ```python
 state = model.init_state(batch)             # per-layer, opaque
 y_t, state = model.step(x_t, state)         # x_t: (B, *shape, H) — one timestep
 ```
 
-and a layer's behavior at step time follows from what it sweeps: a layer
-sweeping **time** consumes and updates its slice of the state; a layer
-sweeping a **spatial** axis runs exactly its normal forward on the single
-timestep (nothing to carry). The kernel family needs no new mechanism at all —
-its spatial kernels are already timestep-local, which the causality test
-proves today.
+and a layer's behavior at step time follows from what it sweeps: a layer sweeping **time** consumes and updates its slice of the state; a layer sweeping a **spatial** axis runs exactly its normal forward on the single timestep (nothing to carry). The kernel family needs no new mechanism at all — its spatial kernels are already timestep-local, which the causality test proves today.
 
-**Per-mixer state, one protocol.** `Mixer.step(x, state) -> (y, state)` as an
-optional protocol method; a mixer without it simply cannot be stepped and the
-model refuses AR mode loudly at `init_state`, never at step 500.
+- [ ] `Mixer.step(x, state) -> (y, state)` as an optional protocol method; a mixer without it cannot be stepped and the model refuses AR mode loudly at `init_state`, never at step 500.
+- [ ] `LSTM`/`GRU` state: `(h, c)` — free, `nn.LSTM` already does this.
+- [ ] `Mamba` state: conv ring buffer (`d_conv−1` inputs) + selective-scan state — mirrors upstream's inference cache, and must be *the same design* as the fused path's cache (why this phase follows Track C).
+- [ ] `S4`/`S4D` state: the recurrent view of the same SSM — materialize `(dA, dB)` from the learned parameters with the *same* discretization as the kernel; DPLR steps in the diagonalized basis, O(N) per channel per step. The dense-reference test already proves the recurrence equals the kernel.
+- [ ] Refusals: a plan sweeping time backward (bidirectional time says the future is visible — generation cannot honor it); any step-less mixer. Constructor-time, pointed messages.
+- [ ] Conformance check #8: parallel `forward` equals sequential `step`ping — bitwise for RNNs, float tolerance for SSMs. The single check that catches the classic AR bugs (off-by-one state, conv buffer misalignment, leaked normalization statistics).
+- [ ] `save`/`load` round-trips mid-generation state (a checkpoint that cannot resume generation is half a checkpoint).
+- [ ] Viewer: step mode in the run panel (Track B V5) — generate cell-by-cell along time and watch the lattice fill.
 
-- `LSTM`/`GRU`: `(h, c)` — free, `nn.LSTM` already does this.
-- `Mamba`: conv ring buffer (`d_conv-1` inputs) + the selective-scan state —
-  mirrors upstream's inference cache.
-- `S4`/`S4D`: the recurrent view of the same SSM — materialize `(dA, dB)` from
-  the learned parameters (bilinear / ZOH, matching the kernel's
-  discretization) and step `x_{k+1} = dA x_k + dB u_k`. The DPLR case steps in
-  the diagonalized basis, so it stays O(N) per channel per step.
+**Deliberately out of scope, permanently:** sampling policy, beam search, KV caches for attention over time, readout heads — the caller's, same as training loops. `step` is the primitive; generation loops are five lines of user code around it.
 
-**What AR mode must refuse.** A plan that sweeps time backward (bidirectional
-time is a statement that the future is visible — generation cannot honor it),
-and any mixer lacking `step`. Both are constructor-time errors with the usual
-pointed messages.
+---
 
-**Acceptance — the parallel/sequential equivalence check, added to the
-conformance suite as check #8:** feed a sequence through `forward`, then feed
-it step-by-step through `step`, and the outputs must agree — bitwise for the
-RNN family, to float tolerance for the SSM family (convolution-vs-recurrence
-is the same operator computed two ways; the S4 dense-reference test already
-proves the recurrence view equals the kernel). This single check is the whole
-correctness story: it is exactly the test that catches the classic AR bugs
-(off-by-one state, leaked normalization statistics, conv buffer misalignment).
+# Track B — Viewer / GUI mode
 
-**Deliberately out of scope, permanently:** sampling policy, beam search, KV
-caches for attention over time, and readout heads — those belong to the
-caller, same as training loops. `step` is the primitive; generation loops are
-five lines of user code around it.
+The library emits a versioned JSON spec (`td.spec`, SPEC_VERSION 1); the viewer consumes it. The boundary is a document, never a socket into the library.
 
-**Why v0.2 and not now:** stepping touches every mixer and freezes a state
-format into checkpoints (`save`/`load` must round-trip mid-generation state to
-be honest). Doing it after the fused-kernel fast paths would mean doing it
-twice — upstream inference caches and ours must be one design. Sequenced
-after Phase 7's fast-path adapters land.
+## V1 — Static architecture viewer · **done**
+
+- [x] React + Vite + react-three-fiber; lattice rendered as cubes, absent cells genuinely absent; sweep wavefront animated per layer; per-layer timeline; sample specs for 2-D sparse LSTM, 3-D paired Mamba-ND, 4-D S4D.
+- [x] Rank ≥ 4 via **dimensional stacking**: a cube of cubes, spaced groups along the fourth axis (the "16-pack" idea).
+- [x] Open-a-spec-JSON from disk; sidebar with model card, directions, unswept-axis warning.
+
+## V1.5 — Live runs and controls · **done**
+
+- [x] `examples/viewer_live.py`: state to `run.json` after every step; viewer polls, auto-switches, loss chart (train + held-out, log scale), progress bar, status lifecycle.
+- [x] Run controls: the script **waits** — nothing trains until Start is pressed; pause froze the counter (proven 5255 → 5255), resume, stop; control server with CORS; state machine.
+- [x] Presets: `lstm2d`, `mamba4d` (18-layer Mamba-ND over a sparse 4-D lattice — trained live to held-out 9e-5).
+
+## V2 — Ship it in the wheel · M · **next in track**
+
+- [ ] `td.viz.show(model, port=…)`: build the bundle, ship it inside the wheel (`[viz]` extra for the server bits if any; the bundle itself is static files), serve locally, open browser. Zero node required at install time.
+- [ ] The publish workflow builds the viewer bundle and verifies its size (the sdist guard pattern).
+- [ ] `td.viz.show(spec_dict)` and `show(path.json)` variants; `show(checkpoint)` via Phase 8 load.
+- [ ] Playwright smoke in CI: the three samples render, the sidebar populates (the accessibility-tree assertions already proven by hand become a script).
+
+## V3 — Shape flow · M
+
+- [ ] Per-layer tensor-shape inspector: hover a layer, see `(B, [T,] *shape, H)` → fold → `(M, A, H)` → restore, with the actual numbers for a chosen batch size.
+- [ ] The fold visualized: which axes collapse into `M` for the hovered layer (this is the single hardest thing to explain in prose; it is one animation).
+- [ ] Parameter breakdown per layer (bar, hover for tensor names) from the spec's `n_params`.
+
+## V4 — Metrics dashboard · L
+
+- [ ] Multi-run compare: `run.json` grows a run id; the panel lists past runs (ring buffer on disk), overlays loss curves.
+- [ ] More channels: learning rate, gradient norm, per-axis gradient norms (does the `w` sweep learn faster than `h`? — a genuinely novel N-D diagnostic), step time.
+- [ ] Live lattice heatmap: per-cell loss contribution at eval time, painted on the 3-D lattice — *where* on the grid the model is wrong, over training.
+- [ ] Export: PNG of the scene, CSV of metrics.
+
+## V5 — Full GUI mode (the original vision) · XL
+
+- [ ] Config editor in the panel: edit d_model/layers/method/plan with validation via `td.build`'s schema errors, see the architecture update live *before* any training.
+- [ ] Launch from the panel: the control server grows a `POST /launch` that spawns the training script with the edited config (opt-in flag, localhost only, explicitly not a deployment tool).
+- [ ] Expected-output preview: run one forward pass on synthetic data at build time; show output shapes and ranges ("press continue to train").
+- [ ] Plan editor: drag layers, flip directions, see the coverage report (Phase 2's `plan.coverage`) recompute — the aliasing bug rendered as a picture would have caught DEBUG.md #4 in a viewer.
+- [ ] AR step mode (with Phase 12): generate along time, watch the lattice fill cell by cell.
+- [ ] Sparse-mask painter: click cells on/off, export the `valid` mask — the fastest way to build a demo lattice.
+
+---
+
+# Track C — Performance & hardware
+
+## C1 — CUDA verification · M · **blocked on hardware access, unblockable by Colab**
+
+- [ ] Run the full suite on a CUDA box (free Colab T4 suffices: `pip install torch-dimensions && pytest tests/test_device.py` plus the marked-slow full run) — the device suite was built to run there unchanged.
+- [ ] The bitwise rank-1 LSTM claim re-checked under cuDNN (expected: holds per single layer; document whatever is true).
+- [ ] fp16/bf16/AMP conformance additions: the relative-cancellation guard was *designed* dtype-aware; prove it at fp16 where the accidental-safety finding (rounding to exact zero) came from.
+- [ ] A `gpu` CI lane (GitHub GPU runners are paid — decide when Phase 7 fast paths land; until then, a documented manual Colab checklist per release).
+
+## C2 — Fast paths · L (see Phase 7 open items)
+
+- [ ] The adapter pattern: portable path is the reference; fused path must agree with it in the conformance suite on the same machine. Never ship a fast path whose only test is "it ran".
+
+## C3 — Throughput engineering · L · gated on Phase 10 numbers
+
+- [ ] Fused/permute-avoiding fold if Phase 10 says permute dominates (the only justified kernel).
+- [ ] `chunk` auto-tuning from device properties.
+- [ ] Associative-scan (log-depth) portable selective scan.
+- [ ] Activation checkpointing option; memory profile at rank 4.
+- [ ] `torch.compile` graph-break audit per family (the conformance hook exists; make the graphs clean).
+
+## C4 — Distributed sanity · M · v0.3+
+
+- [ ] DDP: one multi-process CPU test that gradients sync correctly (buffers like `cell_mask` must not desync — the `persistent=False` choice needs a test under DDP broadcast).
+- [ ] FSDP smoke with the SSM families (complex-as-real parameters interact with flat-param sharding; find out now, not in a user issue).
+
+---
+
+# Track D — Ecosystem & community
+
+- [ ] Docs site + guides (Phase 11 items; listed here because they gate community, not release).
+- [ ] Example gallery in-repo: one runnable file per (family × method) pair — the matrix is the product; show it as a matrix.
+- [ ] GitHub issue templates that ask for `td.spec(model)` output — the spec doubles as a bug report's reproduction seed.
+- [ ] `CITATION.cff` + a short tech report (arXiv) once Phase 9 rows exist — the sparse-lattice baseline is the publishable nugget.
+- [ ] Hugging Face Hub integration via Phase 8 checkpoints (config + safetensors maps cleanly; do it after safetensors lands, not before).
+- [ ] "State of the lattice" doc: honest comparison table vs mamba-ssm, s4, FLA — what to use when, including "not us".
+- [ ] Conformance badges: a downstream mixer repo can run `check_block` in its CI and claim conformance — write the two paragraphs and the badge that make that a thing.
+
+---
+
+# Track E — Research extensions (parked deliberately; each is a design, not a stub)
+
+- [ ] **Space-filling traversals** (Hilbert/Morton) as a *second step kind* carrying a full cell permutation — rejected from `ScanPlan` v1 because a step is `(axis, reverse)` and a curve is not axis-aligned; the design doc for step-kind-2 must handle sparse lattices (curve over present cells only?) before any code.
+- [ ] **Dynamic-shape lattices**: `dim` without `shape` — rank known, sizes bound at first forward. The scan family needs only rank; masks and kernel-family bias tables need sizes. Doable for dense scan-only models; the design question is what `spec()` and `save()` mean before binding.
+- [ ] **Learned schedules**: differentiable relaxation over sweep order (soft mixture of axis sweeps annealed to a hard plan). Research-grade; the `ScanPlan`-as-data design is what makes it even expressible.
+- [ ] **Hierarchical / nested lattices** (multi-resolution grids, lattice-of-lattices): the S4ND paper's multi-scale appendix and weather models both want this; `Lattice.merge/slice` (Phase 1) is the substrate.
+- [ ] **Masked-pretraining utilities**: random cell masking as a training-time lattice transform — the `valid` machinery already guarantees inertia; the utility is three functions and a tutorial, but only after Phase 9 proves the supervised story.
+- [ ] **Continuous-time lattices**: irregular timestamps per cell (the `dt` in SSMs is *built* for this — S4's continuous-time parameterization applied per-observation). The biggest research swing in the list; would make td the only library doing irregular N-D series natively.
 
 ---
 
 ## Critical path
 
 ```
-                            ┌──► 5 ──┐
-0 ──► 1 ──► 2 ──► 3 ──► 4 ──┼──► 6 ──┼──► 8 ──► 9 ──► 10 ──► 11
-                            └──► 7 ──┘
+                             ┌──► 5 ──┐
+0 ──► 1 ──► 2 ──► 3 ──► 4 ──┼──► 6 ──┼──► 8 ──► [9] ──► [10] ──► docs
+        (all done)           └──► 7 ──┘            │
+                                  │                └──► Track D (needs 9's numbers)
+                                  └──► C1 CUDA ──► C2 fast paths ──► 12 AR (v0.2)
+Track B (viewer): V1 ✅ ── V1.5 ✅ ── [V2] ── V3 ── V4 ── V5 (V5 wants 12)
 ```
 
-Phases 5, 6, and 7 are independent once the conformance suite exists. Phase 7 is the one to defer if GPU access is intermittent, since everything else is CPU-only. That is deliberate: **the library is useful and shippable without a single CUDA kernel.**
+Phases 5, 6, 7 were independent once the conformance suite existed, and that bet paid: all three landed without touching each other. The same principle now says **9 and C1 are independent** — reproduction runs on MPS while CUDA verification happens on Colab — and both feed 10. The library remains useful and shippable without a single CUDA kernel; that stays deliberate.
 
 ---
 
@@ -307,66 +392,15 @@ Phases 5, 6, and 7 are independent once the conformance suite exists. Phase 7 is
 ```
 torch-dimensions/
 ├── pyproject.toml                  hatchling; torch>=2.4 only; extras [mamba] [fla] [dev] [all]
-├── README.md                       pitch, unification table, quickstart, scope limits
-├── DESIGN.md                       architecture
-├── PLAN.md                         this file
-├── CONTRIBUTING.md                 how to add a mixer — the extension point is the product
-├── CHANGELOG.md
-├── LICENSE                         Apache-2.0
-│
+├── README.md · DESIGN.md · PLAN.md · VIEWER.md · DEBUG.md · CHANGELOG.md · CONTRIBUTING.md
+├── .github/workflows/              ci.yml (full-history checkout) · publish.yml (OIDC, size guard)
 ├── src/torch_dimensions/
-│   ├── __init__.py                 public API only; defensive optional imports
-│   ├── lattice.py                  Lattice: axes, names, valid mask, permute/scatter/gather
-│   ├── plan.py                     ScanPlan + constructors
-│   ├── registry.py                 register / build / list_blocks
-│   ├── config.py                   dataclass schemas + YAML loader + save/load
-│   ├── testing.py                  check_block() — the conformance suite, public
-│   │
-│   ├── data/                       BUILDS lattices; never trains them
-│   │   ├── source.py               LatticeSource protocol + in-memory reference
-│   │   ├── table.py                long-format rows -> Lattice + dense tensor
-│   │   ├── window.py               LatticeWindow — time windowing, pure index math
-│   │   └── collate.py              collate_lattice
-│   │
-│   ├── compose/
-│   │   ├── scan.py                 AxialScan — sequential 1-D passes
-│   │   └── kernel.py               AxialKernel — Kronecker contraction + sparse renorm
-│   │
-│   ├── mixers/                     ADAPTERS, not reimplementations
-│   │   ├── base.py                 Mixer protocol: (M, A, H) -> (M, A, H)
-│   │   ├── rnn.py                  LSTM, GRU        (torch.nn)
-│   │   ├── attn.py                 self-attn, cross-attn, factorized axial kernel
-│   │   └── ssm.py                  Mamba-2/3, S4, S5   [optional deps]
-│   │
-│   └── models/
-│       ├── rnn.py                  LSTM, GRU  (1-D without a lattice, N-D with one)
-│       ├── transformer_nd.py       AxialTransformer, factorized axial attention
-│       └── ssm_nd.py               MambaND, S4ND
-│
-├── tests/
-│   ├── test_lattice.py             permutation + scatter/gather round-trips, property-based
-│   ├── test_plan.py
-│   ├── test_conformance.py         parametrized: every block × rank 1–4 × dense/sparse
-│   ├── test_kronecker.py           factorized == explicit ⊗
-│   ├── test_equivalence.py         rank-1 == the underlying 1-D module
-│   ├── test_data.py                coords -> lattice -> back, against a dense reference
-│   ├── test_save_load.py           checkpoint reconstructs its own model, bitwise
-│   └── gpu/                        @pytest.mark.gpu — SSM adapters
-│
-├── benchmarks/
-│   ├── permute_overhead.py         the known risk, measured
-│   └── memory_scaling.py           dense vs factorized, ranks 2–4
-│
-├── examples/
-│   ├── 01_lattice_basics.py
-│   ├── 02_sparse_lattice.py        the differentiator, demonstrated
-│   └── 03_config_driven.py
-│
-└── .github/workflows/ci.yml        ruff + pytest, py3.10–3.12, CPU only
+│   ├── lattice.py · plan.py · spec.py · config.py · testing.py
+│   ├── compose/                    scan.py · kernel.py · attention.py · __init__ (strategies, registry)
+│   ├── mixers/                     base.py · rnn.py · ssm.py
+│   ├── models/                     base.py · rnn.py · ssm.py
+│   └── data/                       coords.py · table.py · window.py · source.py · collate.py
+├── tests/                          one file per module + conformance, device, fuzz, trainable, debug_md
+├── examples/                       train_nd.py · viewer_live.py
+└── viewer/                         Vite + React + react-three-fiber (excluded from sdist)
 ```
-
-Three properties of this layout are load-bearing:
-
-- **`mixers/` are adapters.** That directory is where the composition-layer decision either holds or quietly collapses into a reimplementation.
-- **`testing.py` is public API**, not `tests/`. Users adding their own mixer get the same verification the library uses on itself.
-- **`data/` builds lattices; it does not train them.** The dividing line is that constructing a lattice from real data is this library's own object being constructed, whereas optimizers, losses, schedules, and training loops belong to the caller. No trainers, ever.
