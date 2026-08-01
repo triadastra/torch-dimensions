@@ -225,7 +225,19 @@ round-trips are fuzzed there too. Nothing in the machinery counts axes.
 
 ## License
 
-Apache-2.0. The S4/S4D/Mamba mixer mathematics derives from
-[state-spaces/s4](https://github.com/state-spaces/s4) and
-[state-spaces/mamba](https://github.com/state-spaces/mamba) (both Apache-2.0);
-see `mixers/ssm.py` for what was carried over and what deliberately was not.
+Apache-2.0. [NOTICE](NOTICE) carries the full third-party attribution; the
+short version:
+
+- The S4/S4D/Mamba mixer mathematics **derives from**
+  [state-spaces/s4](https://github.com/state-spaces/s4) and
+  [state-spaces/mamba](https://github.com/state-spaces/mamba), both Apache-2.0.
+  `mixers/ssm.py` states what was carried over and what deliberately was not.
+- Two kernel options (`qk_norm`, `kernel_residual`) are **ideas taken from**
+  [BaratiLab/CaFA](https://github.com/BaratiLab/CaFA) (MIT), independently
+  implemented.
+- `ScanPlan.paired()` implements the schedule **described by**
+  [Mamba-ND](https://github.com/jacklishufan/Mamba-ND), written from the
+  paper. That repository states **no license**, so no code from it is used or
+  redistributed here — see NOTICE.
+
+No third-party code is redistributed in this package.

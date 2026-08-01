@@ -151,11 +151,32 @@ its endpoints, and the interpolation between them is expressible in this
 library's terms but is not currently expressible in its API. Logged as a
 Track E item.
 
-## Licensing
+## Licensing audit
 
-- **state-spaces/s4** — Apache-2.0. A derivation with attribution already
-  lives in `src/torch_dimensions/mixers/ssm.py`.
-- **Mamba-ND** — **no LICENSE file at the commit cloned.** Provenance and
-  usage rights unconfirmed, so it is neither vendored nor redistributed here,
-  and the comparison imports it from a local clone only. Resolve with the
-  authors before any use beyond private study.
+Checked from the files on disk on 2026-08-02, to a depth of four directories,
+for `LICENSE*`, `NOTICE*` and `COPYING*`:
+
+| repo | LICENSE | NOTICE | what we take |
+|---|---|---|---|
+| state-spaces/s4 | Apache-2.0 | none | S4/S4D kernel mathematics — a **derivation**, attributed in `mixers/ssm.py` |
+| state-spaces/mamba | Apache-2.0 | none | selective-scan recurrence — a **derivation**, same file |
+| BaratiLab/CaFA | MIT (© 2024 BaratiLab) | none | two **ideas** (`qk_norm`, `kernel_residual`), independently implemented |
+| jacklishufan/Mamba-ND | **none** | none | an **algorithm** described in the paper (`ScanPlan.paired`); no code |
+
+Neither Apache-2.0 upstream ships a NOTICE, so section 4(d) creates nothing to
+propagate. Our own `NOTICE` carries the attributions above and ships with the
+package.
+
+**Mamba-ND is the one to be careful with.** It states no license anywhere, and
+eight of its files carry `Copyright (c) OpenMMLab` headers — OpenMMLab code is
+Apache-2.0, which asks a redistributor to ship the license with it. Whatever
+the explanation, the practical consequence for this project is the same one it
+already followed: no code from that repository is copied, vendored or
+redistributed here, and `verify_mamba_nd.py` imports it from a user's own
+clone for comparison only. Anyone building on it should settle the question
+with its authors.
+
+*(A false positive worth noting so the next person does not chase it: `s4`
+contains several files named `copying.py` / `copying.yaml`. That is the
+synthetic **copying task** from the long-range-arena literature, not a
+license.)*
