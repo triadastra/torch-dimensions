@@ -1,6 +1,8 @@
 """Phase 2 acceptance for ScanPlan. See PLAN.md."""
 
+import json
 import math
+import warnings
 
 import pytest
 
@@ -250,3 +252,71 @@ def test_a_plan_survives_use_as_a_dict_key():
     plan = ScanPlan.cyclic(("a", "b"), 4)
     store = {plan: "value"}
     assert store[ScanPlan.cyclic(("a", "b"), 4)] == "value"
+
+
+# -- algebra ---------------------------------------------------------------
+
+
+def test_plans_concatenate_and_repeat():
+    a = ScanPlan.from_list([("h", False)])
+    b = ScanPlan.from_list([("w", True)])
+    assert (a + b).steps == (Step("h", False), Step("w", True))
+    assert len(a * 3) == 3 and (a * 3).steps == a.steps * 3
+    assert 2 * a == a * 2
+    with pytest.raises(ValueError, match="at least once"):
+        a * 0
+
+
+def test_reversed_is_layer_order_and_flipped_is_direction():
+    plan = ScanPlan.from_list([("h", False), ("w", True)])
+    assert plan.reversed().steps == (Step("w", True), Step("h", False))
+    assert plan.flipped().steps == (Step("h", True), Step("w", False))
+    assert plan.flipped().flipped() == plan
+
+
+def test_a_plan_plus_its_flip_makes_every_axis_bidirectional():
+    """The composition identity the algebra exists for: whatever the schedule,
+    `p + p.flipped()` covers both directions everywhere it swept at all."""
+    lat = Lattice(shape=(4, 5), names=("h", "w"), time=True)
+    plan = ScanPlan.cyclic(("time", "h", "w"), 3, warn=False)
+    both = plan + plan.flipped()
+    cov = both.coverage(lat)
+    assert cov.unswept == () and cov.pinned == ()
+    assert all(a.direction == "both" for a in cov.axes)
+
+
+# -- coverage --------------------------------------------------------------
+
+
+def test_coverage_counts_directions_and_names_the_untouched_axes():
+    lat = Lattice(shape=(3, 4), names=("h", "w"), time=True)
+    plan = ScanPlan.from_list([("time", False), ("h", False), ("h", True)])
+    cov = plan.coverage(lat)
+    assert cov.n_layers == 3
+    assert [a.name for a in cov.axes] == ["time", "h", "w"]
+    assert cov["h"].forward == 1 and cov["h"].backward == 1
+    assert cov["h"].direction == "both" and cov["h"].layers == (1, 2)
+    assert cov["time"].direction == "forward"
+    assert cov["w"].direction == "none" and cov["w"].n_sweeps == 0
+    assert cov.unswept == ("w",)
+    assert cov.pinned == ("time",)
+    assert cov.directions() == {"time": "forward", "h": "both"}
+
+
+def test_coverage_reports_without_warning():
+    """A report that warns cannot be used to decide whether to warn — the
+    constructor's check and the viewer's spec both call this."""
+    lat = Lattice(shape=(3, 4), names=("h", "w"))
+    plan = ScanPlan.from_list([("h", False)])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        cov = plan.coverage(lat)
+    assert cov.unswept == ("w",)
+
+
+def test_coverage_round_trips_to_plain_data():
+    lat = Lattice(shape=(2, 2), names=("h", "w"))
+    d = ScanPlan.cyclic(("h", "w"), 4, bidirectional=True).coverage(lat).to_dict()
+    assert json.loads(json.dumps(d)) == d
+    assert d["unswept"] == [] and d["pinned"] == []
+    assert d["axes"][0]["direction"] == "both"

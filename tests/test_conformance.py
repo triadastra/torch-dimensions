@@ -222,3 +222,51 @@ def test_checks_run_only_at_ranks_the_caller_requested():
     )
     assert not report.failed, str(report)
     assert any("rank 1" in r.detail for r in report.skipped), str(report)
+
+
+# -- high ranks --------------------------------------------------------------
+
+
+@pytest.mark.parametrize("rank", [5, 6])
+def test_the_scan_family_conforms_at_ranks_five_and_six(rank):
+    """The machinery is rank-generic by construction; that is a claim, and this
+    is the test of it. Ranks 5-6 were shipped untested for one release — the
+    README said so — because "generic" felt like enough. It is not: a rank-6
+    lattice is 5,040 cells and every axis bug that hides behind a lucky square
+    shape at rank 2 has room to show here."""
+    report = td.testing.check_block(rnn_factory(LSTM, n_layers=3), ranks=(rank,), d_model=2)
+    assert report, str(report)
+
+
+@pytest.mark.parametrize("rank", [5, 6])
+def test_the_kernel_family_conforms_at_ranks_five_and_six(rank):
+    def build(lat, d_model, plan=None):
+        return td.AxialKernel(
+            mixer=None,
+            plan=plan or td.ScanPlan.cyclic(lat.axis_names, len(lat.axis_names)),
+            lattice=lat,
+            d_model=d_model,
+        )
+
+    report = td.testing.check_block(build, ranks=(rank,), d_model=2)
+    assert report, str(report)
+
+
+def test_a_rank_five_model_trains():
+    """Conformance says the plumbing is right; this says the thing still learns
+    when five axes have to be reached through three layers."""
+    lat = td.Lattice(shape=(2, 2, 3, 2, 2), names=("a", "b", "c", "d", "e"))
+    model = td.LSTM(d_model=8, n_layers=5, lattice=lat, d_input=1)
+    x = torch.randn(4, *lat.shape, 1)
+    y = x.cumsum(dim=lat.tensor_dim("c"))
+    head = nn.Linear(8, 1)
+    opt = torch.optim.Adam([*model.parameters(), *head.parameters()], lr=3e-2)
+    first = last = None
+    for step in range(60):
+        loss = (head(model(x)) - y).pow(2).mean()
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        first = float(loss.detach()) if step == 0 else first
+        last = float(loss.detach())
+    assert last < first * 0.25, f"rank-5 model did not learn: {first:.4f} -> {last:.4f}"

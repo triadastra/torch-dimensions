@@ -144,8 +144,12 @@ lattices from data, it never trains on them.
 
 **Not yet:** autoregressive stepping (forward-only for now — designed as
 [PLAN.md](PLAN.md) Phase 12 for v0.2: a `step`/`init_state` protocol with a
-parallel-vs-sequential equivalence check), ranks ≥ 5 (machinery is
-rank-generic but untested there), fused-kernel fast paths.
+parallel-vs-sequential equivalence check), fused-kernel fast paths, multi-head
+axial kernels.
+
+**Rank** is not a limit: both composition families pass the full conformance
+suite at ranks 5 and 6 (a rank-6 lattice is 5,040 cells), and the fold
+round-trips are fuzzed there too. Nothing in the machinery counts axes.
 
 ## License
 

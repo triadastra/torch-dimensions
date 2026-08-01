@@ -94,29 +94,21 @@ def _n_params(module: nn.Module) -> int:
     return sum(p.numel() for p in module.parameters())
 
 
-def _unswept(plan: ScanPlan, lat: Lattice) -> list[str]:
-    resolved = plan.resolve(lat) if not plan.is_resolved() else plan
-    touched = {s.axis for s in resolved}
-    return [lat.axis_names[i] for i in range(lat.n_axes) if i not in touched]
-
-
-def _directions(plan: ScanPlan, lat: Lattice) -> dict[str, str]:
-    """Which directions each axis is actually swept in.
+def sweeps_spec(plan: ScanPlan, lat: Lattice) -> dict[str, Any]:
+    """Which directions each axis is actually swept in, and which are missed.
 
     Surfaced explicitly because "every layer sweeps this axis the same way" is
     invisible in code and obvious in a picture — it is the failure the viewer
-    exists to make loud.
+    exists to make loud. Derived from :meth:`ScanPlan.coverage`, the one place
+    that computation lives.
     """
-    resolved = plan.resolve(lat) if not plan.is_resolved() else plan
-    seen: dict[int, set[bool]] = {}
-    for s in resolved:
-        seen.setdefault(cast(int, s.axis), set()).add(s.reverse)
-    out = {}
-    for axis, dirs in seen.items():
-        out[lat.axis_names[axis]] = (
-            "both" if len(dirs) == 2 else ("backward" if True in dirs else "forward")
-        )
-    return out
+    cov = plan.coverage(lat)
+    return {
+        "directions": cov.directions(),
+        "unswept_axes": list(cov.unswept),
+        "pinned_axes": list(cov.pinned),
+        "coverage": cov.to_dict(),
+    }
 
 
 def spec(model: nn.Module) -> dict[str, Any]:
@@ -170,10 +162,7 @@ def scan_model_spec(model: nn.Module) -> dict[str, Any]:
         },
         "lattice": lattice_spec(lat),
         "layers": layers,
-        "sweeps": {
-            "directions": _directions(plan, lat),
-            "unswept_axes": _unswept(plan, lat),
-        },
+        "sweeps": sweeps_spec(plan, lat),
         "io": {
             "input": [*lead, *lat.shape, d_input],
             "output": [*lead, *lat.shape, d_model],

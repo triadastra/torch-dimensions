@@ -120,3 +120,51 @@ def test_coords_encode_decode_round_trip_on_random_tables():
         for row, flat in zip(rows, cm.index.tolist(), strict=True):
             assert cm.decode(flat) == row, f"[{i}] {row} -> {cm.decode(flat)}"
         assert torch.equal(cm.encode(rows), cm.index), f"[{i}] encode != index"
+
+
+def test_fold_round_trips_at_ranks_five_and_six():
+    """The rank-1..4 envelope above found real bugs; the machinery claims to be
+    rank-generic, so the envelope should stop where patience does, not where
+    the claim does. Sizes stay tiny: rank is the variable under test."""
+    g = torch.Generator().manual_seed(5)
+    for i in range(20):
+        rank = 5 + int(torch.randint(0, 2, (1,), generator=g))
+        time = bool(torch.randint(0, 2, (1,), generator=g))
+        shape = tuple(int(torch.randint(1, 4, (1,), generator=g)) for _ in range(rank))
+        valid = torch.rand(shape, generator=g) > 0.5
+        valid.reshape(-1)[0] = True
+        lat = td.Lattice(shape=shape, valid=valid, time=time)
+        lead = (2, 2) if time else (2,)
+        x = torch.randn(*lead, *shape, 2, generator=g)
+        for axis in range(lat.n_axes):
+            seq, restore = lat.to_sequence(x, axis)
+            assert seq.shape[-2] == (x.shape[1] if time and axis == 0 else shape[axis - int(time)])
+            assert torch.equal(lat.from_sequence(seq, restore), x), f"[{i}] axis {axis} {lat}"
+        xm = x * lat.mask().to(x.dtype)
+        assert torch.equal(lat.scatter(lat.gather(xm)), xm), f"[{i}] {lat}"
+
+
+def test_stress_shapes_that_fuzz_would_have_to_be_lucky_to_draw():
+    """Degenerate geometries, as explicit cases rather than as fuzz luck: every
+    axis length 1, a single existing cell, and one very long axis."""
+    cases = [
+        td.Lattice(shape=(1, 1, 1, 1), time=True),
+        td.Lattice(shape=(1,), time=False),
+        td.Lattice(
+            shape=(3, 3),
+            valid=torch.eye(3, dtype=torch.bool)[:, [0, 0, 0]]
+            & torch.tensor([[True, False, False], [False, False, False], [False, False, False]]),
+        ),
+        td.Lattice(shape=(10_000, 1), names=("long", "thin")),
+        td.Lattice(shape=(1, 7), names=("thin", "wide"), time=True),
+    ]
+    for lat in cases:
+        lead = (1, 2) if lat.time else (1,)
+        x = torch.randn(*lead, *lat.shape, 2)
+        for axis in range(lat.n_axes):
+            seq, restore = lat.to_sequence(x, axis)
+            assert torch.equal(lat.from_sequence(seq, restore), x), f"{lat} axis {axis}"
+        xm = x * lat.mask().to(x.dtype)
+        assert torch.equal(lat.scatter(lat.gather(xm)), xm), f"{lat}"
+        for name in lat.names or ():
+            assert lat.valid_counts(name).min() >= 1, f"{lat} {name}"

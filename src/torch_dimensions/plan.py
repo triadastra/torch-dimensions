@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     from torch_dimensions.lattice import Lattice
 
-__all__ = ["ScanPlan", "Step"]
+__all__ = ["AxisCoverage", "Coverage", "ScanPlan", "Step"]
 
 AxisSpec = int | str
 
@@ -30,6 +31,94 @@ class Step(NamedTuple):
 
     axis: AxisSpec
     reverse: bool = False
+
+
+@dataclass(frozen=True)
+class AxisCoverage:
+    """What one axis actually receives from a plan."""
+
+    name: str
+    index: int
+    layers: tuple[int, ...]
+    """Layer indices that sweep this axis, in order."""
+    forward: int
+    backward: int
+
+    @property
+    def n_sweeps(self) -> int:
+        return self.forward + self.backward
+
+    @property
+    def direction(self) -> str:
+        """``"both"``, ``"forward"``, ``"backward"``, or ``"none"``."""
+        if self.forward and self.backward:
+            return "both"
+        if self.forward:
+            return "forward"
+        return "backward" if self.backward else "none"
+
+
+@dataclass(frozen=True)
+class Coverage:
+    """A machine-readable report of what a plan does to a lattice.
+
+    The question "does this schedule actually reach every axis, in both
+    directions" is asked by the constructor's warning, by the spec the viewer
+    renders, and by anyone reading a plan — three places that each used to
+    recompute it. This is the one answer they share.
+
+    Purely descriptive: unlike :meth:`ScanPlan.resolve` it never warns, because
+    a report that emits warnings cannot be used to decide whether to warn.
+    """
+
+    n_layers: int
+    axes: tuple[AxisCoverage, ...]
+    """Every lattice axis, swept or not, in lattice order."""
+
+    @property
+    def unswept(self) -> tuple[str, ...]:
+        return tuple(a.name for a in self.axes if a.n_sweeps == 0)
+
+    @property
+    def pinned(self) -> tuple[str, ...]:
+        """Axes swept in exactly one direction — half the receptive field."""
+        return tuple(a.name for a in self.axes if a.direction in ("forward", "backward"))
+
+    def directions(self) -> dict[str, str]:
+        """Axis name to direction, swept axes only (the spec's shape)."""
+        return {a.name: a.direction for a in self.axes if a.n_sweeps}
+
+    def __getitem__(self, name: str) -> AxisCoverage:
+        for a in self.axes:
+            if a.name == name:
+                return a
+        raise KeyError(f"no axis {name!r} in coverage; has {[a.name for a in self.axes]}")
+
+    def to_dict(self) -> dict:
+        return {
+            "n_layers": self.n_layers,
+            "axes": [
+                {
+                    "name": a.name,
+                    "index": a.index,
+                    "layers": list(a.layers),
+                    "forward": a.forward,
+                    "backward": a.backward,
+                    "direction": a.direction,
+                }
+                for a in self.axes
+            ],
+            "unswept": list(self.unswept),
+            "pinned": list(self.pinned),
+        }
+
+    def __repr__(self) -> str:
+        width = max((len(a.name) for a in self.axes), default=1)
+        rows = "\n".join(
+            f"  {a.name:<{width}}  {a.forward:>3}→ {a.backward:>3}←  {a.direction}"
+            for a in self.axes
+        )
+        return f"Coverage({self.n_layers} layers)\n{rows}"
 
 
 class ScanPlan:
@@ -232,6 +321,69 @@ class ScanPlan:
 
     def is_resolved(self) -> bool:
         return all(isinstance(s.axis, int) for s in self.steps)
+
+    # -- algebra ------------------------------------------------------------
+
+    def __add__(self, other: ScanPlan) -> ScanPlan:
+        """Concatenate two schedules: ``a + b`` runs a's layers, then b's."""
+        if not isinstance(other, ScanPlan):
+            return NotImplemented
+        return ScanPlan((*self.steps, *other.steps))
+
+    def __mul__(self, k: int) -> ScanPlan:
+        """Repeat the schedule ``k`` times."""
+        if not isinstance(k, int) or isinstance(k, bool):
+            return NotImplemented
+        if k < 1:
+            raise ValueError(f"a plan must be repeated at least once; got {k}")
+        return ScanPlan(self.steps * k)
+
+    __rmul__ = __mul__
+
+    def reversed(self) -> ScanPlan:
+        """The same layers in the opposite **order**.
+
+        Layer order, not sweep direction — the axes and their ``reverse`` flags
+        are untouched. For the mirror-image sweep use :meth:`flipped`; the two
+        are different plans and naming only one of them "reversed" is how they
+        get confused.
+        """
+        return ScanPlan(tuple(reversed(self.steps)))
+
+    def flipped(self) -> ScanPlan:
+        """The same layers in the same order, every sweep **direction** negated.
+
+        Makes bidirectionality composable: ``plan + plan.flipped()`` gives every
+        axis both directions in a schedule of twice the depth, whatever the
+        original was.
+        """
+        return ScanPlan(tuple(Step(s.axis, not s.reverse) for s in self.steps))
+
+    # -- coverage -----------------------------------------------------------
+
+    def coverage(self, lattice: Lattice) -> Coverage:
+        """Report what this plan does to every axis of ``lattice``.
+
+        Includes axes the plan never touches — the interesting ones are exactly
+        the ones absent from the schedule, so a report keyed only by what the
+        plan mentions cannot show them.
+        """
+        seen: dict[int, list[tuple[int, bool]]] = {}
+        for layer, s in enumerate(self.steps):
+            seen.setdefault(lattice.axis_index(s.axis), []).append((layer, s.reverse))
+        axes = []
+        for i in range(lattice.n_axes):
+            hits = seen.get(i, [])
+            axes.append(
+                AxisCoverage(
+                    name=lattice.axis_names[i],
+                    index=i,
+                    layers=tuple(layer for layer, _ in hits),
+                    forward=sum(1 for _, rev in hits if not rev),
+                    backward=sum(1 for _, rev in hits if rev),
+                )
+            )
+        return Coverage(n_layers=len(self.steps), axes=tuple(axes))
 
     # -- binding to a lattice -----------------------------------------------
 

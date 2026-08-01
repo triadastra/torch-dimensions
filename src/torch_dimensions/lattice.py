@@ -19,12 +19,13 @@ causality is a property of the mixer, not of the axis.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import NamedTuple
 
 import torch
 
-__all__ = ["Lattice", "Restore"]
+__all__ = ["Lattice", "Restore", "Sub"]
 
 AxisSpec = int | str
 
@@ -35,6 +36,31 @@ class Restore(NamedTuple):
 
     axis: int
     shape: torch.Size
+
+
+class Sub(NamedTuple):
+    """A sub-lattice and the tensor selection that produces it.
+
+    Returned by :meth:`Lattice.sliced`. The pair travels together on purpose:
+    a sub-lattice whose selection is re-derived by the caller is a lattice and
+    a tensor that agree only as long as nobody edits one of them.
+    """
+
+    lattice: Lattice
+    indices: tuple[torch.Tensor, ...]
+    """One index vector per lattice axis, into that axis of the parent."""
+
+    def take(self, x: torch.Tensor) -> torch.Tensor:
+        """Select the sub-lattice out of a parent-shaped ``(B, [T,] *shape, H)``."""
+        lead = 1 + (1 if self.lattice.time else 0)
+        for i, idx in enumerate(self.indices):
+            dim = lead + i
+            if idx.numel() == x.shape[dim] and bool(
+                torch.equal(idx, torch.arange(idx.numel(), device=idx.device))
+            ):
+                continue  # a full-axis selection is a copy nobody asked for
+            x = x.index_select(dim, idx.to(x.device))
+        return x
 
 
 @dataclass(eq=False)
@@ -164,6 +190,104 @@ class Lattice:
         if self.valid is None:
             return self
         return Lattice(self.shape, self.names, self.valid.to(device), self.time)
+
+    # -- sub-lattices -------------------------------------------------------
+
+    def sliced(self, **selection: slice | Sequence[int] | torch.Tensor) -> Sub:
+        """Cut a sub-lattice out along one or more named axes.
+
+        Splitting an experiment over *space* — hold out a region, train on the
+        rest — is otherwise hand-rolled index arithmetic against a validity
+        mask, which is the same class of bug this module exists to remove.
+        Axes not mentioned are kept whole::
+
+            sub = lat.sliced(row=slice(0, 4), col=[0, 2, 5])
+            model = td.Mamba(64, 12, lattice=sub.lattice)
+            y = model(sub.take(x))
+
+        The rank never changes: an axis is narrowed, never dropped, so a
+        sub-lattice is interchangeable with its parent everywhere a lattice is
+        accepted. Select a single position with ``slice(i, i + 1)`` — an
+        integer would silently change the rank of every tensor downstream, and
+        a rank that changes because of a train/test split is not a rank.
+        """
+        if self.time and "time" in selection:
+            raise ValueError(
+                "'time' has no static size, so it cannot be sliced here; "
+                "window the data instead (td.data.LatticeWindow)"
+            )
+        idx: list[torch.Tensor] = []
+        for i, size in enumerate(self.shape):
+            assert self.names is not None
+            name = self.names[i]
+            sel = selection.pop(name, None)
+            if sel is None:
+                idx.append(torch.arange(size))
+            elif isinstance(sel, slice):
+                idx.append(torch.arange(size)[sel])
+            elif isinstance(sel, int):
+                raise TypeError(
+                    f"axis {name!r}: an integer index would drop the axis and change the "
+                    f"lattice rank; use slice({sel}, {sel + 1}) to keep it"
+                )
+            else:
+                v = torch.as_tensor(sel, dtype=torch.long).reshape(-1)
+                if v.numel() and (int(v.min()) < 0 or int(v.max()) >= size):
+                    raise IndexError(f"axis {name!r}: indices out of range for size {size}")
+                idx.append(v)
+            if idx[-1].numel() == 0:
+                raise ValueError(f"axis {name!r}: selection is empty; a lattice axis needs a cell")
+        if selection:
+            raise KeyError(f"unknown axes {sorted(selection)}; lattice has {self.names}")
+
+        valid = None
+        if self.valid is not None:
+            valid = self.valid
+            for i, v in enumerate(idx):
+                valid = valid.index_select(i, v.to(valid.device))
+            if not bool(valid.any()):
+                raise ValueError("the selected sub-lattice contains no existing cells")
+        sub = Lattice(tuple(int(v.numel()) for v in idx), self.names, valid, self.time)
+        return Sub(sub, tuple(idx))
+
+    @classmethod
+    def merge(cls, lattices: Sequence[Lattice], axis: AxisSpec) -> Lattice:
+        """Concatenate lattices along ``axis`` — the inverse of :meth:`sliced`.
+
+        Every input must agree on names, on ``time``, and on every axis size
+        but ``axis``. Sparsity survives: a dense input contributes a full block,
+        so merging dense with sparse yields the honest mixed mask rather than
+        quietly dropping either claim. Concatenate the data yourself along
+        ``lattice.tensor_dim(axis)`` — the lattice describes tensors, it does
+        not hold them.
+        """
+        lats = list(lattices)
+        if not lats:
+            raise ValueError("need at least one lattice to merge")
+        head = lats[0]
+        i = head.lattice_index(axis)
+        for other in lats[1:]:
+            if other.names != head.names or other.time != head.time:
+                raise ValueError(f"lattices must agree on names and time; {head!r} vs {other!r}")
+            if len(other.shape) != len(head.shape) or any(
+                a != b
+                for j, (a, b) in enumerate(zip(head.shape, other.shape, strict=True))
+                if j != i
+            ):
+                raise ValueError(
+                    f"lattices may differ only along {head.axis_names[head.axis_index(axis)]!r}; "
+                    f"got {head.shape} and {other.shape}"
+                )
+        shape = list(head.shape)
+        shape[i] = sum(lat.shape[i] for lat in lats)
+        valid = None
+        if any(not lat.is_dense for lat in lats):
+            blocks = [
+                lat.valid if lat.valid is not None else torch.ones(lat.shape, dtype=torch.bool)
+                for lat in lats
+            ]
+            valid = torch.cat([b.to(blocks[0].device) for b in blocks], dim=i)
+        return cls(tuple(shape), head.names, valid, head.time)
 
     # -- axis resolution ----------------------------------------------------
 

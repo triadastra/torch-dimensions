@@ -300,3 +300,86 @@ def test_the_callers_valid_tensor_is_not_aliased():
     v[0, 0] = False  # the caller's own tensor, edited after construction
     assert lat.n_valid == 3
     assert lat.flat_idx.tolist() == [0, 1, 2]
+
+
+# -- sub-lattices ----------------------------------------------------------
+
+
+def test_sliced_narrows_axes_and_the_selection_matches_the_sub_lattice():
+    lat = Lattice(shape=(4, 5), names=("row", "col"), time=True)
+    sub = lat.sliced(row=slice(1, 3), col=[0, 2, 4])
+    assert sub.lattice.shape == (2, 3)
+    assert sub.lattice.names == ("row", "col") and sub.lattice.time
+    x = torch.arange(2 * 3 * 4 * 5 * 2).reshape(2, 3, 4, 5, 2).float()
+    got = sub.take(x)
+    assert tuple(got.shape) == (2, 3, 2, 3, 2)
+    assert torch.equal(got, x[:, :, 1:3][:, :, :, [0, 2, 4]])
+
+
+def test_sliced_carries_the_validity_mask_through():
+    valid = torch.tensor([[True, False, True], [False, False, True], [True, True, False]])
+    lat = Lattice(shape=(3, 3), names=("a", "b"), valid=valid)
+    sub = lat.sliced(a=slice(0, 2))
+    assert torch.equal(sub.lattice.valid, valid[:2])
+    assert sub.lattice.n_valid == 3
+
+
+def test_an_unmentioned_axis_is_kept_whole():
+    lat = Lattice(shape=(3, 4), names=("a", "b"))
+    sub = lat.sliced(b=slice(0, 2))
+    assert sub.lattice.shape == (3, 2)
+    x = torch.randn(2, 3, 4, 1)
+    assert torch.equal(sub.take(x), x[:, :, :2])
+
+
+def test_slicing_refuses_what_would_change_the_rank_or_empty_an_axis():
+    lat = Lattice(shape=(3, 4), names=("a", "b"), time=True)
+    with pytest.raises(TypeError, match="slice\\(1, 2\\)"):
+        lat.sliced(a=1)
+    with pytest.raises(ValueError, match="empty"):
+        lat.sliced(a=slice(2, 2))
+    with pytest.raises(KeyError, match="nope"):
+        lat.sliced(nope=slice(0, 1))
+    with pytest.raises(IndexError, match="out of range"):
+        lat.sliced(a=[0, 9])
+    with pytest.raises(ValueError, match="time"):
+        lat.sliced(time=slice(0, 1))
+
+
+def test_slicing_away_every_existing_cell_is_refused():
+    valid = torch.tensor([[True, True], [False, False]])
+    lat = Lattice(shape=(2, 2), names=("a", "b"), valid=valid)
+    with pytest.raises(ValueError, match="no existing cells"):
+        lat.sliced(a=slice(1, 2))
+
+
+def test_merge_is_the_inverse_of_sliced():
+    valid = torch.rand(6, 4) > 0.4
+    valid[0, 0] = True
+    lat = Lattice(shape=(6, 4), names=("a", "b"), valid=valid, time=True)
+    left = lat.sliced(a=slice(0, 4))
+    right = lat.sliced(a=slice(4, 6))
+    back = Lattice.merge([left.lattice, right.lattice], "a")
+    assert back.shape == lat.shape
+    assert torch.equal(back.valid, lat.valid)
+    x = torch.randn(2, 3, 6, 4, 5)
+    rebuilt = torch.cat([left.take(x), right.take(x)], dim=lat.tensor_dim("a"))
+    assert torch.equal(rebuilt, x)
+
+
+def test_merging_a_dense_lattice_with_a_sparse_one_keeps_both_claims():
+    dense = Lattice(shape=(2, 2), names=("a", "b"))
+    sparse = Lattice(shape=(1, 2), names=("a", "b"), valid=torch.tensor([[True, False]]))
+    merged = Lattice.merge([dense, sparse], "a")
+    assert merged.shape == (3, 2)
+    assert merged.valid.tolist() == [[True, True], [True, True], [True, False]]
+
+
+def test_merge_refuses_lattices_that_disagree():
+    a = Lattice(shape=(2, 3), names=("a", "b"))
+    with pytest.raises(ValueError, match="only along"):
+        Lattice.merge([a, Lattice(shape=(2, 4), names=("a", "b"))], "a")
+    with pytest.raises(ValueError, match="names and time"):
+        Lattice.merge([a, Lattice(shape=(2, 3), names=("a", "b"), time=True)], "a")
+    with pytest.raises(ValueError, match="at least one"):
+        Lattice.merge([], "a")
