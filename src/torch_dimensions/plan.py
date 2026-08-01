@@ -254,8 +254,9 @@ class ScanPlan:
         implementation uses, written here from the description rather than
         from their code (which states no license — see NOTICE) and since
         checked against it layer for layer: it advances the axis ordering
-        every *two* layers while flipping direction every layer — so each ordering is used once forward and once
-        backward, and no phase-locking is possible for any axis count. Axes
+        every *two* layers while flipping direction every layer — so each
+        ordering is used once forward and once backward, and no phase-locking
+        is possible for any axis count. Axes
         outside ``bidirectional`` take a single forward layer instead of two.
 
         Prefer this over :meth:`cyclic` when layers are plentiful: it gives an

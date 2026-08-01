@@ -772,6 +772,15 @@ to a developer's environment rather than to this repo, so it is recorded here
 rather than committed. The honest status is: the tool is right, the habit is
 not, and the guard that caught both was CI.
 
+**Third instance, and a different failure.** Two commits later I *did* run
+`scripts/check.sh` — and then committed and pushed in the same shell command,
+reading its output only after the push had gone out. The gate had exited 1 on
+a long line in a docstring I had just edited. Running the check and *gating on
+the check* are not the same act; a gate whose exit status you do not branch on
+is a log message. The pattern is now: forgot to run it, ran the wrong one, ran
+the right one and ignored the result. Each is a smaller mistake than the last,
+which is progress of a sort, and each produced an identical red build.
+
 **And then running it found a defect in it.** The first honest run of
 `scripts/check.sh` failed — on four `UP038` violations that CI cannot possibly
 report, because the rule was *removed* from ruff before the version CI
