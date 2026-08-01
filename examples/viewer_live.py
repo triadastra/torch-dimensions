@@ -35,7 +35,8 @@ import torch.nn as nn
 import torch_dimensions as td
 
 OUT = Path(__file__).resolve().parent.parent / "viewer" / "public" / "run.json"
-STEPS = int(os.environ.get("TD_VIEWER_STEPS", "300"))
+PRESET = os.environ.get("TD_VIEWER_PRESET", "lstm2d")
+STEPS = int(os.environ.get("TD_VIEWER_STEPS", "2000" if PRESET == "mamba4d" else "300"))
 EVAL_EVERY = 10
 CONTROL_PORT = 8765
 
@@ -127,23 +128,41 @@ def pick_device() -> str:
     return "cpu"
 
 
-def main() -> None:
-    device = pick_device()
+def build(preset: str):
+    """Presets: lstm2d (small, fast) and mamba4d (the deep end — a sparse 4-D
+    lattice under Mamba-ND with the official paired schedule)."""
     torch.manual_seed(0)
-
+    if preset == "mamba4d":
+        valid = torch.rand(4, 5, 6, 4) > 0.3
+        valid.reshape(-1)[0] = True
+        lat = td.Lattice(
+            shape=(4, 5, 6, 4), names=("depth", "row", "col", "group"), valid=valid, time=True
+        )
+        plan = td.ScanPlan.paired(
+            lat.axis_names, n_layers=18, bidirectional=("depth", "row", "col", "group")
+        )
+        model = td.Mamba(d_model=48, lattice=lat, plan=plan, d_input=1, d_state=16)
+        task = "cumsum along col — sparse 4×5×6×4, Mamba-ND, paired schedule"
+        return lat, model, task, "col", 4, 6
     valid = torch.rand(6, 8) > 0.25
     valid[0, 0] = True
     lat = td.Lattice(shape=(6, 8), names=("h", "w"), valid=valid, time=True)
     model = td.LSTM(d_model=32, n_layers=6, lattice=lat, d_input=1, bidirectional=("h", "w"))
+    return lat, model, "cumsum along w (sparse 6×8 lattice)", "w", 8, 5
+
+
+def main() -> None:
+    device = pick_device()
+    lat, model, task, target_axis, batch, t_len = build(PRESET)
     model = model.to(device)
-    head = nn.Linear(32, 1).to(device)
+    head = nn.Linear(model.config["d_model"], 1).to(device)
     opt = torch.optim.Adam([*model.parameters(), *head.parameters()], lr=1e-2)
 
     mask = lat.mask(torch.float32).to(device)
-    w_dim = lat.tensor_dim("w")
+    w_dim = lat.tensor_dim(target_axis)
 
     def draw(g: torch.Generator) -> tuple[torch.Tensor, torch.Tensor]:
-        x = torch.randn(8, 5, 6, 8, 1, generator=g).to(device) * mask
+        x = torch.randn(batch, t_len, *lat.shape, 1, generator=g).to(device) * mask
         return x, x.cumsum(dim=w_dim) * mask
 
     ctrl = Control()
@@ -152,7 +171,7 @@ def main() -> None:
     run: dict = {
         "started": time.time(),
         "device": device,
-        "task": "cumsum along w (sparse 6×8 lattice)",
+        "task": task,
         "status": "waiting",
         "control": f"http://127.0.0.1:{CONTROL_PORT}",
         "total_steps": STEPS,
