@@ -107,13 +107,44 @@ def _family(nd: nn.Module) -> str:
     be something it is not (DEBUG.md #26).
     """
     from torch_dimensions.compose.attention import AxialKernel
+    from torch_dimensions.compose.flatten import Flatten
     from torch_dimensions.compose.scan import AxialScan
 
     if isinstance(nd, AxialScan):
         return "scan"
     if isinstance(nd, AxialKernel):
         return "kernel"
+    if isinstance(nd, Flatten):
+        return "flatten"
     return type(nd).__name__
+
+
+def flatten_layers_spec(nd: Any, lat: Lattice) -> list[dict[str, Any]]:
+    """Per-layer description for the joint (flatten) family.
+
+    Every layer mixes every axis at once, so there is no axis to name and no
+    direction to give. ``axes`` lists what the layer actually spans, which for
+    this family is the whole lattice.
+    """
+    spanned = [n for n in lat.axis_names if n != "time" or nd.join_time]
+    return [
+        {
+            "layer": i,
+            "kind": "flatten",
+            "axis": None,
+            "axis_index": None,
+            "reverse": False,
+            "axes": spanned,
+            # Present cells per timestep. With `join_time` the actual sequence
+            # is this times the (dynamic) number of timesteps, which is why
+            # the static document reports the part it can know.
+            "tokens": nd.seq_len,
+            "joins_time": bool(nd.join_time),
+            "mixer": type(nd.mixers[i]).__name__,
+            "n_params": _n_params(nd.mixers[i]),
+        }
+        for i in range(len(nd.plan))
+    ]
 
 
 def kernel_layers_spec(nd: Any, lat: Lattice) -> list[dict[str, Any]]:
@@ -209,6 +240,19 @@ def scan_model_spec(model: nn.Module) -> dict[str, Any]:
             "contracted_axes": spatial,
             "unswept_axes": [n for n in lat.axis_names if n not in mixed],
             "pinned_axes": ["time"] if has_mixer else [],
+            "coverage": None,
+        }
+    elif family == "flatten":
+        layers = flatten_layers_spec(nd, lat)
+        spanned = [n for n in lat.axis_names if n != "time" or nd.join_time]
+        sweeps = {
+            # Nothing is swept and nothing is contracted: one operator spans
+            # the whole lattice at once, with no direction to report.
+            "directions": {},
+            "contracted_axes": [],
+            "joint_axes": spanned,
+            "unswept_axes": [n for n in lat.axis_names if n not in spanned],
+            "pinned_axes": [],
             "coverage": None,
         }
     else:

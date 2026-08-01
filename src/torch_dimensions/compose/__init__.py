@@ -40,6 +40,7 @@ from torch_dimensions.lattice import Lattice
 from torch_dimensions.plan import ScanPlan
 
 from torch_dimensions.compose.attention import AxialKernel  # isort: skip
+from torch_dimensions.compose.flatten import Flatten  # isort: skip
 from torch_dimensions.compose.kernel import axial_contract, kron_operator  # isort: skip
 from torch_dimensions.compose.scan import AxialScan, axial_apply  # isort: skip
 
@@ -47,11 +48,13 @@ __all__ = [
     "ND_METHODS",
     "AxialKernel",
     "AxialScan",
+    "Flatten",
     "axial_apply",
     "axial_contract",
     "axial_attention",
     "axial_scan",
     "cafa",
+    "flatten",
     "kron_operator",
     "register_nd_method",
     "resolve_nd_method",
@@ -118,10 +121,34 @@ def cafa(
     )
 
 
+def flatten(
+    mixer: Callable[[], nn.Module] | nn.Module,
+    plan: ScanPlan,
+    lattice: Lattice,
+    d_model: int,
+    **kwargs,
+) -> nn.Module:
+    """No factorization: fold every axis into one sequence for the mixer.
+
+    ``td.Transformer(..., nd_method=td.flatten)`` is a Vision Transformer's
+    composition — attention over all cells at once, not axis by axis — and
+    ``td.ViT`` is exactly that with a patch embedding in front.
+
+    This is the baseline the axial methods exist to beat. It is the most
+    expressive of the three and the only one that is quadratic in *cells*
+    rather than in axis length, so it wins on small lattices and cannot be
+    allocated on large ones. On a sparse lattice it is also the only method
+    where absent cells are a saving: they are dropped from the sequence rather
+    than masked within it.
+    """
+    return Flatten(mixer=mixer, plan=plan, lattice=lattice, d_model=d_model, **kwargs)
+
+
 ND_METHODS: dict[str, Callable[..., nn.Module]] = {
     "axial_attention": axial_attention,
     "axial_scan": axial_scan,
     "cafa": cafa,
+    "flatten": flatten,
 }
 
 

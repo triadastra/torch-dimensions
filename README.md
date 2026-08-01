@@ -40,7 +40,16 @@ the same object:
 | Axial Transformer | attention | `td.axial_scan` — attention sweeps each axis (`td.Transformer`) |
 | Axial Transformer (factorized) | attention | `td.axial_attention` — per-axis kernels, contracted |
 | CaFA / factorized axial | pooled attention | `td.cafa` — per-axis kernels, Kronecker contraction |
+| ViT | attention | `td.flatten` — every cell attends to every cell, no factorization |
+| Separable CNN | 1-D convolution | `td.axial_scan` — provably one N-D conv with a rank-1 kernel |
+| TCN, N-D | dilated causal conv | `td.axial_scan` — dilation doubles per *axis* |
 | Forecasting hybrids | any of the above along time | kernel across the lattice, mixer along time |
+
+The last three are the ones that make the claim more than a slogan. A
+convolutional network is not a sequence model — no state, no direction, no
+"so far" — and a Vision Transformer's whole trick is *not* factorizing the
+grid. Both fit without either side bending, which is the evidence that the
+abstraction is about lattices rather than about sequences.
 
 Write that abstraction once and N-D RNNs, N-D transformers, and N-D SSMs all
 fall out of it — including on lattices where **not every cell exists**, which

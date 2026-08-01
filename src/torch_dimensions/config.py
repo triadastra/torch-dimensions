@@ -54,6 +54,7 @@ def _models() -> dict[str, type[nn.Module]]:
     from torch_dimensions.models.conv import CNN, TCN
     from torch_dimensions.models.rnn import GRU, LSTM
     from torch_dimensions.models.ssm import S4, S4D, S4DND, S4ND, Mamba, MambaND
+    from torch_dimensions.models.vit import ViT
 
     return {
         "lstm": LSTM,
@@ -61,6 +62,7 @@ def _models() -> dict[str, type[nn.Module]]:
         "transformer": Transformer,
         "cnn": CNN,
         "tcn": TCN,
+        "vit": ViT,
         "s4": S4,
         "s4d": S4D,
         "mamba": Mamba,

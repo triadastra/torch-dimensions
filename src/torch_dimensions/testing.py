@@ -27,7 +27,16 @@ import torch.nn as nn
 from torch_dimensions.lattice import Lattice
 from torch_dimensions.plan import ScanPlan
 
-__all__ = ["Recorder", "Report", "Result", "check_block", "check_data_source", "check_trainable"]
+__all__ = [
+    "LTIReport",
+    "Recorder",
+    "Report",
+    "Result",
+    "check_block",
+    "check_data_source",
+    "check_lti",
+    "check_trainable",
+]
 
 Factory = Callable[..., nn.Module]
 
@@ -549,3 +558,162 @@ def check_data_source(
     if raise_on_failure and rep.failed:
         raise AssertionError("data source check failed:\n" + str(rep))
     return rep
+
+
+@dataclass
+class LTIReport:
+    """What :func:`check_lti` measured. Numbers, not adjectives.
+
+    Every field is a *relative* error — the deviation divided by the size of
+    the output it deviates from — so the numbers are comparable across mixers
+    with wildly different output scales. Around 1e-16 means the property holds
+    to floating point; anything above ~1e-6 means it does not hold at all.
+    """
+
+    name: str
+    additivity: float
+    homogeneity: float
+    zero_response: float
+    shift_equivariance: float
+    tol: float = 1e-9
+
+    @property
+    def linear(self) -> bool:
+        return max(self.additivity, self.homogeneity) < self.tol
+
+    @property
+    def affine(self) -> bool:
+        """Linear once its constant response is subtracted — a bias, in short."""
+        return self.linear and self.zero_response > self.tol
+
+    @property
+    def time_invariant(self) -> bool:
+        return self.shift_equivariance < self.tol
+
+    @property
+    def verdict(self) -> str:
+        if self.linear and self.time_invariant:
+            return "LTI" + (" (affine)" if self.affine else "")
+        if self.time_invariant:
+            return "time-invariant, nonlinear"
+        if self.linear:
+            return "linear, not time-invariant"
+        return "neither"
+
+    def __str__(self) -> str:
+        return (
+            f"{self.name}: {self.verdict}\n"
+            f"    additivity          {self.additivity:.2e}\n"
+            f"    homogeneity         {self.homogeneity:.2e}\n"
+            f"    shift equivariance  {self.shift_equivariance:.2e}\n"
+            f"    response to zero    {self.zero_response:.2e}"
+        )
+
+
+def _rel(diff: torch.Tensor, scale: torch.Tensor) -> float:
+    """Deviation relative to the magnitude of what it deviates from."""
+    denom = scale.abs().max().item()
+    return float(diff.abs().max().item() / max(denom, 1e-30))
+
+
+def check_lti(
+    mixer: nn.Module | Callable[[], nn.Module],
+    *,
+    d_model: int = 4,
+    length: int = 24,
+    batch: int = 2,
+    shift: int = 3,
+    guard: int | None = None,
+    seed: int = 0,
+    tol: float = 1e-9,
+) -> LTIReport:
+    """Measure whether a mixer is linear and time-invariant.
+
+    This is not a pass/fail check and never raises — no mixer is *supposed* to
+    be LTI. It is a classification, and the classification is what decides how
+    a mixer behaves under N-D composition:
+
+    - **LTI mixers commute across axes.** Sweeping ``h`` then ``w`` equals
+      sweeping ``w`` then ``h``, so the sweep order carries no information and
+      the whole stack collapses to one separable N-D operator. This is why a
+      separable CNN is exactly an N-D convolution, and why S4ND can apply its
+      axes simultaneously instead of in sequence.
+    - **Non-LTI mixers do not.** Order and direction become architectural
+      choices with real consequences, which is the entire reason ``ScanPlan``
+      exists and why Mamba-ND needed a schedule at all.
+
+    **How time-invariance is tested, and why that way.** The input is shifted
+    by zero-padding the front rather than by rolling it, because time
+    invariance is a statement about a system *at rest*: feed it nothing, then
+    feed it the signal later, and the same thing should come out later. Rolling
+    would instead wrap a different prefix into place and test memory decay,
+    which is a different question. A consequence worth knowing: a recurrent
+    mixer whose gates have biases does not stay at rest under zero input, so it
+    is not time-invariant even though it is perfectly causal.
+
+    Args:
+        mixer: a built module, or a zero-argument factory. Run in ``eval``
+            mode and float64 — dropout would make every measurement noise.
+        shift: how far to delay the signal for the equivariance test.
+        tol: relative error below which a property counts as holding.
+
+    Returns:
+        An :class:`LTIReport`. See LTI.md for the measured table across every
+        mixer this library ships.
+    """
+    torch.manual_seed(seed)
+    block = (mixer if isinstance(mixer, nn.Module) else mixer()).double().eval()
+    name = type(block).__name__
+
+    g = torch.Generator().manual_seed(seed)
+    shape = (batch, length, d_model)
+    x = torch.randn(*shape, generator=g, dtype=torch.float64)
+    y = torch.randn(*shape, generator=g, dtype=torch.float64)
+    zeros = torch.zeros(*shape, dtype=torch.float64)
+
+    with torch.no_grad():
+        # A block may be affine rather than linear (any bias makes it so).
+        # Subtracting its response to zero tests the linear part, and the
+        # response itself is reported separately rather than hidden.
+        f0 = block(zeros)
+        fx, fy, fxy = block(x) - f0, block(y) - f0, block(x + y) - f0
+        f3x = block(3.0 * x) - f0
+
+        additivity = _rel(fxy - (fx + fy), fxy)
+        homogeneity = _rel(f3x - 3.0 * fx, f3x)
+
+        # Delay by zero-padding the front: the system starts at rest and the
+        # signal arrives `shift` steps later.
+        delayed = torch.cat([torch.zeros(batch, shift, d_model, dtype=torch.float64), x], dim=1)[
+            :, :length
+        ]
+        fd = block(delayed) - f0
+        # Measured away from both boundaries, because both ends lie about it.
+        #
+        # At the *start*: a stacked causal convolution with biases is not
+        # actually at rest for its first few positions — its own left-padding
+        # is zero while the interior has settled to the bias, so the response
+        # to a zero input is not constant until the transient passes. Exactly
+        # the same shape as an RNN's state ramp, and measuring inside it
+        # reports a boundary convention as a property of the operator.
+        #
+        # At the *end*: delaying truncates the tail of the signal, which a
+        # causal mixer never notices and a centred one does.
+        band = max(shift, length // 4) if guard is None else guard
+        got = fd[:, shift + band : length - band]
+        want = fx[:, band : length - shift - band]
+        if got.shape[1] < 1:
+            raise ValueError(
+                f"nothing left to compare: length={length}, shift={shift}, guard={band}. "
+                "Lengthen the probe or shrink the guard."
+            )
+        shift_err = _rel(got - want, want)
+
+    return LTIReport(
+        name=name,
+        additivity=additivity,
+        homogeneity=homogeneity,
+        zero_response=_rel(f0, block(x)),
+        shift_equivariance=shift_err,
+        tol=tol,
+    )

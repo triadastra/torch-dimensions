@@ -704,6 +704,45 @@ rather than as a feature.
 
 ---
 
+## 27. Out of the sequence is not out of the output
+
+The joint (`flatten`) composition drops absent cells from the token sequence
+entirely — a sparse lattice becomes a shorter sequence, which is the one place
+in this library where sparsity is a saving rather than bookkeeping. Absent
+cells never reach the mixer at all, so the mask-invariance guarantee looked
+free.
+
+It was not. The conformance suite failed on the first run:
+
+```
+[FAIL] absent cells cannot influence the output — rank 2: perturbing absent
+       cells changed the output
+```
+
+The residual stream is the path. `x = x + h` adds the layer's output to the
+*original* `x`, which still holds whatever was sitting in the absent cells, so
+the output at an absent cell echoed its input. Every value the mixer saw was
+clean; the output was not.
+
+**The reasoning error, stated exactly:** "their values never reach the mixer"
+is a claim about one path. "Their values cannot influence any output" is a
+claim about every path. I proved the first and wrote the second, and the two
+differ by a residual connection that was three lines further down the same
+function.
+
+**Fixed** by zeroing on entry and after every layer, which is precisely what
+`AxialScan` and `AxialKernel` already do — the new family had rederived the
+guarantee from scratch instead of copying the mechanism, and got a weaker
+version of it.
+
+**Found by** `td.testing.check_block`, first run, before the family had a test
+of its own. This is the fifth bug the conformance suite has caught in a block
+written by the same person who wrote the suite (§B), and the argument for
+running it against your own work is exactly that: it does not share your
+reasoning, only your interface.
+
+---
+
 ## A. Recurring patterns
 
 Four classes account for the first eight — and the later finds keep landing in

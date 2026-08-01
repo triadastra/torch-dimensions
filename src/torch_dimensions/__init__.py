@@ -16,11 +16,13 @@ from torch_dimensions.compose import (
     ND_METHODS,
     AxialKernel,
     AxialScan,
+    Flatten,
     axial_apply,
     axial_attention,
     axial_contract,
     axial_scan,
     cafa,
+    flatten,
     kron_operator,
     register_nd_method,
     resolve_nd_method,
@@ -40,6 +42,7 @@ from torch_dimensions.models.attention import Transformer, TransformerND
 from torch_dimensions.models.conv import CNN, CNNND, TCN, TCNND
 from torch_dimensions.models.rnn import GRU, LSTM
 from torch_dimensions.models.ssm import S4, S4D, S4DND, S4ND, Mamba, MambaND
+from torch_dimensions.models.vit import PatchEmbed, ViT
 from torch_dimensions.plan import AxisCoverage, Coverage, ScanPlan, Step
 from torch_dimensions.spec import SPEC_VERSION as spec_version
 from torch_dimensions.spec import spec
@@ -59,12 +62,15 @@ __all__ = [
     "S4D",
     "S4DND",
     "S4ND",
+    "PatchEmbed",
     "Transformer",
     "TransformerND",
+    "ViT",
     "MODELS",
     "ND_METHODS",
     "AxialKernel",
     "AxialScan",
+    "Flatten",
     "AxisCoverage",
     "Coverage",
     "Lattice",
@@ -78,6 +84,7 @@ __all__ = [
     "axial_contract",
     "axial_scan",
     "cafa",
+    "flatten",
     "kron_operator",
     "data",
     "list_models",

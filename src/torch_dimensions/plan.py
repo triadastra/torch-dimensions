@@ -387,17 +387,23 @@ class ScanPlan:
 
     # -- binding to a lattice -----------------------------------------------
 
-    def resolve(self, lattice: Lattice) -> ScanPlan:
+    def resolve(self, lattice: Lattice, warn: bool = True) -> ScanPlan:
         """Return an equivalent plan with every axis as an integer index.
 
         Raises if an axis does not exist on ``lattice``. Warns — but does not
         fail — when the plan leaves an axis unswept: that is legal and
         occasionally intended, and usually a mistake.
+
+        ``warn=False`` is for composition strategies that do not sweep at all.
+        The joint (flatten) family mixes every axis in every layer and uses the
+        plan only for its depth, so "never sweeps w" is both true and
+        completely misleading there — a warning nobody can act on trains
+        readers to ignore warnings.
         """
         resolved = [Step(lattice.axis_index(s.axis), s.reverse) for s in self.steps]
         touched = {s.axis for s in resolved}
         missing = [lattice.axis_names[i] for i in range(lattice.n_axes) if i not in touched]
-        if missing:
+        if missing and warn:
             warnings.warn(
                 f"scan plan never sweeps {missing}; those axes get no mixing",
                 UserWarning,
