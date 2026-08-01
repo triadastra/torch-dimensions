@@ -31,10 +31,17 @@ fla = ["flash-linear-attention"]
 # A torch pickle executes arbitrary code when it is opened. `.safetensors`
 # checkpoints do not, and `td.save`/`td.load` pick the container from the
 # file extension.
-safetensors = ["safetensors>=0.4"]
+# safetensors' torch bindings import numpy at runtime, and torch itself does not
+# require it — so the extra says so rather than failing three frames deep.
+safetensors = ["safetensors>=0.4", "numpy"]
 # S4D ships built in (portable, pure torch) — no [s4] extra. The full DPLR S4
 # stays upstream; PLAN.md Phase 7 records what a vendored copy must patch.
-dev = ["pytest>=8", "pytest-cov", "ruff>=0.6", "mypy", "hypothesis", "pyyaml", "safetensors>=0.4"]
+dev = [
+  "pytest>=8", "pytest-cov", "ruff>=0.6", "mypy", "hypothesis", "pyyaml",
+  # Optional at runtime, mandatory for testing the paths that use them —
+  # otherwise CI skips them and reports green (DEBUG.md #24).
+  "safetensors>=0.4", "numpy",
+]
 all = ["torch-dimensions[mamba,fla,safetensors]"]
 
 [project.urls]

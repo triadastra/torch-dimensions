@@ -27,6 +27,26 @@ from torch_dimensions.lattice import Lattice
 __all__ = ["MemmapSource", "Normalizer", "masked_stats"]
 
 
+def _numpy() -> Any:
+    """numpy, or an error that says what to do about it.
+
+    torch does not require numpy, and a CPU-only install genuinely may not have
+    it — this project's own CI is such an install, which is where the bare
+    ``ModuleNotFoundError: No module named 'numpy'`` from three frames inside a
+    ``.npy`` writer was first seen. The ``.npy`` container is numpy's format;
+    needing numpy to read it is not a surprise, but being told so is.
+    """
+    try:
+        import numpy
+    except ModuleNotFoundError as e:  # pragma: no cover - environment-dependent
+        raise ModuleNotFoundError(
+            "MemmapSource reads and writes .npy files, which needs numpy: pip install numpy. "
+            "(torch does not require it, so a minimal install may not have it.) For an "
+            "in-memory source, use td.data.TensorSource instead."
+        ) from e
+    return numpy
+
+
 class MemmapSource:
     """A ``.npy`` file on disk, memory-mapped, as a :class:`LatticeSource`.
 
@@ -44,9 +64,10 @@ class MemmapSource:
     records what that failure mode looks like from the outside: not an
     exception, a hang. Each worker reopens the file itself.
 
-    Needs ``numpy`` (for the ``.npy`` container only); torch ships with it in
-    every practical install, but it is imported lazily so this module never
-    breaks an import that would otherwise work.
+    Needs ``numpy`` — ``.npy`` is numpy's container. It is imported lazily, so
+    this module never breaks an import that would otherwise work, and the
+    error when it is missing says what to install. torch does **not** require
+    numpy: assuming it did is DEBUG.md #24.
     """
 
     def __init__(
@@ -73,17 +94,14 @@ class MemmapSource:
     @staticmethod
     def write(path: str | Path, series: torch.Tensor) -> Path:
         """Write a ``(T, *shape, F)`` tensor to a ``.npy`` this can read."""
-        import numpy as np
-
+        np = _numpy()
         path = Path(path)
         np.save(path, series.detach().cpu().numpy())
         return path if path.suffix == ".npy" else path.with_suffix(".npy")
 
     def _open(self) -> Any:
         if self._array is None:
-            import numpy as np
-
-            self._array = np.load(self.path, mmap_mode="r")
+            self._array = _numpy().load(self.path, mmap_mode="r")
         return self._array
 
     @property

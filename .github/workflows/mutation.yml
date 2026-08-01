@@ -1,0 +1,29 @@
+name: Mutation testing
+
+# Weekly, not per-push: this deliberately breaks the library seven times and
+# runs a slice of the suite against each. DEBUG.md §B ranks it the
+# highest-yield technique in the project, and it had been a manual discipline —
+# which means it ran when somebody remembered.
+#
+# A failure here is a hole in the *tests*, not a bug in the code: it means the
+# library can be wrong in a specific, previously-seen way and nothing says so.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]"
+      - name: Break it on purpose
+        run: python scripts/mutate.py

@@ -209,6 +209,9 @@ def test_configs_are_json_and_registry_is_listable():
 # -- safetensors container -----------------------------------------------------
 
 safetensors = pytest.importorskip("safetensors")
+# safetensors' torch bindings import numpy internally, so skipping on
+# safetensors alone is not enough — that is exactly how these failed in CI.
+pytest.importorskip("numpy")
 
 
 @pytest.mark.parametrize("suffix", [".td", ".safetensors"])

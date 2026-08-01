@@ -11,8 +11,14 @@
 # markdown code blocks are formatted too), or watching a configured pipeline
 # instead of running the gate locally.
 #
-# If CI grows a step, it goes here in the same commit. If this passes and CI
-# fails, that is a bug in this file.
+# If CI grows a step, it goes here in the same commit.
+#
+# What this CANNOT do: make your environment match CI's. It makes the commands
+# identical, not the interpreter, the installed extras, or the transitive
+# dependencies that happen to be lying around. DEBUG.md #24 is exactly that
+# gap — numpy is not a torch dependency, this laptop had it, CI did not, and
+# this script passed while the build went red. A green run here means "the
+# checks pass in this environment"; only CI can say "in a clean one".
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

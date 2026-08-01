@@ -413,6 +413,10 @@ def test_split_at_time_refuses_unsorted_times():
 
 # -- on-disk source and masked normalization ----------------------------------
 
+# `.npy` is numpy's container; torch does not require numpy, and this project's
+# own CI is an install without it.
+numpy = pytest.importorskip("numpy")
+
 
 def test_memmap_source_passes_the_source_conformance_check(tmp_path):
     lat = td.Lattice(shape=(3, 4), names=("h", "w"))

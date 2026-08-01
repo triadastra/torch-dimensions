@@ -56,6 +56,7 @@ Their generalizable lessons are folded into §A without identifying details.
 | 21 | `examples/custom_method.py` — a strategy that indexed an empty axis list at rank 1 | low | conformance suite | fixed |
 | 22 | `examples/custom_method.py` — a schedule derived from *storage* order, not sweep order | high | conformance suite | fixed |
 | 23 | `testing.py` — gradcheck ran at a width the caller never asked for | low | new mixer | fixed |
+| 24 | `data/memmap.py` + `[safetensors]` — assumed numpy is always there | medium | CI (a leaner environment than the laptop) | fixed |
 
 Severity is "what would this have cost if it reached a user", not "how hard was
 it to fix". Every one of #1–#5 is silent: no exception, no NaN, just wrong
@@ -571,6 +572,35 @@ the old behaviour.
 
 ---
 
+## 24. numpy is not a torch dependency, and the laptop lied about it
+
+`MemmapSource` reads and writes `.npy`; `safetensors`' torch bindings import
+numpy internally. Both worked perfectly on the development machine and both
+failed in CI with `ModuleNotFoundError: No module named 'numpy'` from three
+frames inside somebody else's writer — because torch does not require numpy,
+and the CI install is a genuinely minimal one.
+
+Two fixes, because there are two faults. The extras now declare numpy where
+the feature needs it, so CI actually exercises those paths instead of skipping
+them and reporting green. And `MemmapSource` raises an error that names the
+package and points at `TensorSource` as the in-memory alternative, rather than
+surfacing an import failure from a stack the user did not write.
+
+**The process finding is the larger one.** This landed one commit after
+`scripts/check.sh` was added *specifically* to stop CI surprises, and the
+script had passed. It makes the **commands** identical to CI's; it cannot make
+the **environment** identical, and this failure lived entirely in the
+difference. A local gate can prove "the checks pass here". Only CI can prove
+"the checks pass in a clean environment", and the honest conclusion is that
+the two answer different questions — so the script now says so in its own
+docstring rather than implying it is a substitute.
+
+**Guarded by** `[dev]` carrying numpy (so the paths run in CI at all) plus
+`pytest.importorskip("numpy")` in both test modules, so an environment without
+it skips *visibly* instead of failing.
+
+---
+
 ## Not bugs
 
 Two things that look like defects and are not. Recorded so they are not
@@ -625,7 +655,12 @@ decoration.
 Ranked by yield in this project.
 
 1. **Mutation testing.** Break the code deliberately, confirm the suite
-   notices. Found #6 and validated #4. Cheap: revert with `git checkout`.
+   notices. Found #6 and validated #4. Cheap: revert with `git checkout` —
+   and now automatic: [`scripts/mutate.py`](scripts/mutate.py) holds a catalog
+   of seven mutations, each one a bug from this list, and runs weekly in CI.
+   All seven are currently caught. A survivor would be a hole in the tests
+   rather than a bug in the code, which is the distinction that makes this
+   worth automating at all.
    The same trick runs backwards through history —
    `git checkout <fix>~1 -- <file>`, run the guard, restore — which is how
    every **Reproduce** block above was verified, and how two cited "guards"
