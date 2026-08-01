@@ -225,8 +225,8 @@ round-trips are fuzzed there too. Nothing in the machinery counts axes.
 
 ## License
 
-Apache-2.0. [NOTICE](NOTICE) carries the full third-party attribution; the
-short version:
+Apache-2.0, © 2026 Celsia Juilyn Fan. [NOTICE](NOTICE) carries the full
+third-party attribution; the short version:
 
 - The S4/S4D/Mamba mixer mathematics **derives from**
   [state-spaces/s4](https://github.com/state-spaces/s4) and
