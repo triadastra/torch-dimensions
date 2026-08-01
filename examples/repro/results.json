@@ -861,5 +861,51 @@
         "test_acc": 0.9833
       }
     ]
+  },
+  {
+    "recorded": "2026-08-01 21:52:27",
+    "config": {
+      "name": "mnist 2-D \u00b7 mamba_nd",
+      "task": "mnist (2-D lattice 28\u00d728)",
+      "model": "td.mamba_nd d_model=64 n_layers=4",
+      "epochs": 2,
+      "batch": 64,
+      "lr": 0.003,
+      "ssm_lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "seed": 0,
+      "device": "mps",
+      "limit_train": null,
+      "extra": {
+        "dataset": "mnist",
+        "arch": "mamba_nd",
+        "n_layers": 4
+      },
+      "n_params": 131978
+    },
+    "metric": 0.9729,
+    "metric_name": "test_acc",
+    "train_loss": 0.13308214770355967,
+    "epochs_run": 2,
+    "seconds": 1145.4199841022491,
+    "machine": {
+      "accelerator": "Apple Silicon (MPS) arm64",
+      "platform": "Darwin 25.3.0",
+      "torch": "2.13.0",
+      "torch_dimensions": "0.1.0"
+    },
+    "history": [
+      {
+        "epoch": 0,
+        "train_loss": 1.0063268001526913,
+        "test_acc": 0.8839
+      },
+      {
+        "epoch": 1,
+        "train_loss": 0.13308214770355967,
+        "test_acc": 0.9729
+      }
+    ]
   }
 ]

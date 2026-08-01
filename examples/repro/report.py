@@ -57,10 +57,15 @@ SECTIONS = [
         ("mnist (2-D", "cifar10 (2-D"),
         "The image is a lattice; rows and columns are swept with the paired schedule the "
         "Mamba-ND paper describes. No pixel is flattened into a sequence.",
-        "These are 2-epoch runs and are here to show the N-D construction learning, not to "
-        "compete with a convolution. What they demonstrate is that the same mixers that "
-        "reproduced the sequence numbers above also work when the lattice is real and the "
-        "schedule sweeps rows and columns.",
+        "**The construction works, and the cost table is the interesting part.** Two epochs "
+        "each: MambaND with the paper's paired schedule reaches 97.29%, S4DND 98.33%. Neither "
+        "is competing with a convolution and neither is meant to. What is worth reading is "
+        "the wall clock — 19.1 minutes against 1.2, for a model with twice the parameters. "
+        "That is BENCHMARKS.md's mixer table showing up in a real run: the portable Mamba "
+        "scan is a python loop over the swept axis, ~16x the cost of the kernel-based SSM "
+        "here, and it is the number a fused CUDA path would have to beat. The same schedule, "
+        "the same lattice, the same library — the difference is entirely which 1-D mixer was "
+        "named.",
     ),
     (
         "Sparse lattices — no published baseline exists",

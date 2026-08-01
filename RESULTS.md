@@ -28,6 +28,17 @@ A sequence is a lattice with no spatial axes, so these isolate the portable S4D 
 
 **Finding.** **Reproduced.** Both land inside one point of the published numbers, from a config and one command, on a laptop, in 21 minutes each. The portable S4D kernel — pure torch, no CUDA — learns what the paper's does.
 
+## 2-D lattices — the N-D machinery on images
+
+The image is a lattice; rows and columns are swept with the paired schedule the Mamba-ND paper describes. No pixel is flattened into a sequence.
+
+| task | configuration | params | epochs | seed | result | wall clock | hardware |
+|---|---|---|---|---|---|---|---|
+| mnist (2-D lattice 28×28) | td.mamba_nd d_model=64 n_layers=4 | 131,978 | 2 | 0 | **97.29%** test accuracy | 19.1 min | Apple Silicon (MPS) arm64 |
+| mnist (2-D lattice 28×28) | td.s4d_nd d_model=64 n_layers=4 | 67,978 | 2 | 0 | **98.33%** test accuracy | 1.2 min | Apple Silicon (MPS) arm64 |
+
+**Finding.** **The construction works, and the cost table is the interesting part.** Two epochs each: MambaND with the paper's paired schedule reaches 97.29%, S4DND 98.33%. Neither is competing with a convolution and neither is meant to. What is worth reading is the wall clock — 19.1 minutes against 1.2, for a model with twice the parameters. That is BENCHMARKS.md's mixer table showing up in a real run: the portable Mamba scan is a python loop over the swept axis, ~16x the cost of the kernel-based SSM here, and it is the number a fused CUDA path would have to beat. The same schedule, the same lattice, the same library — the difference is entirely which 1-D mixer was named.
+
 ## Sparse lattices — no published baseline exists
 
 Beijing air quality: 12 stations x 6 pollutants, hourly, with a fraction of cells made absent. Arms differ in exactly one thing each and are scored on present cells only. These rows *are* the baseline.
