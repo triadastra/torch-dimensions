@@ -4,6 +4,68 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`td.Transformer`** — attention as the swept mixer, which makes "N-D
+  Transformer" literal and gives both constructions in the literature a name:
+  `td.Transformer` sweeps attention along one axis per layer, while
+  `method=td.axial_attention` builds per-axis kernels and contracts them.
+  `AttentionMixer` is non-causal by default (a mixer is never told which axis
+  it sweeps, so masking "the future" of a spatial axis is meaningless); the
+  causal mask, when asked for, is tested bitwise in both directions.
+- **`td.viz.show(model)`** — the architecture viewer, shipped inside the
+  wheel. No node, no network, no build step at install time. Accepts a model,
+  a spec dict, a spec JSON, or a checkpoint.
+- **Sub-lattices:** `Lattice.sliced(**axes)` returns the sub-lattice *and* the
+  tensor selection as one object, so the two cannot drift apart;
+  `Lattice.merge` is the inverse. Integer indices are refused — a rank that
+  changes with a train/test split is not a rank.
+- **Plan algebra and coverage:** `+`, `* k`, `.reversed()` (layer order) and
+  `.flipped()` (sweep direction), plus `plan.coverage(lattice)` — per-axis
+  sweep counts, directions, `unswept` and `pinned`, machine-readable. `spec()`
+  now derives its sweeps section from it and gained `pinned_axes`.
+- **`safetensors` checkpoints** (optional extra), chosen by file extension,
+  with the config in the container's metadata: still one file, and one that
+  cannot execute code when it is opened.
+- **`td.testing.Recorder`** — a mixer that computes nothing and records every
+  call, droppable into a real model with the new `mixer=` argument.
+- **`td.testing.check_data_source`** — the `LatticeSource` protocol gets the
+  treatment mixers already had, including the picklability check whose failure
+  mode is a hang rather than an error.
+- **`td.data.MemmapSource`** and **`td.data.masked_stats`** — an on-disk
+  source that survives `DataLoader` workers, and statistics computed over
+  present cells only (a mean over a sparse lattice's structural zeros is
+  dragged toward zero, invisibly).
+- **[RESULTS.md](RESULTS.md)** — reproductions with hardware attached: sMNIST
+  99.53% and psMNIST 97.79% with `td.S4D`, 2-D lattice image classification,
+  and a sparse-lattice forecasting baseline that has no published prior.
+- **[BENCHMARKS.md](BENCHMARKS.md)** — measured costs, including two results
+  that contradicted this project's own predictions: cost tracks the *length of
+  the swept axis* rather than the cell count (rank 1 costs ~95× rank 4 at equal
+  cells), and the factorized kernel family only overtakes per-line attention at
+  64³ rather than everywhere.
+- **Guides** for both extension points ([adding a mixer](docs/adding-a-mixer.md),
+  [adding an nd_method](docs/adding-a-method.md)), with examples executed by the
+  test suite, and a [CUDA verification checklist](docs/cuda-checklist.md).
+
+### Changed
+- The conformance suite's **Kronecker check runs** — it had been an
+  unconditional skip since it was written. Pass `check_block(kernels=...)`.
+- Ranks 5 and 6 are tested (full conformance, both families), so the README's
+  "ranks ≥ 5 untested" caveat is gone.
+- The README no longer claims CUDA: it has never been run, and that is now
+  stated with a checklist beside it.
+- Coverage floor in CI at 95% (measured 97%); `pytest-cov` had been installed
+  and unused since the first commit.
+
+### Fixed
+- A stale local training run was baked into the viewer bundle and loaded *in
+  preference to* the model passed to `show()` (DEBUG.md #19).
+- `check_block`'s gradient step built at `d_model=2` regardless of the caller,
+  so a width-constrained mixer failed a gradient check with an error about
+  head counts (DEBUG.md #23).
+
 ## [0.1.0] — 2026-07-31
 
 The first release: the full portable core.
