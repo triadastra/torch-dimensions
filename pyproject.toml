@@ -37,6 +37,12 @@ all = ["torch-dimensions[mamba,fla]"]
 Homepage = "https://github.com/triadastra/torch-dimensions"
 Source = "https://github.com/triadastra/torch-dimensions"
 
+[tool.hatch.build]
+# The viewer bundle is a build artifact: gitignored, rebuilt by CI before
+# packaging, and listed here because hatchling otherwise honours .gitignore
+# and would ship a wheel whose `td.viz.show` has nothing to serve.
+artifacts = ["src/torch_dimensions/viz/static/**"]
+
 [tool.hatch.build.targets.sdist]
 # The sdist is the library, not the repo: without this, viewer/node_modules
 # (35 MB of JS toolchain) rides along into every pip install from source.

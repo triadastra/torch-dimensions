@@ -15,6 +15,7 @@ const SAMPLES = {
 
 const LAYER_SECONDS = 2.2;
 export const LIVE_KEY = "● live run";
+export const SHOWN_KEY = "● this model";
 
 export default function App() {
   const [sampleKey, setSampleKey] = useState(Object.keys(SAMPLES)[0]);
@@ -23,6 +24,7 @@ export default function App() {
   const [playing, setPlaying] = useState(true);
   const [error, setError] = useState(null);
   const [live, setLive] = useState(null);
+  const [shown, setShown] = useState(null);
   const liveRunId = useRef(null);
 
   // progress is animation state, not UI state: it lives in a ref the render
@@ -73,10 +75,31 @@ export default function App() {
   const onSample = useCallback(
     (key) => {
       setSampleKey(key);
-      if (key !== LIVE_KEY) loadSpec(SAMPLES[key]);
+      if (key === SHOWN_KEY) loadSpec(shown);
+      else if (key !== LIVE_KEY) loadSpec(SAMPLES[key]);
     },
-    [loadSpec],
+    [loadSpec, shown],
   );
+
+  // `td.viz.show(model)` serves the bundle with the model's spec at /spec.json.
+  // Fetched once at startup: when it is there, it is what the user asked to
+  // see, so it selects itself. When it is not — the dev server, a static host —
+  // the samples are the whole app and nothing about this path is visible.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/spec.json", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (cancelled || !json) return;
+        setShown(json);
+        setSampleKey(SHOWN_KEY);
+        loadSpec(json);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [loadSpec]);
 
   // Live-run mode: a training script (examples/viewer_live.py) writes
   // public/run.json after every optimizer step. Poll it; a new `started`
@@ -124,7 +147,11 @@ export default function App() {
         playing={playing}
         onTogglePlay={() => setPlaying((p) => !p)}
         onSelectLayer={selectLayer}
-        samples={live ? { [LIVE_KEY]: null, ...SAMPLES } : SAMPLES}
+        samples={{
+          ...(live ? { [LIVE_KEY]: null } : {}),
+          ...(shown ? { [SHOWN_KEY]: null } : {}),
+          ...SAMPLES,
+        }}
         sampleKey={sampleKey}
         onSample={onSample}
         onFile={onFile}

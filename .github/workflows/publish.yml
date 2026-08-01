@@ -17,6 +17,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # The viewer bundle ships inside the wheel so `td.viz.show` needs no node
+      # at install time. It is a build artifact: gitignored, built here, and
+      # listed under [tool.hatch.build] artifacts so hatchling includes it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build the viewer bundle
+        run: |
+          npm --prefix viewer ci
+          npm --prefix viewer run build
+          python viewer/install_bundle.py
       - name: Build sdist and wheel
         run: |
           python -m pip install build
@@ -27,6 +38,14 @@ jobs:
           python -m pip install twine
           python -m twine check dist/*
           test "$(du -k dist/*.tar.gz | cut -f1)" -lt 1024 || { echo "sdist over 1 MB — something rode along"; exit 1; }
+      - name: The wheel must actually carry the viewer
+        # A wheel whose `td.viz.show` has nothing to serve installs fine, imports
+        # fine, and fails only when a user runs the one command this feature is
+        # for. Check the artifact, not the build log.
+        run: |
+          python -m zipfile -l dist/*.whl | grep -q "torch_dimensions/viz/static/index.html" \
+            || { echo "the wheel has no viewer bundle"; exit 1; }
+          test "$(du -k dist/*.whl | cut -f1)" -lt 4096 || { echo "wheel over 4 MB"; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
           name: dist
