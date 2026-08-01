@@ -32,9 +32,7 @@ def sparse(shape: tuple[int, ...], keep: float, seed: int = 0) -> torch.Tensor:
 
 
 def lstm_2d_sparse():
-    lat = td.Lattice(
-        shape=(6, 8), names=("h", "w"), valid=sparse((6, 8), 0.75), time=True
-    )
+    lat = td.Lattice(shape=(6, 8), names=("h", "w"), valid=sparse((6, 8), 0.75), time=True)
     return td.LSTM(32, 6, lat, d_input=1, bidirectional=("h", "w"))
 
 
@@ -67,9 +65,7 @@ def cafa_hybrid():
 def vit_joint():
     """The joint family: a ViT's patch grid, where every cell is one token and
     no axis is swept. Nothing travels, so the scene pulses instead."""
-    return td.ViT(
-        96, 6, image=(32, 32), patch=4, in_channels=3, n_heads=4, names=("row", "col")
-    )
+    return td.ViT(96, 6, image=(32, 32), patch=4, in_channels=3, n_heads=4, names=("row", "col"))
 
 
 SAMPLES = {

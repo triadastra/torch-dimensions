@@ -169,5 +169,6 @@ pytest tests/test_lti.py -q
 
 ```python
 import torch_dimensions as td
+
 print(td.testing.check_lti(lambda: td.mixers.MambaMixer(64)))
 ```
