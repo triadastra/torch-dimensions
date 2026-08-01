@@ -1,0 +1,175 @@
+{
+  "format": "torch-dimensions/architecture",
+  "io": {
+    "cells_per_step": 6,
+    "input": [
+      "B",
+      "T",
+      2,
+      3,
+      32
+    ],
+    "output": [
+      "B",
+      "T",
+      2,
+      3,
+      32
+    ]
+  },
+  "lattice": {
+    "axes": [
+      {
+        "dynamic": true,
+        "name": "time",
+        "size": null
+      },
+      {
+        "dynamic": false,
+        "name": "row",
+        "size": 2
+      },
+      {
+        "dynamic": false,
+        "name": "col",
+        "size": 3
+      }
+    ],
+    "cells": {
+      "dense": true,
+      "present": 6,
+      "present_rle": [
+        0,
+        6
+      ],
+      "total": 6
+    },
+    "n_axes": 3,
+    "names": [
+      "time",
+      "row",
+      "col"
+    ],
+    "rank": 2,
+    "shape": [
+      2,
+      3
+    ],
+    "time": true
+  },
+  "layers": [
+    {
+      "axis": "time",
+      "axis_index": 0,
+      "layer": 0,
+      "mixer": "MambaMixer",
+      "n_params": 9920,
+      "reverse": false
+    },
+    {
+      "axis": "row",
+      "axis_index": 1,
+      "layer": 1,
+      "mixer": "MambaMixer",
+      "n_params": 9920,
+      "reverse": false
+    },
+    {
+      "axis": "row",
+      "axis_index": 1,
+      "layer": 2,
+      "mixer": "MambaMixer",
+      "n_params": 9920,
+      "reverse": true
+    },
+    {
+      "axis": "col",
+      "axis_index": 2,
+      "layer": 3,
+      "mixer": "MambaMixer",
+      "n_params": 9920,
+      "reverse": false
+    },
+    {
+      "axis": "col",
+      "axis_index": 2,
+      "layer": 4,
+      "mixer": "MambaMixer",
+      "n_params": 9920,
+      "reverse": true
+    },
+    {
+      "axis": "time",
+      "axis_index": 0,
+      "layer": 5,
+      "mixer": "MambaMixer",
+      "n_params": 9920,
+      "reverse": false
+    }
+  ],
+  "model": {
+    "d_input": 32,
+    "d_model": 32,
+    "kind": "Mamba",
+    "n_layers": 6,
+    "n_params": 59904
+  },
+  "nd_method": {
+    "family": "scan",
+    "name": "AxialScan"
+  },
+  "sweeps": {
+    "coverage": {
+      "axes": [
+        {
+          "backward": 0,
+          "direction": "forward",
+          "forward": 2,
+          "index": 0,
+          "layers": [
+            0,
+            5
+          ],
+          "name": "time"
+        },
+        {
+          "backward": 1,
+          "direction": "both",
+          "forward": 1,
+          "index": 1,
+          "layers": [
+            1,
+            2
+          ],
+          "name": "row"
+        },
+        {
+          "backward": 1,
+          "direction": "both",
+          "forward": 1,
+          "index": 2,
+          "layers": [
+            3,
+            4
+          ],
+          "name": "col"
+        }
+      ],
+      "n_layers": 6,
+      "pinned": [
+        "time"
+      ],
+      "unswept": []
+    },
+    "directions": {
+      "col": "both",
+      "row": "both",
+      "time": "forward"
+    },
+    "pinned_axes": [
+      "time"
+    ],
+    "unswept_axes": []
+  },
+  "version": 1
+}

@@ -18,6 +18,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from functools import reduce
 
 import torch
 import torch.nn as nn
@@ -100,6 +101,8 @@ def check_block(
     batch: int = 2,
     seq: int = 3,
     reference: Callable[[nn.Module, torch.Tensor], torch.Tensor] | None = None,
+    kernels: Callable[[nn.Module, torch.Tensor], tuple[Sequence[torch.Tensor], torch.Tensor]]
+    | None = None,
     check_compile: bool = False,
     seed: int = 0,
     raise_on_failure: bool = True,
@@ -117,6 +120,12 @@ def check_block(
             values cannot influence any output.
         reference: ``(block, x) -> expected`` for the rank-1 equivalence check.
             Omit and that check is skipped rather than silently passed.
+        kernels: ``(block, x) -> (per_axis_kernels, output)`` for the Kronecker
+            check — run the block's axis-by-axis contraction and hand back the
+            matrices it actually used along with what it produced. The check
+            then builds the joint operator with ``torch.kron`` and compares. A
+            factorized block that cannot produce this is a block whose central
+            claim is untested; it used to be an unconditional skip.
         check_compile: compare ``torch.compile`` numerics against eager. Off by
             default because it is slow, not because it is unimportant.
         raise_on_failure: raise ``AssertionError`` with the full report when
@@ -188,12 +197,33 @@ def check_block(
     record("rank-1 equals the bare 1-D module", _equivalence)
 
     # 4. Kronecker identity --------------------------------------------------
-    record(
-        "Kronecker identity (kernel family)",
-        lambda: (_ for _ in ()).throw(
-            _Skip("needs a block exposing its per-axis kernels; see tests/test_kernel.py")
-        ),
-    )
+    def _kronecker():
+        if kernels is None:
+            raise _Skip("no `kernels` adapter given; kernel-family blocks should supply one")
+        r = max(r for r in ranks if r >= 2) if any(r >= 2 for r in ranks) else 0
+        if not r:
+            raise _Skip("needs rank >= 2; a one-axis Kronecker product is just the kernel")
+        lat = _lattice(r, time=time)
+        block = _build(factory, lat, d_model, seed)
+        # Batch 1: the factorized families build one kernel per (batch, step),
+        # and a single joint operator can only be compared against a single
+        # batch element's kernels.
+        x = _input(lat, d_model, 1, seq, seed)
+        mats, out = kernels(block, x)
+        if len(mats) < 2:
+            raise _Skip(f"adapter returned {len(mats)} kernels; needs >= 2 to form a product")
+        joint = reduce(torch.kron, [m.to(torch.float64) for m in mats])
+        flat = x.reshape(*x.shape[: -(lat.rank + 1)], -1, x.shape[-1]).to(torch.float64)
+        want = (joint @ flat).reshape(out.shape)
+        diff = (out.to(torch.float64) - want).abs().max().item()
+        if diff > 1e-9:
+            raise AssertionError(
+                f"contracting axis by axis differs from the joint Kronecker operator by "
+                f"{diff:.3e}; the factorization is not the product it claims to be"
+            )
+        return f"rank {r}, {len(mats)} axes, max diff {diff:.1e}"
+
+    record("Kronecker identity (kernel family)", _kronecker)
 
     # 5. mask invariance -----------------------------------------------------
     def _mask():

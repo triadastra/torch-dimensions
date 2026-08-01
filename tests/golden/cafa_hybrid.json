@@ -1,0 +1,152 @@
+{
+  "format": "torch-dimensions/architecture",
+  "io": {
+    "cells_per_step": 9,
+    "input": [
+      "B",
+      "T",
+      3,
+      3,
+      16
+    ],
+    "output": [
+      "B",
+      "T",
+      3,
+      3,
+      16
+    ]
+  },
+  "lattice": {
+    "axes": [
+      {
+        "dynamic": true,
+        "name": "time",
+        "size": null
+      },
+      {
+        "dynamic": false,
+        "name": "y",
+        "size": 3
+      },
+      {
+        "dynamic": false,
+        "name": "x",
+        "size": 3
+      }
+    ],
+    "cells": {
+      "dense": true,
+      "present": 9,
+      "present_rle": [
+        0,
+        9
+      ],
+      "total": 9
+    },
+    "n_axes": 3,
+    "names": [
+      "time",
+      "y",
+      "x"
+    ],
+    "rank": 2,
+    "shape": [
+      3,
+      3
+    ],
+    "time": true
+  },
+  "layers": [
+    {
+      "axis": "time",
+      "axis_index": 0,
+      "layer": 0,
+      "mixer": "GRUMixer",
+      "n_params": 1632,
+      "reverse": false
+    },
+    {
+      "axis": "y",
+      "axis_index": 1,
+      "layer": 1,
+      "mixer": "GRUMixer",
+      "n_params": 1632,
+      "reverse": false
+    },
+    {
+      "axis": "x",
+      "axis_index": 2,
+      "layer": 2,
+      "mixer": "GRUMixer",
+      "n_params": 1632,
+      "reverse": false
+    }
+  ],
+  "model": {
+    "d_input": 16,
+    "d_model": 16,
+    "kind": "GRU",
+    "n_layers": 3,
+    "n_params": 9030
+  },
+  "nd_method": {
+    "family": "scan",
+    "name": "AxialKernel"
+  },
+  "sweeps": {
+    "coverage": {
+      "axes": [
+        {
+          "backward": 0,
+          "direction": "forward",
+          "forward": 1,
+          "index": 0,
+          "layers": [
+            0
+          ],
+          "name": "time"
+        },
+        {
+          "backward": 0,
+          "direction": "forward",
+          "forward": 1,
+          "index": 1,
+          "layers": [
+            1
+          ],
+          "name": "y"
+        },
+        {
+          "backward": 0,
+          "direction": "forward",
+          "forward": 1,
+          "index": 2,
+          "layers": [
+            2
+          ],
+          "name": "x"
+        }
+      ],
+      "n_layers": 3,
+      "pinned": [
+        "time",
+        "y",
+        "x"
+      ],
+      "unswept": []
+    },
+    "directions": {
+      "time": "forward",
+      "x": "forward",
+      "y": "forward"
+    },
+    "pinned_axes": [
+      "time",
+      "y",
+      "x"
+    ],
+    "unswept_axes": []
+  },
+  "version": 1
+}

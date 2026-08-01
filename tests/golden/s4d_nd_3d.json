@@ -1,0 +1,200 @@
+{
+  "format": "torch-dimensions/architecture",
+  "io": {
+    "cells_per_step": 24,
+    "input": [
+      "B",
+      "T",
+      2,
+      3,
+      4,
+      24
+    ],
+    "output": [
+      "B",
+      "T",
+      2,
+      3,
+      4,
+      24
+    ]
+  },
+  "lattice": {
+    "axes": [
+      {
+        "dynamic": true,
+        "name": "time",
+        "size": null
+      },
+      {
+        "dynamic": false,
+        "name": "dim0",
+        "size": 2
+      },
+      {
+        "dynamic": false,
+        "name": "dim1",
+        "size": 3
+      },
+      {
+        "dynamic": false,
+        "name": "dim2",
+        "size": 4
+      }
+    ],
+    "cells": {
+      "dense": true,
+      "present": 24,
+      "present_rle": [
+        0,
+        24
+      ],
+      "total": 24
+    },
+    "n_axes": 4,
+    "names": [
+      "time",
+      "dim0",
+      "dim1",
+      "dim2"
+    ],
+    "rank": 3,
+    "shape": [
+      2,
+      3,
+      4
+    ],
+    "time": true
+  },
+  "layers": [
+    {
+      "axis": "time",
+      "axis_index": 0,
+      "layer": 0,
+      "mixer": "S4DMixer",
+      "n_params": 4320,
+      "reverse": false
+    },
+    {
+      "axis": "dim0",
+      "axis_index": 1,
+      "layer": 1,
+      "mixer": "S4DMixer",
+      "n_params": 4320,
+      "reverse": false
+    },
+    {
+      "axis": "dim1",
+      "axis_index": 2,
+      "layer": 2,
+      "mixer": "S4DMixer",
+      "n_params": 4320,
+      "reverse": false
+    },
+    {
+      "axis": "dim2",
+      "axis_index": 3,
+      "layer": 3,
+      "mixer": "S4DMixer",
+      "n_params": 4320,
+      "reverse": false
+    },
+    {
+      "axis": "time",
+      "axis_index": 0,
+      "layer": 4,
+      "mixer": "S4DMixer",
+      "n_params": 4320,
+      "reverse": false
+    },
+    {
+      "axis": "dim0",
+      "axis_index": 1,
+      "layer": 5,
+      "mixer": "S4DMixer",
+      "n_params": 4320,
+      "reverse": false
+    }
+  ],
+  "model": {
+    "d_input": 24,
+    "d_model": 24,
+    "kind": "S4DND",
+    "n_layers": 6,
+    "n_params": 26208
+  },
+  "nd_method": {
+    "family": "scan",
+    "name": "AxialScan"
+  },
+  "sweeps": {
+    "coverage": {
+      "axes": [
+        {
+          "backward": 0,
+          "direction": "forward",
+          "forward": 2,
+          "index": 0,
+          "layers": [
+            0,
+            4
+          ],
+          "name": "time"
+        },
+        {
+          "backward": 0,
+          "direction": "forward",
+          "forward": 2,
+          "index": 1,
+          "layers": [
+            1,
+            5
+          ],
+          "name": "dim0"
+        },
+        {
+          "backward": 0,
+          "direction": "forward",
+          "forward": 1,
+          "index": 2,
+          "layers": [
+            2
+          ],
+          "name": "dim1"
+        },
+        {
+          "backward": 0,
+          "direction": "forward",
+          "forward": 1,
+          "index": 3,
+          "layers": [
+            3
+          ],
+          "name": "dim2"
+        }
+      ],
+      "n_layers": 6,
+      "pinned": [
+        "time",
+        "dim0",
+        "dim1",
+        "dim2"
+      ],
+      "unswept": []
+    },
+    "directions": {
+      "dim0": "forward",
+      "dim1": "forward",
+      "dim2": "forward",
+      "time": "forward"
+    },
+    "pinned_axes": [
+      "time",
+      "dim0",
+      "dim1",
+      "dim2"
+    ],
+    "unswept_axes": []
+  },
+  "version": 1
+}

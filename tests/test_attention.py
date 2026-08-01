@@ -104,3 +104,88 @@ def test_an_unknown_gate_is_refused():
     lat = td.Lattice(shape=(2, 3), time=True)
     with pytest.raises(ValueError, match="gate"):
         td.LSTM(8, 2, lat, nd_method=td.cafa, gate="sigmoid")
+
+
+# -- the module-level Kronecker claim ------------------------------------------
+
+
+def cafa_kernels(block, x):
+    """Run one CaFA layer's contractions and hand back the operators it used.
+
+    This is the adapter shape `td.testing.check_block(kernels=...)` asks for,
+    and it is written here rather than in the library because it necessarily
+    knows a block's internals.
+
+    Note which matrices come back: CaFA pools *the current activation*, so the
+    kernel for the second axis is built from the output of the first axis's
+    contraction. The Kronecker factors are therefore the ones actually applied,
+    not the ones a static reading of the module would predict — which is
+    exactly why the identity is worth testing rather than asserting.
+    """
+    from torch_dimensions.compose.kernel import axial_contract
+
+    h = x
+    mats = []
+    for j, axis in enumerate(block.spatial_axes):
+        kernel = block._kernel(0, j, axis, h)
+        lines = kernel.reshape(-1, kernel.shape[-2], kernel.shape[-1])
+        assert torch.allclose(lines, lines[0].expand_as(lines)), (
+            "pooled kernels differ between lines of the same batch element; "
+            "the joint-operator comparison assumes one operator per axis"
+        )
+        mats.append(lines[0])
+        h = axial_contract(h, block.lattice, axis, kernel)
+    return mats, h
+
+
+def test_cafa_contraction_is_the_kronecker_product_it_claims_to_be():
+    """The kernel family's central claim, checked at module level rather than
+    on hand-built matrices: contracting axis by axis equals applying the single
+    joint operator `A_0 ⊗ A_1 ⊗ …`. Until now this check was an unconditional
+    skip in the conformance report."""
+
+    def build(lat, d_model, plan=None):
+        return td.AxialKernel(
+            mixer=None,
+            plan=plan or td.ScanPlan.cyclic(lat.axis_names, len(lat.axis_names)),
+            lattice=lat,
+            d_model=d_model,
+            per_line=False,
+            norm=False,
+            residual=False,
+        )
+
+    report = td.testing.check_block(build, ranks=(2, 3), kernels=cafa_kernels, d_model=4)
+    assert report, str(report)
+    assert (
+        td.testing.check_block(build, ranks=(2,), kernels=cafa_kernels, raise_on_failure=False)
+        .results[3]
+        .status
+        == "pass"
+    )
+
+
+def test_the_kronecker_check_catches_a_contraction_that_is_not_a_product():
+    """Negative control: an adapter that reports the wrong operators must fail
+    the check. A conformance check that has never failed is a comment."""
+
+    def build(lat, d_model, plan=None):
+        return td.AxialKernel(
+            mixer=None,
+            plan=plan or td.ScanPlan.cyclic(lat.axis_names, len(lat.axis_names)),
+            lattice=lat,
+            d_model=d_model,
+            per_line=False,
+            norm=False,
+            residual=False,
+        )
+
+    def wrong(block, x):
+        mats, out = cafa_kernels(block, x)
+        return [m * 1.5 for m in mats], out
+
+    report = td.testing.check_block(
+        build, ranks=(2,), kernels=wrong, d_model=4, raise_on_failure=False
+    )
+    assert not report
+    assert "Kronecker" in report.failed[0].name
