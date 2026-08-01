@@ -60,9 +60,24 @@ SECTIONS = [
 ]
 
 
+def normalize(run: dict) -> dict:
+    """Bring a ledger row up to the current schema, in memory only.
+
+    The ledger is append-only — including across changes to the recording
+    code, which is how rows written before the metric was given an explicit
+    name still sit in it. Rewriting them to match would be the one edit this
+    file is not allowed to make, so the reader adapts instead. A row whose
+    number is called `test_acc` and nothing else *is* an accuracy; that is the
+    only assumption made here, and it is made once.
+    """
+    if "metric" not in run and "test_acc" in run:
+        run = {**run, "metric": run["test_acc"], "metric_name": "test_acc"}
+    return run
+
+
 def latest_per_config(ledger: list[dict]) -> list[dict]:
     groups: dict[tuple, list[dict]] = defaultdict(list)
-    for run in ledger:
+    for run in map(normalize, ledger):
         c = run["config"]
         groups[(c["task"], c["model"], c["seed"], c["epochs"])].append(run)
     out = []
