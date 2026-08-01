@@ -145,7 +145,7 @@ The test suite is the product as much as the models are:
   factorization crossover measured rather than asserted
   ([BENCHMARKS.md](BENCHMARKS.md)), including the two results that came out
   against the design's own predictions.
-- Every bug found in building this — 24 so far, including four found in this
+- Every bug found in building this — 25 so far, including several found in this
   library's own examples and shipped artifacts — is documented in
   [DEBUG.md](DEBUG.md) with what caught it, and the citations in that file are
   themselves tested.

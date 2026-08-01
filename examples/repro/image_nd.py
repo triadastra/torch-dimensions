@@ -129,7 +129,7 @@ def main() -> None:
     if args.dry_run:
         import time
 
-        from .harness import pick_device
+        from .harness import pick_device, sync
 
         device = pick_device(args.device)
         model = build().to(device)
@@ -137,13 +137,16 @@ def main() -> None:
         yb = data["train_y"][: args.batch].to(device)
         for _ in range(2):  # warm the kernels before timing
             nn.functional.cross_entropy(model(xb), yb).backward()
+        sync(device)
         t0 = time.time()
         nn.functional.cross_entropy(model(xb), yb).backward()
+        sync(device)  # without this, the number is the dispatch queue's
+        per_step = time.time() - t0
         n = sum(p.numel() for p in model.parameters())
         steps = (data["train_x"].shape[0] + args.batch - 1) // args.batch
         print(
-            f"{n:,} params on {device}; {time.time() - t0:.2f}s/step "
-            f"-> {(time.time() - t0) * steps / 60:.1f} min/epoch"
+            f"{n:,} params on {device}; {per_step:.2f}s/step "
+            f"-> {per_step * steps / 60:.1f} min/epoch"
         )
         return
 

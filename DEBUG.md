@@ -57,6 +57,7 @@ Their generalizable lessons are folded into §A without identifying details.
 | 22 | `examples/custom_method.py` — a schedule derived from *storage* order, not sweep order | high | conformance suite | fixed |
 | 23 | `testing.py` — gradcheck ran at a width the caller never asked for | low | new mixer | fixed |
 | 24 | `data/memmap.py` + `[safetensors]` — assumed numpy is always there | medium | CI (a leaner environment than the laptop) | fixed |
+| 25 | `examples/repro/*.py` — a dry-run timer that measured the dispatch queue | low | a run that took 40x its estimate | fixed |
 
 Severity is "what would this have cost if it reached a user", not "how hard was
 it to fix". Every one of #1–#5 is silent: no exception, no NaN, just wrong
@@ -601,7 +602,36 @@ it skips *visibly* instead of failing.
 
 ---
 
-## Not bugs
+## 25. The timer measured the queue, and I had already written that down
+
+The reproduction scripts have a `--dry-run` that times one training step and
+extrapolates to minutes-per-epoch, so a long run can be scheduled with some
+idea of its cost. For the 2-D Mamba model it reported **0.03 s/step, 0.5
+min/epoch**. The real run took **1.19 s/step, ~19 min/epoch** — 40x more — and
+a six-epoch job was queued on the strength of the wrong number and had to be
+killed an hour later.
+
+The cause is one missing line. On MPS and CUDA a `.backward()` returns as soon
+as the work is *queued*, so an unsynchronized timer measures dispatch. This is
+stated, in bold, in the second paragraph of `benchmarks/bench.py`:
+
+> **the timer synchronizes**: on MPS and CUDA the dispatch returns long before
+> the work does, so an unsynchronized loop measures the queue, not the model.
+
+Written by the same hand, the same day, in the file next door — and then not
+applied to the second timer, because the second timer did not look like a
+benchmark. It looked like a convenience.
+
+**The pattern (§A):** a rule written down in the place it was learned does not
+transfer to the next place it applies. What transfers is a shared function.
+`sync(device)` now lives in `harness.py` and is called by both dry-run paths,
+which is the only version of "remember to synchronize" that survives contact
+with a second author or a tired one.
+
+**Guarded by** nothing automatic, and that is honest: this is a measurement
+helper, and a test that asserts a timing is the flake this project has already
+refused to write once (`tests/test_perf.py`). The mitigation is that the
+timing code exists in exactly one place now.
 
 Two things that look like defects and are not. Recorded so they are not
 "fixed" later.

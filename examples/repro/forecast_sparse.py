@@ -45,7 +45,7 @@ import torch.nn as nn
 import torch_dimensions as td
 
 from .data import beijing
-from .harness import Config, pick_device, record, train_regressor
+from .harness import Config, pick_device, record, sync, train_regressor
 
 INPUT_LEN = 24
 HORIZON = 1
@@ -195,8 +195,10 @@ def main() -> None:
 
             model = build().to(device)
             step(model, train[0]).backward()
+            sync(device)
             t0 = time.time()
             step(model, train[0]).backward()
+            sync(device)  # without this, the number is the dispatch queue's
             n = sum(p.numel() for p in model.parameters())
             print(
                 f"{arm}: {n:,} params, {time.time() - t0:.2f}s/batch "

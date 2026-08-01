@@ -46,6 +46,22 @@ def pick_device(requested: str | None = None) -> str:
     return "cpu"
 
 
+def sync(device: str) -> None:
+    """Wait for the accelerator to actually finish.
+
+    On MPS and CUDA a `.backward()` returns as soon as the work is *queued*, so
+    an unsynchronized timer measures the dispatch and not the model. The first
+    version of the dry-run below reported 0.03 s/step for a model that really
+    takes ~1.3 s/step — a 40x underestimate that turned into a six-epoch run
+    scheduled on the strength of it. `benchmarks/bench.py` states this rule at
+    the top of the file; stating it there did not stop it happening here.
+    """
+    if device == "cuda":
+        torch.cuda.synchronize()
+    elif device == "mps":
+        torch.mps.synchronize()
+
+
 def param_groups(model: nn.Module, lr: float, ssm_lr: float, weight_decay: float) -> list[dict]:
     slow, fast = [], []
     for name, p in model.named_parameters():
