@@ -250,13 +250,12 @@ class ScanPlan:
     ) -> ScanPlan:
         """Sweep each bidirectional axis forward then immediately backward.
 
-        This is the schedule the Mamba-ND paper describes and its reference
-        implementation uses, written here from the description rather than
-        from their code (which states no license — see NOTICE) and since
-        checked against it layer for layer: it advances the axis ordering
-        every *two* layers while flipping direction every layer — so each
-        ordering is used once forward and once backward, and no phase-locking
-        is possible for any axis count. Axes
+        This produces the same per-layer schedule as the Mamba-ND reference
+        implementation — verified against it layer for layer; see NOTICE for
+        what that comparison does and does not establish. It advances the axis
+        ordering every *two* layers while flipping direction every layer, so
+        each ordering is used once forward and once backward and no
+        phase-locking is possible for any axis count. Axes
         outside ``bidirectional`` take a single forward layer instead of two.
 
         Prefer this over :meth:`cyclic` when layers are plentiful: it gives an

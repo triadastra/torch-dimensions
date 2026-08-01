@@ -62,10 +62,26 @@ on; it is recorded because it is a second, independent reason to keep that
 repository at arm's length.
 
 Accordingly: no code from it is present in this project, and none is
-redistributed. `ScanPlan.paired()` implements the alternating per-axis
-schedule their paper describes — an algorithm, written independently — and
-`dossier/verify_mamba_nd.py` imports their code from a user's own local clone
-purely to compare behaviour. Nothing in the published package depends on it.
+redistributed. `dossier/verify_mamba_nd.py` imports their code from a user's
+own local clone purely to compare behaviour; nothing in the published package
+depends on it.
+
+`ScanPlan.paired()` produces the schedule the paper specifies. Figure 2 of
+arXiv:2402.05892 states it in words — "a chain of 1D Mamba layers that process
+the sequence in alternating orderings. In 3D space, we use the order H+ H- W+
+W- T+ T-" — and our per-layer (axis, direction) sequence was additionally
+verified against their reference implementation, layer for layer, on
+2026-08-02. What that establishes, and what it does not, stated exactly:
+
+  - The two implementations share no expression. Ours builds `Step` tuples in
+    a three-line list comprehension; theirs advances an index (`z = i // 2`)
+    over einops rearrange strings. Anyone can compare the two files.
+  - `paired()` has been in this repository since its Phase 2 commit
+    (0fba849), which predates any contact with their code here.
+  - We make **no claim** about which sources informed that original
+    implementation. The schedule is published in the paper's Figure 2;
+    identical behaviour between two expressions of a published algorithm is
+    expected and is not evidence of copying in either direction.
 
 Anyone intending to build on Mamba-ND beyond private study should resolve the
 license question with its authors first.

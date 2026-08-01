@@ -463,14 +463,16 @@ The library emits a versioned JSON spec (`td.spec`, SPEC_VERSION 1); the viewer 
 - [ ] **Learned schedules**: differentiable relaxation over sweep order (soft mixture of axis sweeps annealed to a hard plan). Research-grade; the `ScanPlan`-as-data design is what makes it even expressible.
 - [ ] **Hierarchical / nested lattices** (multi-resolution grids, lattice-of-lattices): the S4ND paper's multi-scale appendix and weather models both want this; `Lattice.merge/slice` (Phase 1) is the substrate.
 - [ ] **Masked-pretraining utilities**: random cell masking as a training-time lattice transform — the `valid` machinery already guarantees inertia; the utility is three functions and a tutorial, but only after Phase 9 proves the supervised story.
-- [ ] **Partial flattening** — scan a *subset* of axes jointly, batching the
-  rest, which is what Mamba-ND actually does (`n_dim_pos`, and its published
-  configs use the middle values). `td.axial_scan` and `td.flatten` are the two
-  endpoints; the interior is a real method used by a real paper and this
-  library has no name for it. Probably one `axes=` argument on `flatten`
-  rather than a new strategy — the design question is how a plan expresses
-  "these three axes together, that one batched", and whether the answer is a
-  plan step over a *set* of axes.
+- [ ] **Scan factorization** — the Mamba-ND paper's own name for it (§4.1,
+  Fig. 5b): a policy choosing how many axes are flattened into each scanned
+  sequence. "No factorization" is one sequence over every cell — `td.flatten`.
+  Maximal factorization is one sequence per line — `td.axial_scan`. The
+  interior (D 2D sequences out of a 3D lattice) is what their published
+  configs actually use, and this library cannot express it. Probably a
+  `groups=` argument giving per-layer ordered axis subsets rather than a new
+  strategy; the design question is whether a `ScanPlan` step should be allowed
+  to name a *set* of axes rather than one, which would make all three policies
+  a single schedule type.
 - [ ] **Continuous-time lattices**: irregular timestamps per cell (the `dt` in SSMs is *built* for this — S4's continuous-time parameterization applied per-observation). The biggest research swing in the list; would make td the only library doing irregular N-D series natively.
 
 ---

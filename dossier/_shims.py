@@ -1,8 +1,15 @@
 """Import shims that let the upstream research repos load off-GPU.
 
-These repos are *not* vendored into this one — they stay wherever you cloned
-them and this file makes them importable, so nothing here is redistribution
-and no license question arises. Point `TD_EXTERNAL` at the clone directory.
+These repos are *not* vendored into this one. They are cloned on demand into a
+directory **outside** this repository, and this file makes them importable
+from there, so no upstream code enters our tree, our git history, our sdist or
+our wheel. Nothing here is redistribution.
+
+`external(name)` fetches a shallow clone the first time it is asked for; set
+`TD_EXTERNAL` to choose where they live (default `~/.cache/torch-dimensions/
+upstream`). It refuses outright to place a clone inside this repository, which
+is the one mistake that would turn "we read their code" into "we shipped their
+code".
 
 Every stub below replaces something a research repo imports at module scope
 for reasons unrelated to the mathematics: a trainer, a config framework, a hub
@@ -14,20 +21,116 @@ exercise is that the second is far more common than the first.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import types
 from pathlib import Path
 
+# The repositories these comparisons read, and what each one grants. The
+# license column is not decoration: it decides what may be done with what is
+# fetched, and Mamba-ND grants nothing at all.
+# `paths` are the sparse-checkout directories: only these are downloaded.
+# A full clone of s4 is 39 MB and the comparison reads 420 KB of it, so this
+# is 26x smaller and produces identical numbers (verified). Sparse checkout is
+# preferred over vendoring a trimmed copy for one reason above the others: the
+# comparison is only worth something because it runs *their* code, and hand-
+# picking "the modules that matter" makes us the ones deciding what matters.
+# A wrong call there makes the check agree for the wrong reason.
+UPSTREAM = {
+    "s4": {
+        "url": "https://github.com/state-spaces/s4",
+        "license": "Apache-2.0",
+        "paths": ["src/models", "src/utils"],
+    },
+    "mamba": {
+        "url": "https://github.com/state-spaces/mamba",
+        "license": "Apache-2.0",
+        "paths": ["mamba_ssm"],
+    },
+    "CaFA": {
+        "url": "https://github.com/BaratiLab/CaFA",
+        "license": "MIT",
+        "paths": ["libs"],
+    },
+    "Mamba-ND": {
+        "url": "https://github.com/jacklishufan/Mamba-ND",
+        "license": "NO LICENSE",
+        "paths": ["video_pretraining"],
+    },
+}
 
-def external(name: str) -> Path:
-    root = Path(os.environ.get("TD_EXTERNAL", Path.home() / "Desktop/Safe/code/github/external"))
-    path = root / name
-    if not path.exists():
-        raise FileNotFoundError(
-            f"upstream repo {name!r} not found under {root}. Clone it there, or set "
-            "TD_EXTERNAL to the directory holding the clones."
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _clone_root() -> Path:
+    root = Path(
+        os.environ.get("TD_EXTERNAL", Path.home() / ".cache" / "torch-dimensions" / "upstream")
+    ).expanduser()
+    # A clone inside this repository would put unlicensed third-party code one
+    # `git add -A` away from being committed and published. Refused, not warned
+    # about: a warning is something you scroll past.
+    resolved = root.resolve()
+    if resolved == _REPO_ROOT or _REPO_ROOT in resolved.parents:
+        raise ValueError(
+            f"TD_EXTERNAL points inside this repository ({resolved}). Upstream clones must "
+            "live outside it — one `git add -A` away from committing someone else's code is "
+            "not a place to keep it. Choose a path outside the repo."
         )
+    return root
+
+
+def external(name: str, *, clone: bool = True) -> Path:
+    """Path to an upstream clone, fetching it on first use.
+
+    Shallow-clones into `TD_EXTERNAL` (outside this repo, enforced). Pass
+    `clone=False` to require that it already exists.
+    """
+    if name not in UPSTREAM:
+        raise KeyError(f"unknown upstream {name!r}; known: {sorted(UPSTREAM)}")
+    spec = UPSTREAM[name]
+    root = _clone_root()
+    path = root / name
+    if path.exists():
+        return path
+    if not clone:
+        raise FileNotFoundError(f"upstream repo {name!r} not found under {root}")
+
+    print(f"cloning {name} from {spec['url']} into {path}")
+    print(f"  license: {spec['license']}")
+    if spec["license"] == "NO LICENSE":
+        print(
+            "  ^ this repository states no license. Cloning it to read and compare against\n"
+            "    is your own business; redistributing it, or copying its code into a project,\n"
+            "    is not granted. Nothing from it enters torch-dimensions."
+        )
+    print(f"  fetching only: {', '.join(spec['paths'])}")
+    root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "clone", "--filter=blob:none", "--sparse", "--depth", "1", spec["url"], str(path)],
+        check=True,
+    )
+    subprocess.run(["git", "sparse-checkout", "set", *spec["paths"]], cwd=path, check=True)
+    print(f"  at commit {head(name)}")
     return path
+
+
+def head(name: str) -> str:
+    """The upstream commit a clone is sitting on, or "unknown".
+
+    Worth having because a number is only reproducible if you can say what it
+    was measured against. Clones made by hand often cannot answer this: three
+    of the four repositories originally used here had no `.git` of their own,
+    so `git -C` silently reported the *enclosing* repository's commit — the
+    same SHA for three different projects, which is how the problem announced
+    itself.
+    """
+    path = _clone_root() / name
+    if not (path / ".git").exists():
+        return "unknown (no .git — not a clone)"
+    out = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=path, capture_output=True, text=True, check=False
+    )
+    return out.stdout.strip() or "unknown"
 
 
 def _module(name: str, **attrs) -> types.ModuleType:

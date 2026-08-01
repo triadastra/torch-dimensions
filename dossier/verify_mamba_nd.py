@@ -14,17 +14,42 @@ up.
 not redistributed, and not copied into this project — it stays in your own
 clone and this script imports it by path. Nothing here reproduces their code.
 
+**Exactly what is in the measured path**, because a stub that participates in
+a measurement is part of the result. With `skip=False` their block computes
+`drop_path(dropout(mixer(x)))` around the rearrange, and:
+
+- `mixer` is **ours**, injected on purpose — that is the experiment;
+- `norm` is `nn.Identity`, passed by us;
+- `dropout` and `drop_path` come from **our stub**, which returns `Identity()`
+  at the default rate of 0.
+
+So two stubbed components do sit in the path. They contribute nothing
+numerically *because* they are identities at rate 0, which is why the
+comparison can be bitwise rather than approximate — "they are identities" is
+the reason, not "they are absent". The one assumption left standing: real
+`mmcv`'s `DropPath(drop_prob=0)` is likewise the identity. That is the
+definition of stochastic depth, but it is an assumption here rather than a
+measurement, since mmcv is not installed.
+
 **What is being compared.** Mamba-ND's method is not "one axis per layer". It
 rearranges the flattened lattice into a per-layer axis *order* and scans the
 last `n_dim_pos` axes as one sequence, batching the rest:
 
-    n_dim_pos = 1   ->  scan one axis          == td.axial_scan
-    n_dim_pos = rank->  scan every cell at once == td.flatten
-    in between      ->  scan a *subset* of axes  (td has no name for this yet)
+    n_dim_pos = 1    -> one sequence per line      == td.axial_scan
+    n_dim_pos = rank -> one sequence for everything == td.flatten
+    in between       -> a subset scanned jointly    (we have no name for it)
 
-So their two published extremes are two of our methods, and the middle is a
-method this library does not currently express. That is the finding; the
-numbers below are the check that the first equivalence is exact.
+The paper calls this choice **scan factorization** (§4.1, Fig. 5b: "no
+factorization, there is only 1 sequence" through "factorizing the 3D sequence
+into D² 1D sequences"). So their two extremes are our two methods, and the
+middle — which their published configs actually use — is one this library
+cannot express. That is the finding; the numbers below check that the
+maximally-factorized corner is exact.
+
+A note on their notation, from the paper rather than the code: `H+` is not
+"scan the H axis". §4.1 defines a scan ordering as a permutation of the axes
+flattened whole into one sequence, "the last dimension traversed
+continuously", so `H+` names the permutation ending in H.
 """
 
 from __future__ import annotations
@@ -121,9 +146,11 @@ def schedule_check() -> None:
     """Their per-layer schedule against `ScanPlan.paired`.
 
     Upstream advances the axis ordering every *two* layers (`z = i // 2`,
-    `d = z % len(orders)`) while direction alternates per layer. That is the
-    claim `ScanPlan.paired` was written from; this prints both so the
-    correspondence is visible rather than asserted in a docstring.
+    `d = z % len(orders)`) while direction alternates per layer, which is also
+    what the paper specifies in words (Fig. 2: "in 3D space, we use the order
+    H+ H- W+ W- T+ T-"). This prints both schedules so the correspondence is
+    visible rather than asserted. See NOTICE for what the match does and does
+    not establish about provenance.
     """
     n_layers = 12
     upstream = [(ORDERS[(i // 2) % len(ORDERS)].split()[-1], bool(i % 2)) for i in range(n_layers)]

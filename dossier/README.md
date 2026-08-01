@@ -12,18 +12,39 @@ composed.** That is what these scripts do.
 
 ## Running them
 
-The upstream repos stay in your own clone. Point `TD_EXTERNAL` at the
-directory holding them (default `~/Desktop/Safe/code/github/external`):
-
 ```bash
 pip install hydra-core einops timm        # genuine imports, dev-only
 python dossier/verify_s4nd.py
 python dossier/verify_mamba_nd.py
-# CaFA: MIT, clone from https://github.com/BaratiLab/CaFA
 ```
 
-Neither repo is vendored. `_shims.py` makes them *importable*; it copies
-nothing.
+Each script clones what it needs on first run, into
+`~/.cache/torch-dimensions/upstream` (override with `TD_EXTERNAL`), prints the
+repository's license before fetching, and reports the commit it landed on so
+every number below is attributable to a revision.
+
+The clones are **sparse**: `--filter=blob:none --sparse` plus a checkout of
+only the directories a comparison reads. For s4 that is `src/models` and
+`src/utils` — **1.7 MB instead of 39 MB**, producing identical numbers.
+
+That is deliberately not the same as vendoring a trimmed copy, which was
+considered and rejected. A distilled copy is a fork we would maintain forever,
+and worse, it would put *our* judgement about which modules matter inside the
+very check whose value is that it runs *their* code. Sparse checkout gets the
+whole size benefit and keeps the code genuinely theirs. (Licensing would have
+permitted vendoring for the Apache-2.0 and MIT repositories; it was not the
+licence that decided this.)
+
+**The clone directory may not be inside this repository, and that is enforced
+rather than advised.** `_shims.py` raises if `TD_EXTERNAL` resolves to this
+tree or below it. The reason is narrow and worth stating: an upstream clone
+sitting in the working tree is one `git add -A` from being committed, and one
+of these repositories grants no license to redistribute. Refusing the path
+outright is the only version of that rule that survives a hurried afternoon.
+
+Nothing upstream is vendored: no third-party code is in our tree, our git
+history, our sdist or our wheel. `_shims.py` fetches and makes importable; it
+copies nothing.
 
 ## Results, 2026-08-02, Apple Silicon (MPS) + CPU, float32
 
@@ -132,24 +153,35 @@ models are bit-for-bit unchanged. What we did not: RoPE (we have a learned
 bias table) and the spherical quadrature weights, which are a property of the
 sphere rather than of the method.
 
-## A method we do not have
+## Scan factorization — a method we do not have, and its proper name
 
-Reading their code answered a question the paper's prose leaves open.
-Mamba-ND rearranges the flattened lattice into a per-layer axis order and
-scans the **last `n_dim_pos` axes as one sequence**, batching the rest:
+The code has a `n_dim_pos` parameter that scans the last *k* axes of a
+per-layer ordering as one sequence and batches the rest. The paper names this
+directly (§4.1, Fig. 5b, "Scan-Factorization policies"):
 
-| `n_dim_pos` | what it does | our name |
+> Col 1: No factorization, there is only 1 sequence. Col 2: Factorizing the 3D
+> sequence into D 2D sequences [...] Col 3: Factorizing the 3D sequence into
+> D² 1D sequences.
+
+So it is a spectrum, and our two methods are its endpoints:
+
+| paper's policy | `n_dim_pos` | our name |
 |---|---|---|
-| 1 | scan one axis | `td.axial_scan` |
-| rank | scan every cell in one sequence | `td.flatten` |
-| 2 of 4 | scan a *subset* of axes jointly | **none** |
+| no factorization — 1 sequence | rank | `td.flatten` |
+| factorize into D 2D sequences | in between | **none** |
+| factorize into D² 1D sequences | 1 | `td.axial_scan` |
 
-Their published configs use the middle setting (`factorization='hw_t'` gives
-`n_dim_pos = (2, 2, 4)`; `'h_w_t'` gives `(1, 1, 2)`), so it is not a corner
-case — it is how the model is actually run. Both of our existing methods are
-its endpoints, and the interpolation between them is expressible in this
-library's terms but is not currently expressible in its API. Logged as a
-Track E item.
+Their published configs use the middle (`factorization='hw_t'` →
+`n_dim_pos = (2, 2, 4)`; `'h_w_t'` → `(1, 1, 2)`), so it is how the model is
+actually run rather than a corner case. Logged as a Track E item.
+
+**One correction from reading the paper rather than only the code.** In their
+notation `H+` is not "scan the H axis". §4.1: a scan ordering permutes the
+axes and flattens *all* of them into one 1D sequence, forward or reversed,
+with "the last dimension traversed continuously" — so `H+` names the
+permutation that ends in H. Scanning a single axis is the maximally factorized
+policy, not a different kind of object. The equivalence measured above
+(`n_dim_pos=1` ≡ `td.axial_apply`) is that corner of the spectrum.
 
 ## Licensing audit
 

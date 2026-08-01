@@ -235,9 +235,10 @@ third-party attribution; the short version:
 - Two kernel options (`qk_norm`, `kernel_residual`) are **ideas taken from**
   [BaratiLab/CaFA](https://github.com/BaratiLab/CaFA) (MIT), independently
   implemented.
-- `ScanPlan.paired()` implements the schedule **described by**
-  [Mamba-ND](https://github.com/jacklishufan/Mamba-ND), written from the
-  paper. That repository states **no license**, so no code from it is used or
-  redistributed here — see NOTICE.
+- `ScanPlan.paired()` produces the same per-layer schedule as
+  [Mamba-ND](https://github.com/jacklishufan/Mamba-ND)'s reference
+  implementation, verified against it. That repository states **no license**,
+  so no code from it is used or redistributed here — see [NOTICE](NOTICE),
+  which states precisely what that verification does and does not establish.
 
 No third-party code is redistributed in this package.
