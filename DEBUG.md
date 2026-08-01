@@ -651,6 +651,59 @@ unobservable. A semantically equivalent mutant, not a coverage hole.
 
 ---
 
+## 26. The spec described a model the library never runs
+
+`td.spec(model)` emits the document the viewer renders, `td.viz.show` serves,
+and a downstream tool may parse. For a kernel-family model — `method=td.cafa`
+or `td.axial_attention` — it said this:
+
+```
+layer 0: axis time, mixer LSTMMixer
+layer 1: axis h,    mixer LSTMMixer
+layer 2: axis w,    mixer LSTMMixer
+```
+
+None of layers 1 and 2 happens. `AxialKernel.forward` contracts **every**
+spatial axis with a kernel on **every** layer, and applies the mixer along
+time only. The document was describing a scan model that was never built, and
+`"nd_method": {"family": "scan"}` was a hardcoded string in a function whose
+name — `scan_model_spec` — was the only thing about it that was still true
+after the kernel family landed.
+
+The viewer, meanwhile, was *already right*: `Scene.jsx` sniffed
+`nd_method.name === "AxialKernel"` and drew a simultaneous flash instead of a
+travelling wavefront. So the renderer had a special case that the document it
+renders did not, and the sidebar — which reads `layer.axis` directly — printed
+the three sweeps anyway. Half the system knew.
+
+**Cause.** A schema written when there was one family, extended by adding a
+family rather than by extending the schema. The per-layer record had exactly
+the fields a scan needs (`axis`, `axis_index`, `reverse`) and no way to say
+"this layer contracts a set of axes and sweeps none of them", so the kernel
+family was serialized through the only vocabulary available.
+
+**Found by** writing a third family. Asking "what will a `flatten` layer put
+in the `axis` field?" has no answer, and the same question asked of the
+existing kernel family turned out to have a wrong one already shipped.
+
+**Fixed** by giving layers a `kind` (`scan` | `kernel`), an `axes` list of what
+the layer actually mixes, and `contracted` for the axes handled by kernels;
+`sweeps` gains `contracted_axes`, and `directions` now lists only axes a mixer
+genuinely sweeps, because a contraction has no direction. `nd_method.family`
+is derived from the composition class. Spec version 1 to 2.
+
+**Guarded by** `tests/test_spec.py::test_the_kernel_family_spec_does_not_claim_spatial_sweeps`
+and the golden fixtures, which is how the blast radius was visible at all: the
+regeneration diff showed four stored specs changing, and the cafa one changing
+in exactly the way the fix intends.
+
+**The pattern (§A):** the renderer's special case was documentation of a defect
+in the data. A consumer that has to compensate for a producer is evidence the
+producer is wrong, and it is worth reading such a special case as a bug report
+rather than as a feature.
+
+---
+
 ## A. Recurring patterns
 
 Four classes account for the first eight — and the later finds keep landing in

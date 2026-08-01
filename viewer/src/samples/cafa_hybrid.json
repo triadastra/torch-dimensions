@@ -1,0 +1,184 @@
+{
+ "format": "torch-dimensions/architecture",
+ "io": {
+  "cells_per_step": 35,
+  "input": [
+   "B",
+   "T",
+   5,
+   7,
+   1
+  ],
+  "output": [
+   "B",
+   "T",
+   5,
+   7,
+   32
+  ]
+ },
+ "lattice": {
+  "axes": [
+   {
+    "dynamic": true,
+    "name": "time",
+    "size": null
+   },
+   {
+    "dynamic": false,
+    "name": "station",
+    "size": 5
+   },
+   {
+    "dynamic": false,
+    "name": "sensor",
+    "size": 7
+   }
+  ],
+  "cells": {
+   "dense": false,
+   "present": 31,
+   "present_rle": [
+    0,
+    18,
+    1,
+    10,
+    1,
+    1,
+    2,
+    2
+   ],
+   "total": 35
+  },
+  "n_axes": 3,
+  "names": [
+   "time",
+   "station",
+   "sensor"
+  ],
+  "rank": 2,
+  "shape": [
+   5,
+   7
+  ],
+  "time": true
+ },
+ "layers": [
+  {
+   "axes": [
+    "station",
+    "sensor",
+    "time"
+   ],
+   "axis": "time",
+   "axis_index": 0,
+   "contracted": [
+    "station",
+    "sensor"
+   ],
+   "kind": "kernel",
+   "layer": 0,
+   "mixer": "LSTMMixer",
+   "n_params": 8448,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "station",
+    "sensor",
+    "time"
+   ],
+   "axis": "time",
+   "axis_index": 0,
+   "contracted": [
+    "station",
+    "sensor"
+   ],
+   "kind": "kernel",
+   "layer": 1,
+   "mixer": "LSTMMixer",
+   "n_params": 8448,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "station",
+    "sensor",
+    "time"
+   ],
+   "axis": "time",
+   "axis_index": 0,
+   "contracted": [
+    "station",
+    "sensor"
+   ],
+   "kind": "kernel",
+   "layer": 2,
+   "mixer": "LSTMMixer",
+   "n_params": 8448,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "station",
+    "sensor",
+    "time"
+   ],
+   "axis": "time",
+   "axis_index": 0,
+   "contracted": [
+    "station",
+    "sensor"
+   ],
+   "kind": "kernel",
+   "layer": 3,
+   "mixer": "LSTMMixer",
+   "n_params": 8448,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "station",
+    "sensor",
+    "time"
+   ],
+   "axis": "time",
+   "axis_index": 0,
+   "contracted": [
+    "station",
+    "sensor"
+   ],
+   "kind": "kernel",
+   "layer": 4,
+   "mixer": "LSTMMixer",
+   "n_params": 8448,
+   "reverse": false
+  }
+ ],
+ "model": {
+  "d_input": 1,
+  "d_model": 32,
+  "kind": "LSTM",
+  "n_layers": 5,
+  "n_params": 69074
+ },
+ "nd_method": {
+  "family": "kernel",
+  "name": "AxialKernel"
+ },
+ "sweeps": {
+  "contracted_axes": [
+   "station",
+   "sensor"
+  ],
+  "coverage": null,
+  "directions": {
+   "time": "forward"
+  },
+  "pinned_axes": [
+   "time"
+  ],
+  "unswept_axes": []
+ },
+ "version": 2
+}

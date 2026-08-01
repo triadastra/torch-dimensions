@@ -63,32 +63,48 @@
   },
   "layers": [
     {
+      "axes": [
+        "time"
+      ],
       "axis": "time",
       "axis_index": 0,
+      "kind": "scan",
       "layer": 0,
       "mixer": "LSTMMixer",
       "n_params": 2176,
       "reverse": false
     },
     {
+      "axes": [
+        "h"
+      ],
       "axis": "h",
       "axis_index": 1,
+      "kind": "scan",
       "layer": 1,
       "mixer": "LSTMMixer",
       "n_params": 2176,
       "reverse": false
     },
     {
+      "axes": [
+        "w"
+      ],
       "axis": "w",
       "axis_index": 2,
+      "kind": "scan",
       "layer": 2,
       "mixer": "LSTMMixer",
       "n_params": 2176,
       "reverse": false
     },
     {
+      "axes": [
+        "time"
+      ],
       "axis": "time",
       "axis_index": 0,
+      "kind": "scan",
       "layer": 3,
       "mixer": "LSTMMixer",
       "n_params": 2176,
@@ -107,6 +123,7 @@
     "name": "AxialScan"
   },
   "sweeps": {
+    "contracted_axes": [],
     "coverage": {
       "axes": [
         {
@@ -161,5 +178,5 @@
     ],
     "unswept_axes": []
   },
-  "version": 1
+  "version": 2
 }

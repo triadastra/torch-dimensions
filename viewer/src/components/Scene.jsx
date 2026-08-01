@@ -41,7 +41,9 @@ function Lattice({ parsed, layout, anim }) {
     const { spec } = parsed;
     const layer = spec.layers[anim.current.layer];
     const progress = anim.current.progress;
-    const isKernel = spec.nd_method.name === "AxialKernel";
+    // The family, not the class name: a second kernel-family method would
+    // have sniffed as a scan and been drawn with a travelling wavefront.
+    const isKernel = spec.nd_method.family === "kernel";
     const axis = layer ? latticeAxisOf(layer, spec) : null;
     const color = new THREE.Color();
 
@@ -92,7 +94,9 @@ function SweepArrow({ parsed, layout, anim }) {
     const { spec } = parsed;
     const layer = spec.layers[anim.current.layer];
     const axis = layer ? latticeAxisOf(layer, spec) : null;
-    const isKernel = spec.nd_method.name === "AxialKernel";
+    // The family, not the class name: a second kernel-family method would
+    // have sniffed as a scan and been drawn with a travelling wavefront.
+    const isKernel = spec.nd_method.family === "kernel";
     if (axis === null || isKernel) {
       g.visible = false;
       return;
@@ -107,9 +111,11 @@ function SweepArrow({ parsed, layout, anim }) {
     const screenDir = sd === 1 ? -dir : dir;
 
     g.position.set(0, offY, 0);
-    if (sd === 0) g.rotation.set(0, 0, screenDir > 0 ? -Math.PI / 2 : Math.PI / 2);
+    if (sd === 0)
+      g.rotation.set(0, 0, screenDir > 0 ? -Math.PI / 2 : Math.PI / 2);
     if (sd === 1) g.rotation.set(0, 0, screenDir > 0 ? 0 : Math.PI);
-    if (sd === 2) g.rotation.set(screenDir > 0 ? Math.PI / 2 : -Math.PI / 2, 0, 0);
+    if (sd === 2)
+      g.rotation.set(screenDir > 0 ? Math.PI / 2 : -Math.PI / 2, 0, 0);
     g.scale.setScalar(Math.max(2, len * 0.35) / 2.4);
   });
 
@@ -167,14 +173,18 @@ export default function Scene({ parsed, anim }) {
   const dist = Math.max(6, layout.radius * 2.4);
 
   return (
-    <Canvas camera={{ position: [dist * 0.8, dist * 0.55, dist * 0.85], fov: 42 }}>
+    <Canvas
+      camera={{ position: [dist * 0.8, dist * 0.55, dist * 0.85], fov: 42 }}
+    >
       <color attach="background" args={["#0b0e14"]} />
       <ambientLight intensity={0.85} />
       <directionalLight position={[6, 10, 8]} intensity={1.1} />
       <directionalLight position={[-8, -4, -6]} intensity={0.35} />
       <Recenter layout={layout} />
       <Lattice
-        key={parsed.spec.model.kind + parsed.shape.join("x") + parsed.cells.length}
+        key={
+          parsed.spec.model.kind + parsed.shape.join("x") + parsed.cells.length
+        }
         parsed={parsed}
         layout={layout}
         anim={anim}

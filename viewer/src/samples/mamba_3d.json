@@ -1,156 +1,297 @@
 {
  "format": "torch-dimensions/architecture",
- "version": 1,
- "model": {
-  "kind": "Mamba",
-  "d_model": 32,
-  "d_input": 32,
-  "n_layers": 8,
-  "n_params": 79872
- },
- "nd_method": {
-  "name": "AxialScan",
-  "family": "scan"
- },
- "lattice": {
-  "shape": [
-   5,
-   6,
-   7
-  ],
-  "names": [
-   "time",
-   "depth",
-   "height",
-   "width"
-  ],
-  "time": true,
-  "rank": 3,
-  "n_axes": 4,
-  "axes": [
-   {
-    "name": "time",
-    "size": null,
-    "dynamic": true
-   },
-   {
-    "name": "depth",
-    "size": 5,
-    "dynamic": false
-   },
-   {
-    "name": "height",
-    "size": 6,
-    "dynamic": false
-   },
-   {
-    "name": "width",
-    "size": 7,
-    "dynamic": false
-   }
-  ],
-  "cells": {
-   "total": 210,
-   "present": 210,
-   "dense": true,
-   "present_rle": [
-    0,
-    210
-   ]
-  }
- },
- "layers": [
-  {
-   "layer": 0,
-   "axis": "time",
-   "axis_index": 0,
-   "reverse": false,
-   "mixer": "MambaMixer",
-   "n_params": 9920
-  },
-  {
-   "layer": 1,
-   "axis": "depth",
-   "axis_index": 1,
-   "reverse": false,
-   "mixer": "MambaMixer",
-   "n_params": 9920
-  },
-  {
-   "layer": 2,
-   "axis": "depth",
-   "axis_index": 1,
-   "reverse": true,
-   "mixer": "MambaMixer",
-   "n_params": 9920
-  },
-  {
-   "layer": 3,
-   "axis": "height",
-   "axis_index": 2,
-   "reverse": false,
-   "mixer": "MambaMixer",
-   "n_params": 9920
-  },
-  {
-   "layer": 4,
-   "axis": "height",
-   "axis_index": 2,
-   "reverse": true,
-   "mixer": "MambaMixer",
-   "n_params": 9920
-  },
-  {
-   "layer": 5,
-   "axis": "width",
-   "axis_index": 3,
-   "reverse": false,
-   "mixer": "MambaMixer",
-   "n_params": 9920
-  },
-  {
-   "layer": 6,
-   "axis": "width",
-   "axis_index": 3,
-   "reverse": true,
-   "mixer": "MambaMixer",
-   "n_params": 9920
-  },
-  {
-   "layer": 7,
-   "axis": "time",
-   "axis_index": 0,
-   "reverse": false,
-   "mixer": "MambaMixer",
-   "n_params": 9920
-  }
- ],
- "sweeps": {
-  "directions": {
-   "time": "forward",
-   "depth": "both",
-   "height": "both",
-   "width": "both"
-  },
-  "unswept_axes": []
- },
  "io": {
+  "cells_per_step": 120,
   "input": [
    "B",
    "T",
+   4,
    5,
    6,
-   7,
-   32
+   1
   ],
   "output": [
    "B",
    "T",
+   4,
    5,
    6,
-   7,
-   32
+   48
+  ]
+ },
+ "lattice": {
+  "axes": [
+   {
+    "dynamic": true,
+    "name": "time",
+    "size": null
+   },
+   {
+    "dynamic": false,
+    "name": "depth",
+    "size": 4
+   },
+   {
+    "dynamic": false,
+    "name": "row",
+    "size": 5
+   },
+   {
+    "dynamic": false,
+    "name": "col",
+    "size": 6
+   }
   ],
-  "cells_per_step": 210
- }
+  "cells": {
+   "dense": true,
+   "present": 120,
+   "present_rle": [
+    0,
+    120
+   ],
+   "total": 120
+  },
+  "n_axes": 4,
+  "names": [
+   "time",
+   "depth",
+   "row",
+   "col"
+  ],
+  "rank": 3,
+  "shape": [
+   4,
+   5,
+   6
+  ],
+  "time": true
+ },
+ "layers": [
+  {
+   "axes": [
+    "time"
+   ],
+   "axis": "time",
+   "axis_index": 0,
+   "kind": "scan",
+   "layer": 0,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "depth"
+   ],
+   "axis": "depth",
+   "axis_index": 1,
+   "kind": "scan",
+   "layer": 1,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "depth"
+   ],
+   "axis": "depth",
+   "axis_index": 1,
+   "kind": "scan",
+   "layer": 2,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": true
+  },
+  {
+   "axes": [
+    "row"
+   ],
+   "axis": "row",
+   "axis_index": 2,
+   "kind": "scan",
+   "layer": 3,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "row"
+   ],
+   "axis": "row",
+   "axis_index": 2,
+   "kind": "scan",
+   "layer": 4,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": true
+  },
+  {
+   "axes": [
+    "col"
+   ],
+   "axis": "col",
+   "axis_index": 3,
+   "kind": "scan",
+   "layer": 5,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "col"
+   ],
+   "axis": "col",
+   "axis_index": 3,
+   "kind": "scan",
+   "layer": 6,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": true
+  },
+  {
+   "axes": [
+    "time"
+   ],
+   "axis": "time",
+   "axis_index": 0,
+   "kind": "scan",
+   "layer": 7,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "depth"
+   ],
+   "axis": "depth",
+   "axis_index": 1,
+   "kind": "scan",
+   "layer": 8,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "depth"
+   ],
+   "axis": "depth",
+   "axis_index": 1,
+   "kind": "scan",
+   "layer": 9,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": true
+  },
+  {
+   "axes": [
+    "row"
+   ],
+   "axis": "row",
+   "axis_index": 2,
+   "kind": "scan",
+   "layer": 10,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": false
+  },
+  {
+   "axes": [
+    "row"
+   ],
+   "axis": "row",
+   "axis_index": 2,
+   "kind": "scan",
+   "layer": 11,
+   "mixer": "MambaMixer",
+   "n_params": 19680,
+   "reverse": true
+  }
+ ],
+ "model": {
+  "d_input": 1,
+  "d_model": 48,
+  "kind": "Mamba",
+  "n_layers": 12,
+  "n_params": 237408
+ },
+ "nd_method": {
+  "family": "scan",
+  "name": "AxialScan"
+ },
+ "sweeps": {
+  "contracted_axes": [],
+  "coverage": {
+   "axes": [
+    {
+     "backward": 0,
+     "direction": "forward",
+     "forward": 2,
+     "index": 0,
+     "layers": [
+      0,
+      7
+     ],
+     "name": "time"
+    },
+    {
+     "backward": 2,
+     "direction": "both",
+     "forward": 2,
+     "index": 1,
+     "layers": [
+      1,
+      2,
+      8,
+      9
+     ],
+     "name": "depth"
+    },
+    {
+     "backward": 2,
+     "direction": "both",
+     "forward": 2,
+     "index": 2,
+     "layers": [
+      3,
+      4,
+      10,
+      11
+     ],
+     "name": "row"
+    },
+    {
+     "backward": 1,
+     "direction": "both",
+     "forward": 1,
+     "index": 3,
+     "layers": [
+      5,
+      6
+     ],
+     "name": "col"
+    }
+   ],
+   "n_layers": 12,
+   "pinned": [
+    "time"
+   ],
+   "unswept": []
+  },
+  "directions": {
+   "col": "both",
+   "depth": "both",
+   "row": "both",
+   "time": "forward"
+  },
+  "pinned_axes": [
+   "time"
+  ],
+  "unswept_axes": []
+ },
+ "version": 2
 }

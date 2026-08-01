@@ -59,48 +59,72 @@
   },
   "layers": [
     {
+      "axes": [
+        "time"
+      ],
       "axis": "time",
       "axis_index": 0,
+      "kind": "scan",
       "layer": 0,
       "mixer": "MambaMixer",
       "n_params": 9920,
       "reverse": false
     },
     {
+      "axes": [
+        "row"
+      ],
       "axis": "row",
       "axis_index": 1,
+      "kind": "scan",
       "layer": 1,
       "mixer": "MambaMixer",
       "n_params": 9920,
       "reverse": false
     },
     {
+      "axes": [
+        "row"
+      ],
       "axis": "row",
       "axis_index": 1,
+      "kind": "scan",
       "layer": 2,
       "mixer": "MambaMixer",
       "n_params": 9920,
       "reverse": true
     },
     {
+      "axes": [
+        "col"
+      ],
       "axis": "col",
       "axis_index": 2,
+      "kind": "scan",
       "layer": 3,
       "mixer": "MambaMixer",
       "n_params": 9920,
       "reverse": false
     },
     {
+      "axes": [
+        "col"
+      ],
       "axis": "col",
       "axis_index": 2,
+      "kind": "scan",
       "layer": 4,
       "mixer": "MambaMixer",
       "n_params": 9920,
       "reverse": true
     },
     {
+      "axes": [
+        "time"
+      ],
       "axis": "time",
       "axis_index": 0,
+      "kind": "scan",
       "layer": 5,
       "mixer": "MambaMixer",
       "n_params": 9920,
@@ -119,6 +143,7 @@
     "name": "AxialScan"
   },
   "sweeps": {
+    "contracted_axes": [],
     "coverage": {
       "axes": [
         {
@@ -171,5 +196,5 @@
     ],
     "unswept_axes": []
   },
-  "version": 1
+  "version": 2
 }

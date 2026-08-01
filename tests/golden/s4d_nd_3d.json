@@ -68,48 +68,72 @@
   },
   "layers": [
     {
+      "axes": [
+        "time"
+      ],
       "axis": "time",
       "axis_index": 0,
+      "kind": "scan",
       "layer": 0,
       "mixer": "S4DMixer",
       "n_params": 4320,
       "reverse": false
     },
     {
+      "axes": [
+        "dim0"
+      ],
       "axis": "dim0",
       "axis_index": 1,
+      "kind": "scan",
       "layer": 1,
       "mixer": "S4DMixer",
       "n_params": 4320,
       "reverse": false
     },
     {
+      "axes": [
+        "dim1"
+      ],
       "axis": "dim1",
       "axis_index": 2,
+      "kind": "scan",
       "layer": 2,
       "mixer": "S4DMixer",
       "n_params": 4320,
       "reverse": false
     },
     {
+      "axes": [
+        "dim2"
+      ],
       "axis": "dim2",
       "axis_index": 3,
+      "kind": "scan",
       "layer": 3,
       "mixer": "S4DMixer",
       "n_params": 4320,
       "reverse": false
     },
     {
+      "axes": [
+        "time"
+      ],
       "axis": "time",
       "axis_index": 0,
+      "kind": "scan",
       "layer": 4,
       "mixer": "S4DMixer",
       "n_params": 4320,
       "reverse": false
     },
     {
+      "axes": [
+        "dim0"
+      ],
       "axis": "dim0",
       "axis_index": 1,
+      "kind": "scan",
       "layer": 5,
       "mixer": "S4DMixer",
       "n_params": 4320,
@@ -128,6 +152,7 @@
     "name": "AxialScan"
   },
   "sweeps": {
+    "contracted_axes": [],
     "coverage": {
       "axes": [
         {
@@ -196,5 +221,5 @@
     ],
     "unswept_axes": []
   },
-  "version": 1
+  "version": 2
 }

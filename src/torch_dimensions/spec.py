@@ -26,7 +26,11 @@ from torch_dimensions.plan import ScanPlan
 __all__ = ["SPEC_VERSION", "spec"]
 
 SPEC_FORMAT = "torch-dimensions/architecture"
-SPEC_VERSION = 1
+# v2: layers describe what their *family* actually does. v1 assumed every
+# model was a scan, so a kernel-family model's spec claimed one spatial sweep
+# per layer — sweeps that never happen — and the viewer drew them. See
+# DEBUG.md #26.
+SPEC_VERSION = 2
 
 
 def _rle(flags: torch.Tensor) -> list[int]:
@@ -77,17 +81,70 @@ def lattice_spec(lat: Lattice) -> dict[str, Any]:
 
 
 def plan_spec(plan: ScanPlan, lat: Lattice) -> list[dict[str, Any]]:
-    """Per-layer sweep schedule, with axes named rather than indexed."""
+    """Per-layer sweep schedule, with axes named rather than indexed.
+
+    The scan family's layer description: one axis, one direction, per layer.
+    The other families do something else and say so — see :func:`layers_spec`.
+    """
     resolved = plan.resolve(lat) if not plan.is_resolved() else plan
     return [
         {
             "layer": i,
+            "kind": "scan",
             "axis": lat.axis_names[cast(int, step.axis)],
             "axis_index": cast(int, step.axis),
             "reverse": step.reverse,
+            "axes": [lat.axis_names[cast(int, step.axis)]],
         }
         for i, step in enumerate(resolved)
     ]
+
+
+def _family(nd: nn.Module) -> str:
+    """Which composition family this model uses.
+
+    Was hardcoded to ``"scan"``, which made every kernel-family spec claim to
+    be something it is not (DEBUG.md #26).
+    """
+    from torch_dimensions.compose.attention import AxialKernel
+    from torch_dimensions.compose.scan import AxialScan
+
+    if isinstance(nd, AxialScan):
+        return "scan"
+    if isinstance(nd, AxialKernel):
+        return "kernel"
+    return type(nd).__name__
+
+
+def kernel_layers_spec(nd: Any, lat: Lattice) -> list[dict[str, Any]]:
+    """Per-layer description for the kernel family.
+
+    Every layer contracts **all** the spatial axes — not one per layer — and
+    then, in the hybrid form, sweeps the mixer along time. Describing this with
+    the scan family's schema produced a document claiming layer 1 swept ``h``
+    with an LSTM, which is not what runs and is what the viewer drew.
+    """
+    spatial = [lat.axis_names[a] for a in nd.spatial_axes]
+    has_mixer = getattr(nd, "mixers", None) is not None
+    out = []
+    for i in range(len(nd.plan)):
+        mixer = nd.mixers[i] if has_mixer else None
+        out.append(
+            {
+                "layer": i,
+                "kind": "kernel",
+                # The axis actually *swept*, which for this family is time or
+                # nothing at all.
+                "axis": "time" if has_mixer else None,
+                "axis_index": 0 if has_mixer else None,
+                "reverse": False,
+                "axes": [*spatial, *(["time"] if has_mixer else [])],
+                "contracted": spatial,
+                "mixer": type(mixer).__name__ if mixer is not None else None,
+                "n_params": _n_params(mixer) if mixer is not None else 0,
+            }
+        )
+    return out
 
 
 def _n_params(module: nn.Module) -> int:
@@ -128,18 +185,41 @@ def spec(model: nn.Module) -> dict[str, Any]:
 
 
 def scan_model_spec(model: nn.Module) -> dict[str, Any]:
-    """The spec for a scan-family model. Used by the models' ``to_spec``."""
+    """The spec for a composed model. Used by the models' ``to_spec``.
+
+    Named for the scan family because that is all there was when it was
+    written; it now describes whichever family the model actually uses.
+    """
     lat = cast(Lattice, model.lattice)
     nd: Any = model.nd  # Module.__getattr__ erases the type
     plan: ScanPlan = nd.plan
+    family = _family(nd)
 
-    mixers = [
-        {"layer": i, "type": type(m).__name__, "n_params": _n_params(m)}
-        for i, m in enumerate(nd.mixers)
-    ]
-    layers = plan_spec(plan, lat)
-    for layer, mixer in zip(layers, mixers, strict=True):
-        layer.update({"mixer": mixer["type"], "n_params": mixer["n_params"]})
+    if family == "kernel":
+        layers = kernel_layers_spec(nd, lat)
+        spatial = [lat.axis_names[a] for a in nd.spatial_axes]
+        has_mixer = getattr(nd, "mixers", None) is not None
+        mixed = {*spatial, *(["time"] if has_mixer else [])}
+        sweeps: dict[str, Any] = {
+            # Only the axis a mixer actually sweeps has a direction. The
+            # kernels are not directional at all — a contraction has no
+            # forward or backward — so listing them here would invent a
+            # property the model does not have.
+            "directions": {"time": "forward"} if has_mixer else {},
+            "contracted_axes": spatial,
+            "unswept_axes": [n for n in lat.axis_names if n not in mixed],
+            "pinned_axes": ["time"] if has_mixer else [],
+            "coverage": None,
+        }
+    else:
+        layers = plan_spec(plan, lat)
+        mixers = [
+            {"layer": i, "type": type(m).__name__, "n_params": _n_params(m)}
+            for i, m in enumerate(nd.mixers)
+        ]
+        for layer, mixer in zip(layers, mixers, strict=True):
+            layer.update({"mixer": mixer["type"], "n_params": mixer["n_params"]})
+        sweeps = {**sweeps_spec(plan, lat), "contracted_axes": []}
 
     d_model: int = nd.d_model
     in_proj = getattr(model, "in_proj", None)
@@ -158,11 +238,11 @@ def scan_model_spec(model: nn.Module) -> dict[str, Any]:
         },
         "nd_method": {
             "name": type(nd).__name__,
-            "family": "scan",
+            "family": family,
         },
         "lattice": lattice_spec(lat),
         "layers": layers,
-        "sweeps": sweeps_spec(plan, lat),
+        "sweeps": sweeps,
         "io": {
             "input": [*lead, *lat.shape, d_input],
             "output": [*lead, *lat.shape, d_model],

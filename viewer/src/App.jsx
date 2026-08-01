@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Scene from "./components/Scene.jsx";
 import Sidebar from "./components/Sidebar.jsx";
+import cafaHybrid from "./samples/cafa_hybrid.json";
 import lstm2d from "./samples/lstm_2d_sparse.json";
 import mamba3d from "./samples/mamba_3d.json";
 import s4d4d from "./samples/s4d_4d.json";
 import { parseSpec } from "./spec.js";
 
+// Regenerate with `python viewer/make_samples.py`.
 const SAMPLES = {
   "LSTM · 2-D sparse lattice": lstm2d,
   "Mamba-ND · 3-D, paired schedule": mamba3d,
   "S4D · 4-D (dimensional stacking)": s4d4d,
+  "CaFA · kernel family (no wavefront)": cafaHybrid,
 };
 
 const LAYER_SECONDS = 2.2;
@@ -108,7 +111,9 @@ export default function App() {
   useEffect(() => {
     const id = setInterval(async () => {
       try {
-        const r = await fetch(`/run.json?t=${Date.now()}`, { cache: "no-store" });
+        const r = await fetch(`/run.json?t=${Date.now()}`, {
+          cache: "no-store",
+        });
         if (!r.ok) return;
         const j = await r.json();
         setLive(j);

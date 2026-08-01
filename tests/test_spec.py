@@ -186,3 +186,61 @@ def test_gru_is_described_too():
     spec = td.spec(td.GRU(4, 2, td.Lattice(shape=(2, 3))))
     assert spec["model"]["kind"] == "GRU"
     assert spec["layers"][0]["mixer"] == "GRUMixer"
+
+
+# -- the spec must describe the family that actually runs ---------------------
+
+
+def test_the_kernel_family_spec_does_not_claim_spatial_sweeps():
+    """A kernel-family layer contracts every spatial axis at once and sweeps
+    only time. The spec used to describe it with the scan family's schema, so
+    a 3-layer CaFA model claimed to sweep time, then h, then w — three sweeps
+    that never happen — and the viewer drew them (DEBUG.md #26).
+    """
+    lat = td.Lattice(shape=(4, 5), names=("h", "w"), time=True)
+    s = td.spec(td.LSTM(8, 3, lat, method=td.cafa))
+
+    assert s["nd_method"]["family"] == "kernel"
+    assert [layer["kind"] for layer in s["layers"]] == ["kernel"] * 3
+    assert {layer["axis"] for layer in s["layers"]} == {"time"}
+    assert all(layer["contracted"] == ["h", "w"] for layer in s["layers"])
+    assert s["sweeps"]["contracted_axes"] == ["h", "w"]
+    # A contraction has no direction; only the swept axis gets one.
+    assert s["sweeps"]["directions"] == {"time": "forward"}
+    # Contracted axes are mixed, so they are not "unswept" in the sense the
+    # viewer warns about.
+    assert s["sweeps"]["unswept_axes"] == []
+
+
+def test_a_kernel_only_block_reports_no_swept_axis_at_all():
+    lat = td.Lattice(shape=(4, 5), names=("h", "w"))
+    block = td.AxialKernel(
+        mixer=None, plan=td.ScanPlan.cyclic(lat.axis_names, 2), lattice=lat, d_model=8
+    )
+
+    class Wrapper(torch.nn.Module):
+        lattice = lat
+
+        def __init__(self):
+            super().__init__()
+            self.nd = block
+
+        def to_spec(self):
+            from torch_dimensions.spec import scan_model_spec
+
+            return scan_model_spec(self)
+
+    s = td.spec(Wrapper())
+    assert [layer["axis"] for layer in s["layers"]] == [None, None]
+    assert [layer["mixer"] for layer in s["layers"]] == [None, None]
+    assert s["sweeps"]["directions"] == {}
+    assert s["sweeps"]["contracted_axes"] == ["h", "w"]
+
+
+def test_the_scan_family_spec_is_unchanged_in_shape():
+    lat = td.Lattice(shape=(4, 5), names=("h", "w"), time=True)
+    s = td.spec(td.LSTM(8, 3, lat))
+    assert s["nd_method"]["family"] == "scan"
+    assert [layer["axis"] for layer in s["layers"]] == ["time", "h", "w"]
+    assert [layer["kind"] for layer in s["layers"]] == ["scan"] * 3
+    assert s["sweeps"]["contracted_axes"] == []

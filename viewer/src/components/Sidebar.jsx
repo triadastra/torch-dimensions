@@ -28,7 +28,12 @@ const S = {
     borderRadius: 8,
     padding: "10px 12px",
   },
-  row: { display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 13 },
+  row: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "2px 0",
+    fontSize: 13,
+  },
   key: { color: "#8b95a8" },
   warn: {
     background: "#2a1418",
@@ -139,11 +144,17 @@ function LossChart({ metrics }) {
   const hi = Math.max(...logs, lo + 1e-6);
   const x = (i) => pad + (i * (w - 2 * pad)) / Math.max(metrics.length - 1, 1);
   const y = (v) => pad + ((hi - v) * (h - 2 * pad)) / (hi - lo);
-  const line = logs.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const line = logs
+    .map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`)
+    .join(" ");
   const held = metrics
-    .map((m, i) => (m.held_out == null ? null : [i, Math.log10(Math.max(m.held_out, 1e-8))]))
+    .map((m, i) =>
+      m.held_out == null ? null : [i, Math.log10(Math.max(m.held_out, 1e-8))],
+    )
     .filter(Boolean);
-  const heldLine = held.map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const heldLine = held
+    .map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`)
+    .join(" ");
   return (
     <svg width={w} height={h} style={{ display: "block", marginTop: 8 }}>
       <polyline points={line} fill="none" stroke="#e8963a" strokeWidth="1.6" />
@@ -169,15 +180,24 @@ function RunPanel({ live }) {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify({ action }),
-      }).catch(() => setSendError("control server unreachable — is the training script running?"));
+      }).catch(() =>
+        setSendError(
+          "control server unreachable — is the training script running?",
+        ),
+      );
     },
     [live.control],
   );
 
   const st = STATUS[live.status] ?? STATUS.stopped;
-  const last = live.metrics?.length ? live.metrics[live.metrics.length - 1] : null;
-  const lastHeld = live.metrics ? [...live.metrics].reverse().find((e) => e.held_out != null) : null;
-  const pct = live.total_steps && last ? ((last.step + 1) / live.total_steps) * 100 : 0;
+  const last = live.metrics?.length
+    ? live.metrics[live.metrics.length - 1]
+    : null;
+  const lastHeld = live.metrics
+    ? [...live.metrics].reverse().find((e) => e.held_out != null)
+    : null;
+  const pct =
+    live.total_steps && last ? ((last.step + 1) / live.total_steps) * 100 : 0;
 
   return (
     <div style={{ ...S.card, borderColor: "#2c3b58" }}>
@@ -190,7 +210,9 @@ function RunPanel({ live }) {
       </div>
       <div style={S.row}>
         <span style={S.key}>task</span>
-        <span style={{ fontSize: 11, color: "#8b95a8", textAlign: "right" }}>{live.task}</span>
+        <span style={{ fontSize: 11, color: "#8b95a8", textAlign: "right" }}>
+          {live.task}
+        </span>
       </div>
 
       {live.status === "waiting" && (
@@ -239,7 +261,9 @@ function RunPanel({ live }) {
           {lastHeld && (
             <div style={S.row}>
               <span style={S.key}>held-out</span>
-              <span style={{ color: "#7aa2f7" }}>{lastHeld.held_out.toFixed(5)}</span>
+              <span style={{ color: "#7aa2f7" }}>
+                {lastHeld.held_out.toFixed(5)}
+              </span>
             </div>
           )}
           <LossChart metrics={live.metrics} />
@@ -273,7 +297,11 @@ export default function Sidebar({
       <div style={S.h1}>torch-dimensions</div>
       <div style={S.sub}>architecture viewer &middot; spec v{spec.version}</div>
 
-      <select style={S.select} value={sampleKey} onChange={(e) => onSample(e.target.value)}>
+      <select
+        style={S.select}
+        value={sampleKey}
+        onChange={(e) => onSample(e.target.value)}
+      >
         {Object.keys(samples).map((k) => (
           <option key={k} value={k}>
             {k}
@@ -339,7 +367,8 @@ export default function Sidebar({
 
       {spec.sweeps.unswept_axes.length > 0 && (
         <div style={S.warn}>
-          <b>never swept:</b> {spec.sweeps.unswept_axes.join(", ")} — these axes get no mixing.
+          <b>never swept:</b> {spec.sweeps.unswept_axes.join(", ")} — these axes
+          get no mixing.
         </div>
       )}
 
@@ -348,7 +377,22 @@ export default function Sidebar({
         {Object.entries(spec.sweeps.directions).map(([axis, dir]) => (
           <div key={axis} style={S.row}>
             <span style={S.key}>{axis}</span>
-            <span>{dir === "both" ? "→ and ←" : dir === "forward" ? "→ only" : "← only"}</span>
+            <span>
+              {dir === "both"
+                ? "→ and ←"
+                : dir === "forward"
+                  ? "→ only"
+                  : "← only"}
+            </span>
+          </div>
+        ))}
+        {(spec.sweeps.contracted_axes ?? []).map((axis) => (
+          <div key={axis} style={S.row}>
+            <span style={S.key}>{axis}</span>
+            {/* A contraction has no direction: the whole axis is mixed at
+                once, every layer. Listing it as "→ only" would invent a
+                property the model does not have. */}
+            <span style={{ color: "#c39bd8" }}>⊗ contracted</span>
           </div>
         ))}
       </div>
@@ -367,14 +411,34 @@ export default function Sidebar({
       </div>
 
       {spec.layers.map((l, i) => {
-        const isTime = latticeAxisOf(l, spec) === null;
+        // A kernel-family layer contracts every spatial axis at once and, in
+        // the hybrid form, sweeps time. Rendering it with the scan family's
+        // "one axis, one arrow" was drawing sweeps that never happen — the
+        // spec used to claim them (DEBUG.md #26).
+        const kernel = l.kind === "kernel";
+        const isTime = !kernel && latticeAxisOf(l, spec) === null;
         return (
-          <div key={i} style={S.layer(i === layerIndex)} onClick={() => onSelectLayer(i)}>
+          <div
+            key={i}
+            style={S.layer(i === layerIndex)}
+            onClick={() => onSelectLayer(i)}
+          >
             <span style={{ color: "#8b95a8", width: 28 }}>L{i}</span>
-            <b>{l.axis}</b>
-            <span>{isTime ? "→ (causal)" : dirGlyph(l.reverse)}</span>
+            {kernel ? (
+              <>
+                <b style={{ color: "#c39bd8" }}>
+                  {(l.contracted ?? []).join(" ⊗ ")}
+                </b>
+                <span style={S.key}>{l.axis ? `+ ${l.axis} →` : ""}</span>
+              </>
+            ) : (
+              <>
+                <b>{l.axis}</b>
+                <span>{isTime ? "→ (causal)" : dirGlyph(l.reverse)}</span>
+              </>
+            )}
             <span style={{ flex: 1 }} />
-            <span style={S.chip}>{l.mixer}</span>
+            {l.mixer && <span style={S.chip}>{l.mixer}</span>}
           </div>
         );
       })}

@@ -59,24 +59,54 @@
   },
   "layers": [
     {
+      "axes": [
+        "y",
+        "x",
+        "time"
+      ],
       "axis": "time",
       "axis_index": 0,
+      "contracted": [
+        "y",
+        "x"
+      ],
+      "kind": "kernel",
       "layer": 0,
       "mixer": "GRUMixer",
       "n_params": 1632,
       "reverse": false
     },
     {
-      "axis": "y",
-      "axis_index": 1,
+      "axes": [
+        "y",
+        "x",
+        "time"
+      ],
+      "axis": "time",
+      "axis_index": 0,
+      "contracted": [
+        "y",
+        "x"
+      ],
+      "kind": "kernel",
       "layer": 1,
       "mixer": "GRUMixer",
       "n_params": 1632,
       "reverse": false
     },
     {
-      "axis": "x",
-      "axis_index": 2,
+      "axes": [
+        "y",
+        "x",
+        "time"
+      ],
+      "axis": "time",
+      "axis_index": 0,
+      "contracted": [
+        "y",
+        "x"
+      ],
+      "kind": "kernel",
       "layer": 2,
       "mixer": "GRUMixer",
       "n_params": 1632,
@@ -91,62 +121,22 @@
     "n_params": 9030
   },
   "nd_method": {
-    "family": "scan",
+    "family": "kernel",
     "name": "AxialKernel"
   },
   "sweeps": {
-    "coverage": {
-      "axes": [
-        {
-          "backward": 0,
-          "direction": "forward",
-          "forward": 1,
-          "index": 0,
-          "layers": [
-            0
-          ],
-          "name": "time"
-        },
-        {
-          "backward": 0,
-          "direction": "forward",
-          "forward": 1,
-          "index": 1,
-          "layers": [
-            1
-          ],
-          "name": "y"
-        },
-        {
-          "backward": 0,
-          "direction": "forward",
-          "forward": 1,
-          "index": 2,
-          "layers": [
-            2
-          ],
-          "name": "x"
-        }
-      ],
-      "n_layers": 3,
-      "pinned": [
-        "time",
-        "y",
-        "x"
-      ],
-      "unswept": []
-    },
-    "directions": {
-      "time": "forward",
-      "x": "forward",
-      "y": "forward"
-    },
-    "pinned_axes": [
-      "time",
+    "contracted_axes": [
       "y",
       "x"
     ],
+    "coverage": null,
+    "directions": {
+      "time": "forward"
+    },
+    "pinned_axes": [
+      "time"
+    ],
     "unswept_axes": []
   },
-  "version": 1
+  "version": 2
 }
