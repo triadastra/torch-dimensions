@@ -49,6 +49,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   [adding an nd_method](docs/adding-a-method.md)), with examples executed by the
   test suite, and a [CUDA verification checklist](docs/cuda-checklist.md).
 
+- **`td.build(checkpoint)`** returns the architecture a checkpoint records with
+  fresh weights (`weights=True` is `load`), plus `td.read_config(path)`.
+- **Entry-point registration** (`torch_dimensions.models` group) so third-party
+  packages can add model kinds without being imported eagerly.
+- **`scripts/mutate.py`** — mutation testing as a weekly CI job. Seven
+  mutations, each one a bug this project actually had; all seven caught. A
+  survivor is reported as a hole in the tests, not a bug in the code.
+- **`scripts/check.sh`** — exactly what CI runs, in the same order, because
+  "I ran the linter" and "I ran the check that gates the build" turned out to
+  be different sentences three times.
+- **`tests/test_perf.py`** — a perf smoke on *ratios between configurations*
+  rather than absolute times, so machine speed cancels and complexity does not.
+
 ### Changed
 - The conformance suite's **Kronecker check runs** — it had been an
   unconditional skip since it was written. Pass `check_block(kernels=...)`.
@@ -65,6 +78,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `check_block`'s gradient step built at `d_model=2` regardless of the caller,
   so a width-constrained mixer failed a gradient check with an error about
   head counts (DEBUG.md #23).
+- numpy was assumed present — it is not a torch dependency, and both the
+  memmap source and `safetensors`' torch bindings need it. The extras declare
+  it, the error says what to install, and the tests skip visibly without it
+  (DEBUG.md #24).
+- The reproductions' dry-run timer did not synchronize the accelerator, so it
+  measured the dispatch queue and underestimated a run by 40x (DEBUG.md #25).
 
 ## [0.1.0] — 2026-07-31
 
