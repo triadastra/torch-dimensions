@@ -743,6 +743,54 @@ reasoning, only your interface.
 
 ---
 
+## 28. The shared function existed and I did not call it
+
+Two red builds in one session, both from the same cause, and the cause was not
+a missing tool.
+
+The first: `ruff format src tests` locally where CI runs `ruff format --check .`,
+so `viewer/make_samples.py` and a code block inside `LTI.md` went unformatted.
+The second, in the very next push: `pytest` locally where CI runs
+`pytest --cov`, so the new families' error paths pushed total coverage to
+93.96% against a 95% floor and the gate caught what I had not looked at.
+
+`scripts/check.sh` runs exactly what CI runs, in the same order. It was added
+earlier the same day, in a commit titled *"run what CI runs, because I did
+not"*. Its header names this failure mode in its second paragraph — it even
+uses `ruff check src tests` as the example. I wrote that file, gave it that
+commit message, and then typed the ad-hoc command anyway. Twice.
+
+**The pattern, one level past §A's usual form.** #25's lesson was "a rule
+written where it was learned does not transfer; what transfers is a shared
+function." This is the sequel: *a shared function only transfers if it is the
+path of least resistance.* Typing `pytest -q` is shorter than
+`bash scripts/check.sh`, and shorter wins under momentum every time.
+
+**Not fixed by resolve.** What would actually fix it is making the shortest
+command the correct one — a pre-push hook, or an alias — and that is a change
+to a developer's environment rather than to this repo, so it is recorded here
+rather than committed. The honest status is: the tool is right, the habit is
+not, and the guard that caught both was CI.
+
+**And then running it found a defect in it.** The first honest run of
+`scripts/check.sh` failed — on four `UP038` violations that CI cannot possibly
+report, because the rule was *removed* from ruff before the version CI
+installs. The script invoked bare `ruff`, which resolved through PATH to a
+conda-installed 0.6.7 while the project's dev extra pins 0.16.1. So the tool
+written to make local checks match CI was itself running a different tool than
+CI. It now invokes everything as `$PYTHON -m <tool>`, defaults to `.venv`, and
+prints the resolved versions first, because a gate that reports failures CI
+cannot have teaches you to ignore the gate.
+
+**Worth noting what worked.** The coverage floor did exactly its job. The new
+code was not undertested by accident; it was undertested because I had not
+written tests for the refusal paths yet, and a number that moved 1.04% told me
+so before a reviewer had to. `mixers/conv.py`, `models/vit.py` and
+`compose/flatten.py` are now at 100%, and every line of it is an error message
+someone will eventually read.
+
+---
+
 ## A. Recurring patterns
 
 Four classes account for the first eight — and the later finds keep landing in

@@ -1,9 +1,14 @@
 # Contributing
 
 **Before pushing, run `bash scripts/check.sh`.** It is exactly what CI
-runs, in the same order — including `ruff format --check .`, which formats the
+runs, in the same order — including `ruff format --check .` (which formats the
 Python inside Markdown code blocks and has caught this repo's own docs more
-than once. Running a narrower command locally is how a build goes red.
+than once) and the coverage floor. Running a narrower command locally is how a
+build goes red; DEBUG.md #28 is two of those in one afternoon.
+
+It runs the tools through `.venv/bin/python -m ...` rather than through
+whatever `ruff` is first on your PATH, and prints the versions it resolved
+before it starts. Set `PYTHON=...` to point it at a different environment.
 
 ## Setup
 

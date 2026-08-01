@@ -269,3 +269,43 @@ def test_depthwise_separable_is_separable_in_both_senses():
     n_light = sum(p.numel() for p in light.parameters())
     assert n_light < n_dense / 2, (n_light, n_dense)
     assert light(torch.randn(2, 5, 6, 16)).shape == (2, 5, 6, 16)
+
+
+# -- refusals and reporting ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "kw,match",
+    [
+        ({"kernel_size": 0}, "kernel_size must be >= 1"),
+        ({"n_conv": 0}, "n_conv must be >= 1"),
+        ({"dilation": 0}, "must be >= 1"),
+        ({"dilation_base": 0}, "must be >= 1"),
+        ({"activation": "swish"}, "unknown activation"),
+    ],
+)
+def test_bad_configuration_is_refused_by_name(kw, match):
+    with pytest.raises(ValueError, match=match):
+        ConvMixer(4, **kw)
+
+
+def test_a_width_one_kernel_needs_no_padding_and_is_the_identity_in_space():
+    """kernel_size=1 is a pointwise channel mix — a legitimate degenerate case,
+    and the one that exercises the no-padding path."""
+    mixer = ConvMixer(4, kernel_size=1, activation=None).double()
+    x = torch.randn(2, 5, 4, dtype=torch.float64)
+    assert mixer(x).shape == x.shape
+    assert mixer.receptive_field == 1
+
+
+def test_wrong_feature_width_is_refused():
+    with pytest.raises(ValueError, match="expected 4 features"):
+        ConvMixer(4)(torch.randn(2, 5, 7))
+
+
+def test_the_repr_states_what_the_layer_actually_does():
+    """`extra_repr` is how a stack of these is read at a glance, and the
+    dilation is the part a schedule makes non-obvious."""
+    text = repr(ConvMixer(4, kernel_size=5, causal=True, dilation=3))
+    assert "causal" in text and "dilation=3" in text and "receptive_field=13" in text
+    assert "centred" in repr(ConvMixer(4))

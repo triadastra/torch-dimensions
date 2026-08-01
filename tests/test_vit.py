@@ -232,3 +232,109 @@ def test_vit_learns():
         loss.backward()
         opt.step()
     assert last < first / 3, (first, last)
+
+
+# -- refusals and reporting ---------------------------------------------------
+
+
+def test_patch_rank_must_match_the_image():
+    with pytest.raises(ValueError, match="axes, image has"):
+        PatchEmbed((16, 16), (4, 4, 4), in_channels=1, d_model=8)
+
+
+@pytest.mark.parametrize(
+    "bad,match",
+    [
+        (torch.randn(2, 16, 16), "expected a 4-D tensor"),
+        (torch.randn(2, 8, 8, 3), "expected image dims"),
+        (torch.randn(2, 16, 16, 5), "expected 3 channels"),
+    ],
+)
+def test_malformed_input_is_refused_by_name(bad, match):
+    embed = PatchEmbed((16, 16), 4, in_channels=3, d_model=8)
+    with pytest.raises(ValueError, match=match):
+        embed(bad)
+
+
+def test_patch_embed_repr_states_the_grid_it_produces():
+    text = repr(PatchEmbed((32, 32), 4, in_channels=3, d_model=8))
+    assert "grid=(8, 8)" in text and "patch=(4, 4)" in text
+
+
+def test_unknown_pos_embed_is_refused_and_none_is_honoured():
+    with pytest.raises(ValueError, match="factorized\\|full\\|none"):
+        ViT(16, 1, image=(8, 8), patch=2, in_channels=1, pos_embed="sinusoidal", n_heads=2)
+
+    plain = ViT(16, 1, image=(8, 8), patch=2, in_channels=1, pos_embed="none", n_heads=2)
+    assert sum(p.numel() for p in plain.pos.parameters()) == 0
+    # With no positional embedding the stage is a pass-through, and the model
+    # still runs — "none" is a supported choice, not a broken one.
+    x = torch.randn(1, 8, 8, 1)
+    assert torch.equal(plain.pos(plain.patch_embed(x)), plain.patch_embed(x))
+    assert plain(x).shape == (1, 4, 4, 16)
+    assert "none" in repr(plain.pos)
+
+
+def test_pos_embed_repr_reports_its_parameter_cost():
+    fac = ViT(16, 1, image=(8, 8), patch=2, in_channels=1, n_heads=2)
+    assert "factorized" in repr(fac.pos) and "grid=(4, 4)" in repr(fac.pos)
+
+
+# -- the flatten composition's own edges --------------------------------------
+
+
+def test_flatten_reports_what_it_spans():
+    lat = td.Lattice(shape=(3, 4), names=("h", "w"), time=True)
+    nd = td.Transformer(8, 2, lat, method=td.flatten, mixer_kwargs={"n_heads": 2}).nd
+    assert "space+time" in repr(nd) and "tokens=12" in repr(nd)
+    apart = td.Transformer(
+        8, 2, lat, method=td.flatten, join_time=False, mixer_kwargs={"n_heads": 2}
+    ).nd
+    assert "space only" in repr(apart)
+
+
+def test_flatten_refuses_a_wrong_width_and_a_shape_changing_mixer():
+    lat = td.Lattice(shape=(3, 4), names=("h", "w"))
+    model = td.Transformer(8, 1, lat, method=td.flatten, mixer_kwargs={"n_heads": 2})
+    with pytest.raises(ValueError, match="expected 8 features"):
+        model(torch.randn(1, 3, 4, 5))
+
+    class Truncating(torch.nn.Module):
+        def __init__(self, d_model, **_):
+            super().__init__()
+            self.scale = torch.nn.Parameter(torch.ones(()))
+
+        def forward(self, x):
+            return x[:, :-1] * self.scale
+
+    bad = td.Transformer(8, 1, lat, method=td.flatten, mixer=Truncating)
+    with pytest.raises(ValueError, match="mixer changed shape"):
+        bad(torch.randn(1, 3, 4, 8))
+
+
+def test_flatten_chunking_matches_the_unchunked_path():
+    """`chunk` exists to keep a fused kernel inside its grid limits; it must
+    not change the answer."""
+    lat = td.Lattice(shape=(3, 4), names=("h", "w"), time=True)
+    torch.manual_seed(0)
+    whole = (
+        td.Transformer(8, 2, lat, method=td.flatten, mixer_kwargs={"n_heads": 2}).double().eval()
+    )
+    torch.manual_seed(0)
+    piece = (
+        td.Transformer(8, 2, lat, method=td.flatten, chunk=1, mixer_kwargs={"n_heads": 2})
+        .double()
+        .eval()
+    )
+    x = torch.randn(3, 2, 3, 4, 8, dtype=torch.float64)
+    assert torch.allclose(whole(x), piece(x), rtol=0, atol=1e-12)
+
+
+def test_a_shared_mixer_instance_is_used_by_every_layer():
+    lat = td.Lattice(shape=(3, 4), names=("h", "w"))
+    shared = td.mixers.AttentionMixer(8, 2)
+    nd = td.Flatten(
+        mixer=shared, plan=td.ScanPlan.cyclic(lat.axis_names, 3), lattice=lat, d_model=8
+    )
+    assert all(m is shared for m in nd.mixers)
+    assert nd(torch.randn(1, 3, 4, 8)).shape == (1, 3, 4, 8)
