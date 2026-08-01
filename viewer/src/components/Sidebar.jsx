@@ -1,3 +1,5 @@
+import { useCallback, useState } from "react";
+
 import { fmtParams, latticeAxisOf } from "../spec.js";
 
 const S = {
@@ -12,12 +14,19 @@ const S = {
   },
   h1: { fontSize: 15, fontWeight: 650, letterSpacing: 0.2, marginBottom: 2 },
   sub: { color: "#8b95a8", fontSize: 12, marginBottom: 14 },
+  section: {
+    color: "#5d6b84",
+    fontSize: 10.5,
+    fontWeight: 700,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    margin: "16px 2px 6px",
+  },
   card: {
     background: "#151b28",
     border: "1px solid #232d40",
     borderRadius: 8,
     padding: "10px 12px",
-    marginBottom: 12,
   },
   row: { display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 13 },
   key: { color: "#8b95a8" },
@@ -27,7 +36,7 @@ const S = {
     color: "#fca5a5",
     borderRadius: 8,
     padding: "8px 12px",
-    marginBottom: 12,
+    marginTop: 10,
     fontSize: 13,
   },
   layer: (active) => ({
@@ -48,15 +57,37 @@ const S = {
     background: "#233049",
     color: "#9fb3d9",
   },
-  controls: { display: "flex", gap: 8, margin: "10px 0 16px" },
+  controls: { display: "flex", gap: 8, marginTop: 10 },
   btn: {
     background: "#1c2536",
     color: "#d6dbe4",
     border: "1px solid #2b3850",
     borderRadius: 6,
-    padding: "6px 12px",
+    padding: "7px 12px",
     cursor: "pointer",
     fontSize: 13,
+    flex: 1,
+  },
+  btnStart: {
+    background: "#173423",
+    color: "#9ece6a",
+    border: "1px solid #2f6e42",
+    borderRadius: 6,
+    padding: "9px 12px",
+    cursor: "pointer",
+    fontSize: 13.5,
+    fontWeight: 650,
+    width: "100%",
+  },
+  btnStop: {
+    background: "#2a1418",
+    color: "#fca5a5",
+    border: "1px solid #7f1d1d",
+    borderRadius: 6,
+    padding: "7px 12px",
+    cursor: "pointer",
+    fontSize: 13,
+    flex: 1,
   },
   select: {
     background: "#1c2536",
@@ -67,6 +98,36 @@ const S = {
     fontSize: 13,
     width: "100%",
   },
+  dot: (color) => ({
+    display: "inline-block",
+    width: 8,
+    height: 8,
+    borderRadius: 99,
+    background: color,
+    marginRight: 7,
+  }),
+  barOuter: {
+    height: 6,
+    borderRadius: 99,
+    background: "#0c1018",
+    border: "1px solid #232d40",
+    margin: "8px 0 2px",
+    overflow: "hidden",
+  },
+  barInner: (pct, color) => ({
+    height: "100%",
+    width: `${pct}%`,
+    background: color,
+    transition: "width 0.4s",
+  }),
+};
+
+const STATUS = {
+  waiting: { color: "#e0af68", label: "waiting for start" },
+  training: { color: "#e8963a", label: "training" },
+  paused: { color: "#7aa2f7", label: "paused" },
+  done: { color: "#9ece6a", label: "done" },
+  stopped: { color: "#8b95a8", label: "stopped" },
 };
 
 function LossChart({ metrics }) {
@@ -84,7 +145,7 @@ function LossChart({ metrics }) {
     .filter(Boolean);
   const heldLine = held.map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   return (
-    <svg width={w} height={h} style={{ display: "block", marginTop: 6 }}>
+    <svg width={w} height={h} style={{ display: "block", marginTop: 8 }}>
       <polyline points={line} fill="none" stroke="#e8963a" strokeWidth="1.6" />
       {held.length > 1 && (
         <polyline
@@ -96,6 +157,97 @@ function LossChart({ metrics }) {
         />
       )}
     </svg>
+  );
+}
+
+function RunPanel({ live }) {
+  const [sendError, setSendError] = useState(null);
+  const post = useCallback(
+    (action) => {
+      setSendError(null);
+      fetch(`${live.control}/control`, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ action }),
+      }).catch(() => setSendError("control server unreachable — is the training script running?"));
+    },
+    [live.control],
+  );
+
+  const st = STATUS[live.status] ?? STATUS.stopped;
+  const last = live.metrics?.length ? live.metrics[live.metrics.length - 1] : null;
+  const lastHeld = live.metrics ? [...live.metrics].reverse().find((e) => e.held_out != null) : null;
+  const pct = live.total_steps && last ? ((last.step + 1) / live.total_steps) * 100 : 0;
+
+  return (
+    <div style={{ ...S.card, borderColor: "#2c3b58" }}>
+      <div style={S.row}>
+        <span style={S.key}>
+          <span style={S.dot(st.color)} />
+          {st.label}
+        </span>
+        <span style={S.chip}>{live.device}</span>
+      </div>
+      <div style={S.row}>
+        <span style={S.key}>task</span>
+        <span style={{ fontSize: 11, color: "#8b95a8", textAlign: "right" }}>{live.task}</span>
+      </div>
+
+      {live.status === "waiting" && (
+        <div style={{ marginTop: 10 }}>
+          <button style={S.btnStart} onClick={() => post("start")}>
+            ▶ start training
+          </button>
+          <div style={{ fontSize: 11.5, color: "#8b95a8", marginTop: 6 }}>
+            the model is built and idle — nothing runs until you press start
+          </div>
+        </div>
+      )}
+
+      {(live.status === "training" || live.status === "paused") && (
+        <div style={S.controls}>
+          {live.status === "training" ? (
+            <button style={S.btn} onClick={() => post("pause")}>
+              ⏸ pause
+            </button>
+          ) : (
+            <button style={S.btn} onClick={() => post("resume")}>
+              ▶ resume
+            </button>
+          )}
+          <button style={S.btnStop} onClick={() => post("stop")}>
+            ■ stop
+          </button>
+        </div>
+      )}
+
+      {last && (
+        <>
+          <div style={S.barOuter}>
+            <div style={S.barInner(pct, st.color)} />
+          </div>
+          <div style={S.row}>
+            <span style={S.key}>step</span>
+            <span>
+              {last.step + 1} / {live.total_steps}
+            </span>
+          </div>
+          <div style={S.row}>
+            <span style={S.key}>train loss</span>
+            <span style={{ color: "#e8963a" }}>{last.loss.toFixed(5)}</span>
+          </div>
+          {lastHeld && (
+            <div style={S.row}>
+              <span style={S.key}>held-out</span>
+              <span style={{ color: "#7aa2f7" }}>{lastHeld.held_out.toFixed(5)}</span>
+            </div>
+          )}
+          <LossChart metrics={live.metrics} />
+        </>
+      )}
+
+      {sendError && <div style={S.warn}>{sendError}</div>}
+    </div>
   );
 }
 
@@ -115,8 +267,6 @@ export default function Sidebar({
   const m = spec.model;
   const cells = spec.lattice.cells;
   const dirGlyph = (r) => (r ? "←" : "→");
-  const last = live?.metrics?.length ? live.metrics[live.metrics.length - 1] : null;
-  const lastHeld = live?.metrics ? [...live.metrics].reverse().find((e) => e.held_out != null) : null;
 
   return (
     <div style={S.panel}>
@@ -126,12 +276,12 @@ export default function Sidebar({
       <select style={S.select} value={sampleKey} onChange={(e) => onSample(e.target.value)}>
         {Object.keys(samples).map((k) => (
           <option key={k} value={k}>
-            sample: {k}
+            {k}
           </option>
         ))}
       </select>
-      <div style={{ margin: "8px 0 14px" }}>
-        <label style={{ ...S.btn, display: "inline-block" }}>
+      <div style={{ margin: "8px 0 0" }}>
+        <label style={{ ...S.btn, display: "inline-block", flex: "none" }}>
           open spec JSON
           <input
             type="file"
@@ -143,43 +293,13 @@ export default function Sidebar({
       </div>
 
       {live && (
-        <div style={{ ...S.card, borderColor: "#3d5a3d" }}>
-          <div style={S.row}>
-            <span style={S.key}>live training</span>
-            <b style={{ color: live.status === "done" ? "#9ece6a" : "#e8963a" }}>
-              {live.status === "done" ? "done" : "running"}
-            </b>
-          </div>
-          <div style={S.row}>
-            <span style={S.key}>device</span>
-            <span style={S.chip}>{live.device}</span>
-          </div>
-          <div style={S.row}>
-            <span style={S.key}>task</span>
-            <span style={{ fontSize: 11, color: "#8b95a8" }}>{live.task}</span>
-          </div>
-          {last && (
-            <>
-              <div style={S.row}>
-                <span style={S.key}>step</span>
-                <span>{last.step}</span>
-              </div>
-              <div style={S.row}>
-                <span style={S.key}>train loss</span>
-                <span style={{ color: "#e8963a" }}>{last.loss.toFixed(5)}</span>
-              </div>
-              {lastHeld && (
-                <div style={S.row}>
-                  <span style={S.key}>held-out</span>
-                  <span style={{ color: "#7aa2f7" }}>{lastHeld.held_out.toFixed(5)}</span>
-                </div>
-              )}
-              <LossChart metrics={live.metrics} />
-            </>
-          )}
-        </div>
+        <>
+          <div style={S.section}>run</div>
+          <RunPanel live={live} />
+        </>
       )}
 
+      <div style={S.section}>model</div>
       <div style={S.card}>
         <div style={S.row}>
           <span style={S.key}>model</span>
@@ -223,20 +343,20 @@ export default function Sidebar({
         </div>
       )}
 
+      <div style={S.section}>directions</div>
       <div style={S.card}>
         {Object.entries(spec.sweeps.directions).map(([axis, dir]) => (
           <div key={axis} style={S.row}>
             <span style={S.key}>{axis}</span>
-            <span>
-              {dir === "both" ? "→ and ←" : dir === "forward" ? "→ only" : "← only"}
-            </span>
+            <span>{dir === "both" ? "→ and ←" : dir === "forward" ? "→ only" : "← only"}</span>
           </div>
         ))}
       </div>
 
-      <div style={S.controls}>
+      <div style={S.section}>sweep animation</div>
+      <div style={{ ...S.controls, marginTop: 0, marginBottom: 6 }}>
         <button style={S.btn} onClick={onTogglePlay}>
-          {playing ? "pause" : "play"}
+          {playing ? "⏸ pause" : "▶ play"}
         </button>
         <button style={S.btn} onClick={() => onSelectLayer(layerIndex - 1)}>
           ◀ prev

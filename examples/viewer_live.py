@@ -1,15 +1,20 @@
-"""Train a 2-D LSTM and watch it live in the viewer.
+"""Train a 2-D LSTM under the viewer's control panel.
 
 Run the viewer dev server, then:
 
     python examples/viewer_live.py
 
-The script trains ``td.LSTM`` over a sparse 2-D lattice on the best available
-device (MPS on Apple Silicon, else CUDA, else CPU) and writes
-``viewer/public/run.json`` after every optimizer step — the model's
-architecture spec plus the loss history. The viewer polls that file and
-switches itself to the live run: architecture on the right, loss curve on the
-left, exactly the "watch it train" half of the GUI-mode idea (VIEWER.md V4).
+The script builds ``td.LSTM`` over a sparse 2-D lattice on the best available
+device (MPS on Apple Silicon, else CUDA, else CPU) and then **waits**: nothing
+trains until the Start button in the viewer is pressed. State flows one way,
+control the other:
+
+- state:   ``viewer/public/run.json`` is rewritten after every step — the
+  architecture spec, loss history, status, and progress. The viewer polls it.
+- control: a small HTTP server (default port 8765) accepts
+  ``POST /control {"action": "start" | "pause" | "resume" | "stop"}`` from the
+  panel's buttons. The run document carries the control URL, so the viewer
+  knows where to send them.
 
 The task is the library's own trainability task: a cumulative sum along the
 ``w`` axis, which a model that never mixes along ``w`` provably cannot learn.
@@ -19,7 +24,9 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import torch
@@ -28,8 +35,88 @@ import torch.nn as nn
 import torch_dimensions as td
 
 OUT = Path(__file__).resolve().parent.parent / "viewer" / "public" / "run.json"
-STEPS = 300
+STEPS = int(os.environ.get("TD_VIEWER_STEPS", "300"))
 EVAL_EVERY = 10
+CONTROL_PORT = 8765
+
+
+class Control:
+    """The run's state machine, shared between the HTTP thread and training.
+
+    waiting → (start) → training ⇄ (pause/resume) paused
+    any state → (stop) → stopped; training ends naturally → done.
+    """
+
+    ACTIONS = {
+        "start": ("waiting", "training"),
+        "pause": ("training", "paused"),
+        "resume": ("paused", "training"),
+    }
+
+    def __init__(self) -> None:
+        self.state = "waiting"
+        self.cond = threading.Condition()
+
+    def apply(self, action: str) -> str:
+        with self.cond:
+            if action == "stop" and self.state in ("waiting", "training", "paused"):
+                self.state = "stopped"
+            else:
+                expected = self.ACTIONS.get(action)
+                if expected and self.state == expected[0]:
+                    self.state = expected[1]
+            self.cond.notify_all()
+            return self.state
+
+    def wait_while(self, *states: str) -> str:
+        with self.cond:
+            while self.state in states:
+                self.cond.wait(timeout=1.0)
+            return self.state
+
+    def finish(self) -> None:
+        with self.cond:
+            if self.state != "stopped":
+                self.state = "done"
+
+
+def serve_control(ctrl: Control, port: int) -> ThreadingHTTPServer:
+    class Handler(BaseHTTPRequestHandler):
+        def _respond(self, code: int, body: dict | None = None) -> None:
+            payload = json.dumps(body or {}).encode()
+            self.send_response(code)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def do_OPTIONS(self) -> None:  # CORS preflight
+            self._respond(204)
+
+        def do_GET(self) -> None:
+            self._respond(200, {"state": ctrl.state})
+
+        def do_POST(self) -> None:
+            if self.path != "/control":
+                self._respond(404, {"error": "POST /control"})
+                return
+            try:
+                raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                action = json.loads(raw or b"{}").get("action", "")
+            except (ValueError, TypeError):
+                self._respond(400, {"error": "body must be JSON with an 'action'"})
+                return
+            self._respond(200, {"state": ctrl.apply(action)})
+
+        def log_message(self, *args) -> None:  # keep stdout for training progress
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
 def pick_device() -> str:
@@ -59,27 +146,47 @@ def main() -> None:
         x = torch.randn(8, 5, 6, 8, 1, generator=g).to(device) * mask
         return x, x.cumsum(dim=w_dim) * mask
 
+    ctrl = Control()
+    serve_control(ctrl, CONTROL_PORT)
+
     run: dict = {
         "started": time.time(),
         "device": device,
         "task": "cumsum along w (sparse 6×8 lattice)",
-        "status": "training",
+        "status": "waiting",
+        "control": f"http://127.0.0.1:{CONTROL_PORT}",
+        "total_steps": STEPS,
         "spec": model.to_spec(),
         "metrics": [],
     }
 
     def flush() -> None:
+        run["status"] = ctrl.state
         tmp = OUT.with_suffix(".tmp")
         OUT.parent.mkdir(parents=True, exist_ok=True)
         tmp.write_text(json.dumps(run))
         os.replace(tmp, OUT)
 
-    g = torch.Generator().manual_seed(1)
-    g_eval = torch.Generator().manual_seed(9973)
-    x_eval, y_eval = draw(g_eval)
+    flush()
+    print(f"model built on {device}; waiting for Start in the viewer (control :{CONTROL_PORT})")
+    if ctrl.wait_while("waiting") == "stopped":
+        flush()
+        print("stopped before training began")
+        return
 
-    print(f"training on {device}; writing {OUT}")
+    g = torch.Generator().manual_seed(1)
+    x_eval, y_eval = draw(torch.Generator().manual_seed(9973))
+
     for step in range(STEPS):
+        if ctrl.state == "paused":
+            flush()
+            print(f"paused at step {step}")
+            if ctrl.wait_while("paused") == "stopped":
+                break
+            print("resumed")
+        if ctrl.state == "stopped":
+            break
+
         x, y = draw(g)
         loss = (head(model(x)) - y).pow(2).mean()
         opt.zero_grad()
@@ -96,9 +203,9 @@ def main() -> None:
         run["metrics"].append(entry)
         flush()
 
-    run["status"] = "done"
+    ctrl.finish()
     flush()
-    print("done")
+    print(ctrl.state)
 
 
 if __name__ == "__main__":
