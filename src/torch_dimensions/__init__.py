@@ -35,7 +35,9 @@ from torch_dimensions.config import (
     save,
 )
 from torch_dimensions.lattice import Lattice, Restore, Sub
+from torch_dimensions.mixers.conv import axis_receptive_field as receptive_field
 from torch_dimensions.models.attention import Transformer, TransformerND
+from torch_dimensions.models.conv import CNN, CNNND, TCN, TCNND
 from torch_dimensions.models.rnn import GRU, LSTM
 from torch_dimensions.models.ssm import S4, S4D, S4DND, S4ND, Mamba, MambaND
 from torch_dimensions.plan import AxisCoverage, Coverage, ScanPlan, Step
@@ -45,8 +47,12 @@ from torch_dimensions.spec import spec
 __version__ = "0.1.0"
 
 __all__ = [
+    "CNN",
+    "CNNND",
     "GRU",
     "LSTM",
+    "TCN",
+    "TCNND",
     "Mamba",
     "MambaND",
     "S4",
@@ -78,6 +84,7 @@ __all__ = [
     "load",
     "read_config",
     "mixers",
+    "receptive_field",
     "testing",
     "viz",
     "register_model",

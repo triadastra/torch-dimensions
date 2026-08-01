@@ -15,6 +15,7 @@ norm or residual in the way.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 
 import torch
@@ -24,6 +25,31 @@ from torch_dimensions.lattice import AxisSpec, Lattice
 from torch_dimensions.plan import ScanPlan
 
 __all__ = ["AxialScan", "axial_apply"]
+
+# What a mixer factory may ask to be told about the layer it is being built
+# for. Both are opt-in by signature: a factory that does not name the argument
+# is called exactly as before, so this is invisible to every mixer that does
+# not want it.
+#
+# `sweep` — not `layer` — is the one that matters for N-D. A dilated
+# convolution's window should grow with how many times *its own axis* has been
+# swept, because that is what its receptive field along that axis composes
+# over. Growing with the global layer index instead would give the third sweep
+# of a rank-3 lattice a dilation of 64 where 4 is meant, and the model would
+# quietly be looking past the end of every line.
+_LAYER_ARGS = ("layer", "sweep")
+
+
+def _layer_kwargs(factory: Callable[..., nn.Module], layer: int, sweep: int) -> dict[str, int]:
+    try:
+        params = inspect.signature(factory).parameters
+    except (TypeError, ValueError):  # builtins, C callables
+        return {}
+    available = {"layer": layer, "sweep": sweep}
+    # Only names the signature spells out. A factory with `**kwargs` would
+    # swallow these silently, and a mixer that never asked for a `sweep`
+    # should not have one appear in its config.
+    return {k: v for k, v in available.items() if k in params and k in _LAYER_ARGS}
 
 
 def axial_apply(
@@ -117,9 +143,19 @@ class AxialScan(nn.Module):
 
         n = len(self.plan)
         if isinstance(mixer, nn.Module):
-            self.mixers = nn.ModuleList([mixer] * n)  # shared weights, by request
+            # Shared weights, by request. A shared mixer is one object, so it
+            # cannot vary per layer — no dilation schedule, no per-sweep
+            # anything. That is the trade the caller made by passing an
+            # instance instead of a factory.
+            self.mixers = nn.ModuleList([mixer] * n)
         else:
-            self.mixers = nn.ModuleList([mixer() for _ in range(n)])
+            swept: dict[int, int] = {}
+            built = []
+            for i, step in enumerate(self.plan):
+                axis = int(step.axis)
+                built.append(mixer(**_layer_kwargs(mixer, i, swept.get(axis, 0))))
+                swept[axis] = swept.get(axis, 0) + 1
+            self.mixers = nn.ModuleList(built)
         self.norms = nn.ModuleList([nn.LayerNorm(d_model) for _ in range(n)]) if norm else None
         self.drop = nn.Dropout(dropout)
 

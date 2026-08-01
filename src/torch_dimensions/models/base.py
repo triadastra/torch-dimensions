@@ -141,6 +141,18 @@ class LatticeModel(nn.Module):
 
         save(self, path)
 
+    def receptive_field(self) -> dict[str, dict[str, object]]:
+        """How far along each axis this model can actually see.
+
+        ``inf`` for mixers that span their axis in one layer (RNNs, SSMs,
+        attention); a finite number for convolutions, where it is a real
+        constraint worth checking before training rather than after. See
+        :func:`torch_dimensions.receptive_field`.
+        """
+        from torch_dimensions.mixers.conv import axis_receptive_field
+
+        return axis_receptive_field(self)
+
     def to_spec(self) -> dict:
         """A JSON-able description of this model's N-D architecture.
 
