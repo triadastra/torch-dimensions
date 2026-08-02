@@ -281,7 +281,9 @@ def test_mount_refuses_a_foreign_src(monkeypatch):
 
 
 def test_upstream_extra_missing_message(monkeypatch):
-    """Without einops the adapters must say how to get it, not stack-trace."""
+    """Without einops (and auto-install disabled) the adapters must say how
+    to get it, not stack-trace. The auto-install path itself is covered in
+    test_portable_flag.py."""
     import builtins
 
     real_import = builtins.__import__
@@ -292,6 +294,7 @@ def test_upstream_extra_missing_message(monkeypatch):
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", no_einops)
+    monkeypatch.setenv("TD_NO_AUTO_INSTALL", "1")
     from torch_dimensions.mixers.upstream import UpstreamMambaMixer
 
     with pytest.raises(ImportError, match=r"torch-dimensions\[upstream\]"):

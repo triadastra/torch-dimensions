@@ -207,7 +207,7 @@ def build(cfg: dict[str, Any] | str | Path, *, weights: bool = False) -> nn.Modu
     if isinstance(cfg, (str, Path)) and Path(cfg).suffix in (".td", ".pt", ".safetensors"):
         if weights:
             return load(cfg)
-        cfg = read_config(cfg)
+        cfg = _legacy_defaults(read_config(cfg))
     if isinstance(cfg, (str, Path)):
         try:
             import yaml
@@ -260,6 +260,21 @@ def read_config(path: str | Path) -> dict[str, Any]:
     if not isinstance(ckpt, dict) or ckpt.get("format") != CHECKPOINT_FORMAT:
         raise ValueError(f"{path} is not a torch-dimensions checkpoint")
     return {"kind": ckpt["kind"], **ckpt["config"]}
+
+
+# The SSM kinds gained a `portable` flag when the default flipped to the
+# vendored upstream implementations. A checkpoint written before then records
+# no such key — and was built with the portable mixers, so a rebuild must
+# produce that model, not today's default. Applied only to configs read out
+# of checkpoint files: a fresh YAML or dict written today means today's
+# default.
+_PORTABLE_FLAG_KINDS = {"s4", "s4d", "mamba", "s4nd", "s4dnd", "mamband"}
+
+
+def _legacy_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
+    if str(cfg.get("kind", "")).lower() in _PORTABLE_FLAG_KINDS and "portable" not in cfg:
+        cfg = {**cfg, "portable": True}
+    return cfg
 
 
 def _load_entry_points() -> None:
@@ -416,7 +431,7 @@ def load(path: str | Path, map_location: Any = None) -> nn.Module:
         if meta.get("format") != CHECKPOINT_FORMAT:
             raise ValueError(f"{path} is not a torch-dimensions checkpoint")
         _check_version(meta.get("version", -1), meta.get("library"))
-        model = build({"kind": meta["kind"], **json.loads(meta["config"])})
+        model = build(_legacy_defaults({"kind": meta["kind"], **json.loads(meta["config"])}))
         model.load_state_dict(load_file(str(path), device=str(map_location or "cpu")))
         return model
 
@@ -424,6 +439,6 @@ def load(path: str | Path, map_location: Any = None) -> nn.Module:
     if not isinstance(ckpt, dict) or ckpt.get("format") != CHECKPOINT_FORMAT:
         raise ValueError(f"{path} is not a torch-dimensions checkpoint")
     _check_version(ckpt.get("version", -1), ckpt.get("library"))
-    model = build({"kind": ckpt["kind"], **ckpt["config"]})
+    model = build(_legacy_defaults({"kind": ckpt["kind"], **ckpt["config"]}))
     model.load_state_dict(ckpt["state_dict"])
     return model

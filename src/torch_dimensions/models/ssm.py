@@ -9,13 +9,21 @@ one spatial axis is the 1-D model, and code reading "S4ND" must not be
 running S4. Pass ``lattice=...`` or just ``shape=(32, 32)`` and the lattice
 is constructed for you.
 
-The default mixers are the portable implementations in
-:mod:`torch_dimensions.mixers.ssm`: pure torch, verified against the upstream
-reference kernels, and runnable on CPU, CUDA, and MPS alike. To run the
-original authors' code instead — shipped verbatim in
-``torch_dimensions._vendor`` — substitute it per model:
-``td.Mamba(64, 6, lattice=lat, mixer=td.mixers.UpstreamMambaMixer)``. How the
-axes are composed stays ``nd_method``'s business (default
+**The default mixers are the original authors' code**, shipped verbatim in
+``torch_dimensions._vendor`` and byte-verified against their repositories:
+S4/S4D construct upstream's real ``S4Block`` through their own hydra
+registry, Mamba runs the reference block with the authors' own selective
+scan. Their dependencies (einops, numpy, scipy, hydra-core, omegaconf) are
+installed on first use — never at import, never for ``portable=True``.
+
+``portable=True`` selects our pure-torch implementations in
+:mod:`torch_dimensions.mixers.ssm` instead: no dependencies beyond torch,
+verified to agree with the originals (the S4D kernel bitwise). The flag is
+recorded in the model's config, so checkpoints rebuild what was actually
+trained; checkpoints written before this flag existed rebuild portable, which
+is what they were.
+
+How the axes are composed stays ``nd_method``'s business (default
 :func:`~torch_dimensions.axial_scan`), exactly as for the RNN family.
 """
 
@@ -24,12 +32,28 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import torch
+import torch.nn as nn
 
 from torch_dimensions.lattice import Lattice
 from torch_dimensions.mixers.ssm import MambaMixer, S4DMixer, S4Mixer
+from torch_dimensions.mixers.upstream import (
+    UpstreamMambaMixer,
+    UpstreamS4DMixer,
+    UpstreamS4Mixer,
+)
 from torch_dimensions.models.base import LatticeModel
 
 __all__ = ["S4", "S4D", "S4DND", "S4ND", "Mamba", "MambaND"]
+
+
+def _pick(
+    portable: bool, portable_cls: type[nn.Module], upstream_cls: type[nn.Module], kw: dict
+) -> type[nn.Module]:
+    """The flag chooses the implementation; an explicit mixer= makes it moot,
+    and combining the two is a contradiction refused rather than resolved."""
+    if portable and kw.get("mixer") is not None:
+        raise ValueError("pass either portable=True or mixer=..., not both")
+    return portable_cls if portable else upstream_cls
 
 
 class S4(LatticeModel):
@@ -42,14 +66,27 @@ class S4(LatticeModel):
         d_state: full SSM state size (even; stored as conjugate pairs).
 
     The kernel carries the rank-1 HiPPO-LegS correction that distinguishes S4
-    from its diagonal approximation :class:`S4D`.
+    from its diagonal approximation :class:`S4D`. By default this is
+    upstream's real ``S4Block(mode='dplr')``; ``portable=True`` selects our
+    pure-torch kernel instead.
     """
 
-    _mixer = S4Mixer
+    _mixer: type[nn.Module] = S4Mixer
 
-    def __init__(self, d_model: int, n_layers: int = 1, lattice=None, *, d_state: int = 64, **kw):
+    def __init__(
+        self,
+        d_model: int,
+        n_layers: int = 1,
+        lattice=None,
+        *,
+        d_state: int = 64,
+        portable: bool = False,
+        **kw,
+    ):
+        self._mixer = _pick(portable, S4Mixer, UpstreamS4Mixer, kw)
         mixer_kwargs = {"d_state": d_state, **kw.pop("mixer_kwargs", {})}
         super().__init__(d_model, n_layers, lattice, mixer_kwargs=mixer_kwargs, **kw)
+        self.config["portable"] = portable
 
 
 class S4D(LatticeModel):
@@ -61,14 +98,27 @@ class S4D(LatticeModel):
         lattice: omit for an ordinary 1-D sequence model.
         d_state: state dimension of the diagonal SSM (even; conjugate pairs).
 
-    Extra mixer options (``dt_min``, ``dt_max``) go in ``mixer_kwargs``.
+    Extra mixer options (``dt_min``, ``dt_max``) go in ``mixer_kwargs``. By
+    default this is upstream's real ``S4Block(mode='diag')``;
+    ``portable=True`` selects our pure-torch kernel instead.
     """
 
-    _mixer = S4DMixer
+    _mixer: type[nn.Module] = S4DMixer
 
-    def __init__(self, d_model: int, n_layers: int = 1, lattice=None, *, d_state: int = 64, **kw):
+    def __init__(
+        self,
+        d_model: int,
+        n_layers: int = 1,
+        lattice=None,
+        *,
+        d_state: int = 64,
+        portable: bool = False,
+        **kw,
+    ):
+        self._mixer = _pick(portable, S4DMixer, UpstreamS4DMixer, kw)
         mixer_kwargs = {"d_state": d_state, **kw.pop("mixer_kwargs", {})}
         super().__init__(d_model, n_layers, lattice, mixer_kwargs=mixer_kwargs, **kw)
+        self.config["portable"] = portable
 
 
 class Mamba(LatticeModel):
@@ -83,9 +133,13 @@ class Mamba(LatticeModel):
         d_state: SSM state size per channel.
         d_conv: width of the causal depthwise convolution.
         expand: inner width multiplier.
+
+    By default the layer is the authors' reference ``Mamba`` block (their
+    selective scan, end to end); ``portable=True`` selects our pure-torch
+    mixer instead.
     """
 
-    _mixer = MambaMixer
+    _mixer: type[nn.Module] = MambaMixer
 
     def __init__(
         self,
@@ -96,8 +150,10 @@ class Mamba(LatticeModel):
         d_state: int = 16,
         d_conv: int = 4,
         expand: int = 2,
+        portable: bool = False,
         **kw,
     ):
+        self._mixer = _pick(portable, MambaMixer, UpstreamMambaMixer, kw)
         mixer_kwargs = {
             "d_state": d_state,
             "d_conv": d_conv,
@@ -105,6 +161,7 @@ class Mamba(LatticeModel):
             **kw.pop("mixer_kwargs", {}),
         }
         super().__init__(d_model, n_layers, lattice, mixer_kwargs=mixer_kwargs, **kw)
+        self.config["portable"] = portable
 
 
 def _nd_lattice(

@@ -66,7 +66,7 @@
       "axis_index": 0,
       "kind": "scan",
       "layer": 0,
-      "mixer": "MambaMixer",
+      "mixer": "UpstreamMambaMixer",
       "n_params": 9920,
       "reverse": false
     },
@@ -78,7 +78,7 @@
       "axis_index": 1,
       "kind": "scan",
       "layer": 1,
-      "mixer": "MambaMixer",
+      "mixer": "UpstreamMambaMixer",
       "n_params": 9920,
       "reverse": false
     },
@@ -90,7 +90,7 @@
       "axis_index": 1,
       "kind": "scan",
       "layer": 2,
-      "mixer": "MambaMixer",
+      "mixer": "UpstreamMambaMixer",
       "n_params": 9920,
       "reverse": true
     },
@@ -102,7 +102,7 @@
       "axis_index": 2,
       "kind": "scan",
       "layer": 3,
-      "mixer": "MambaMixer",
+      "mixer": "UpstreamMambaMixer",
       "n_params": 9920,
       "reverse": false
     },
@@ -114,7 +114,7 @@
       "axis_index": 2,
       "kind": "scan",
       "layer": 4,
-      "mixer": "MambaMixer",
+      "mixer": "UpstreamMambaMixer",
       "n_params": 9920,
       "reverse": true
     },
@@ -126,7 +126,7 @@
       "axis_index": 0,
       "kind": "scan",
       "layer": 5,
-      "mixer": "MambaMixer",
+      "mixer": "UpstreamMambaMixer",
       "n_params": 9920,
       "reverse": false
     }

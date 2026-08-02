@@ -224,20 +224,29 @@ axial kernels.
 suite at ranks 5 and 6 (a rank-6 lattice is 5,040 cells), and the fold
 round-trips are fuzzed there too. Nothing in the machinery counts axes.
 
-## Run the original authors' code
+## The default IS the original authors' code
 
 The reference implementations of S4/S4D and Mamba ship inside the package,
-**byte-for-byte** — not our rewrite of them. For S4 that means the pipeline
-their `train.py` actually runs (`S4Block`, its kernels, HiPPO, the S4ND
-layer), not a standalone re-export; for Mamba, the reference block and the
-authors' own pure-torch selective scan:
+**byte-for-byte** — and they are what `td.S4`, `td.S4D`, and `td.Mamba` run
+by default. For S4 that means the pipeline their `train.py` actually runs
+(`S4Block`, its kernels, HiPPO, the S4ND layer), not a standalone re-export;
+for Mamba, the reference block and the authors' own pure-torch selective
+scan:
 
 ```python
-from torch_dimensions.mixers import UpstreamMambaMixer, UpstreamS4DMixer
+model = td.Mamba(64, n_layers=6, lattice=lat)  # the authors' Mamba block, verbatim
+s4d = td.S4D(64, 8, lattice=lat)  # their S4Block(mode='diag'), verbatim
 
-model = td.Mamba(64, n_layers=6, lattice=lat, mixer=UpstreamMambaMixer)
-s4d = td.S4D(64, 8, lattice=lat, mixer=UpstreamS4DMixer)  # their S4Block, mode='diag'
+light = td.S4D(64, 8, lattice=lat, portable=True)  # our pure-torch build, zero extra deps
 ```
+
+The originals' own dependencies (einops, numpy, scipy, hydra-core, omegaconf)
+are **installed on first use** — never at import, never for `portable=True`,
+announced before installing, and disabled by `TD_NO_AUTO_INSTALL=1` (which
+turns the moment into an error with the manual command,
+`pip install 'torch-dimensions[upstream]'`). The flag is recorded in each
+model's config, so checkpoints rebuild the implementation they were trained
+with — including pre-flag checkpoints, which rebuild portable.
 
 `torch_dimensions/_vendor/` holds the vendored subtree with its directory
 structure intact and a manifest pinning the upstream commits and hashes.

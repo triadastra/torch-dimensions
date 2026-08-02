@@ -69,9 +69,12 @@ def test_the_mixer_is_causal_along_the_swept_axis(mixer_cls, atol):
 
 @pytest.mark.parametrize("cls,mixer_cls", zip(MODELS, MIXERS, strict=True))
 def test_rank_one_single_layer_equals_the_bare_mixer(cls, mixer_cls):
+    # portable=True: the model class must add nothing around its bare mixer.
+    # The default (upstream) build is checked the same way in test_vendored /
+    # test_portable_flag; here the pairing is with the portable mixer.
     lat = td.Lattice(shape=(), time=True)
     torch.manual_seed(0)
-    model = cls(6, 1, lat, norm=False, residual=False).double()
+    model = cls(6, 1, lat, norm=False, residual=False, portable=True).double()
     torch.manual_seed(0)
     bare = mixer_cls(6).double()
     x = torch.randn(2, 7, 6, dtype=torch.float64)
@@ -92,12 +95,20 @@ def test_the_ssm_family_learns_a_task_that_needs_axial_mixing(cls):
 
 def test_mixer_options_reach_every_layer():
     lat = td.Lattice(shape=(2, 3))
-    model = td.Mamba(8, 2, lat, d_state=4, expand=3)
+    # portable build: our mixers' own attributes
+    model = td.Mamba(8, 2, lat, d_state=4, expand=3, portable=True)
     for m in model.nd.mixers:
         assert m.d_state == 4 and m.d_inner == 24
-    s4 = td.S4D(8, 2, lat, d_state=8)
+    s4 = td.S4D(8, 2, lat, d_state=8, portable=True)
     for m in s4.nd.mixers:
         assert m.kernel.A_imag.shape[-1] == 4  # d_state // 2 conjugate pairs
+    # default (upstream) build: the same options must reach the authors' blocks
+    model = td.Mamba(8, 2, lat, d_state=4, expand=3)
+    for m in model.nd.mixers:
+        assert m.block.d_state == 4 and m.block.d_inner == 24
+    s4 = td.S4D(8, 2, lat, d_state=8)
+    for m in s4.nd.mixers:
+        assert m.block.layer.kernel.N == 4  # their kernel halves N for conjugate pairs
 
 
 def test_s4d_rejects_an_odd_state_size():

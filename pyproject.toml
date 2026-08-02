@@ -21,8 +21,10 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
-# torch and nothing else. Every fused kernel is an optional extra, so a
-# CPU-only install still gets a working library (see PLAN.md, Phase 0).
+# torch and nothing else at install time. The default S4/S4D/Mamba mixers run
+# the vendored upstream code, whose own dependencies ([upstream] below) are
+# auto-installed on the first call that needs them; portable=True models and
+# everything else in the library never need more than torch.
 dependencies = ["torch>=2.4"]
 
 [project.optional-dependencies]

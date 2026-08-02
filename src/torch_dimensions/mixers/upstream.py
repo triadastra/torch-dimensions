@@ -30,26 +30,72 @@ rather than a silent shadowing.
 
 from __future__ import annotations
 
+import importlib
+import os
+import subprocess
+import sys
+
 import torch
 import torch.nn as nn
 
 __all__ = ["UpstreamMambaMixer", "UpstreamS4DMixer", "UpstreamS4Mixer"]
 
 _S4_DEPS = ("einops", "numpy", "scipy", "hydra", "omegaconf")
+_PIP_NAMES = {"hydra": "hydra-core"}
 
 
-def _require_upstream(modules: tuple[str, ...] = ("einops",)) -> None:
-    """Fail with an installation hint instead of a stack trace three frames deep."""
-    missing = []
+def _missing(modules: tuple[str, ...]) -> list[str]:
+    out = []
     for mod in modules:
         try:
             __import__(mod)
         except ImportError:
-            missing.append("hydra-core" if mod == "hydra" else mod)
-    if missing:
+            out.append(mod)
+    return out
+
+
+def _require_upstream(modules: tuple[str, ...] = ("einops",)) -> None:
+    """Make the originals' own dependencies available, installing on first use.
+
+    The upstream mixers are the *default* implementation, but their
+    dependencies are not `torch-dimensions` dependencies: someone who never
+    constructs an upstream-backed model, or always passes ``portable=True``,
+    never needs them and never gets them. On the first call that does need
+    them, the missing ones are pip-installed into the running interpreter's
+    environment — announced on stderr first, disabled entirely by setting
+    ``TD_NO_AUTO_INSTALL=1``, in which case (and whenever installation fails)
+    this raises with the manual command instead.
+    """
+    missing = _missing(modules)
+    if not missing:
+        return
+    pips = [_PIP_NAMES.get(m, m) for m in missing]
+    manual = "pip install 'torch-dimensions[upstream]'"
+    if os.environ.get("TD_NO_AUTO_INSTALL"):
         raise ImportError(
-            f"the upstream mixers run the original authors' code, which needs "
-            f"{', '.join(missing)}: pip install 'torch-dimensions[upstream]'"
+            f"the upstream reference code (the default mixers) needs {', '.join(pips)}. "
+            f"Auto-install is disabled by TD_NO_AUTO_INSTALL; run {manual}, or pass "
+            "portable=True for the pure-torch build."
+        )
+    print(
+        f"torch-dimensions: the default mixers run the original authors' code, which "
+        f"needs {', '.join(pips)}; installing with {sys.executable} -m pip "
+        "(set TD_NO_AUTO_INSTALL=1 to disable, or pass portable=True to avoid entirely)",
+        file=sys.stderr,
+    )
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", *pips], check=True)
+    except (subprocess.CalledProcessError, OSError) as e:
+        raise ImportError(
+            f"auto-installing {', '.join(pips)} failed; run {manual} yourself, "
+            "or pass portable=True for the pure-torch build"
+        ) from e
+    importlib.invalidate_caches()
+    still = [_PIP_NAMES.get(m, m) for m in _missing(modules)]
+    if still:
+        raise ImportError(
+            f"{', '.join(still)} still not importable after installation; run {manual} "
+            "in the right environment, or pass portable=True"
         )
 
 

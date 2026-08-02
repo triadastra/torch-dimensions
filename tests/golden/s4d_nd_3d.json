@@ -75,8 +75,8 @@
       "axis_index": 0,
       "kind": "scan",
       "layer": 0,
-      "mixer": "S4DMixer",
-      "n_params": 4320,
+      "mixer": "UpstreamS4DMixer",
+      "n_params": 5856,
       "reverse": false
     },
     {
@@ -87,8 +87,8 @@
       "axis_index": 1,
       "kind": "scan",
       "layer": 1,
-      "mixer": "S4DMixer",
-      "n_params": 4320,
+      "mixer": "UpstreamS4DMixer",
+      "n_params": 5856,
       "reverse": false
     },
     {
@@ -99,8 +99,8 @@
       "axis_index": 2,
       "kind": "scan",
       "layer": 2,
-      "mixer": "S4DMixer",
-      "n_params": 4320,
+      "mixer": "UpstreamS4DMixer",
+      "n_params": 5856,
       "reverse": false
     },
     {
@@ -111,8 +111,8 @@
       "axis_index": 3,
       "kind": "scan",
       "layer": 3,
-      "mixer": "S4DMixer",
-      "n_params": 4320,
+      "mixer": "UpstreamS4DMixer",
+      "n_params": 5856,
       "reverse": false
     },
     {
@@ -123,8 +123,8 @@
       "axis_index": 0,
       "kind": "scan",
       "layer": 4,
-      "mixer": "S4DMixer",
-      "n_params": 4320,
+      "mixer": "UpstreamS4DMixer",
+      "n_params": 5856,
       "reverse": false
     },
     {
@@ -135,8 +135,8 @@
       "axis_index": 1,
       "kind": "scan",
       "layer": 5,
-      "mixer": "S4DMixer",
-      "n_params": 4320,
+      "mixer": "UpstreamS4DMixer",
+      "n_params": 5856,
       "reverse": false
     }
   ],
@@ -145,7 +145,7 @@
     "d_model": 24,
     "kind": "S4DND",
     "n_layers": 6,
-    "n_params": 26208
+    "n_params": 35424
   },
   "nd_method": {
     "family": "scan",

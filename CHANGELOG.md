@@ -6,6 +6,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **The default S4/S4D/Mamba implementation is now the original authors'
+  code.** `td.S4`, `td.S4D`, and `td.Mamba` construct the vendored upstream
+  blocks by default; `portable=True` selects the pure-torch mixers (the old
+  default). The flag is recorded in the model config, so checkpoints rebuild
+  what they were trained with — and checkpoints written before the flag
+  existed rebuild `portable=True`, bitwise. The originals' dependencies are
+  auto-installed on the first call that needs them (announced first;
+  `TD_NO_AUTO_INSTALL=1` turns that into an error with the manual command;
+  `portable=True` never installs anything). Passing both `portable=True` and
+  `mixer=` is refused. Golden specs now name the upstream mixers in the
+  default models' layers.
+
 ## [0.2.0] - 2026-08-03
 
 ### Added
