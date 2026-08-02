@@ -1,14 +1,14 @@
 {
   "repos": {
-    "mamba": {
-      "url": "https://github.com/state-spaces/mamba",
-      "license": "Apache-2.0",
-      "commit": "e9594ce1c732d97440f0332fdc43170a2294dbfa"
-    },
     "s4": {
       "url": "https://github.com/state-spaces/s4",
       "license": "Apache-2.0",
       "commit": "e757cef57d89e448c413de7325ed5601aceaac13"
+    },
+    "mamba": {
+      "url": "https://github.com/state-spaces/mamba",
+      "license": "Apache-2.0",
+      "commit": "e9594ce1c732d97440f0332fdc43170a2294dbfa"
     }
   },
   "files": {
@@ -193,6 +193,42 @@
       "sha256": "a17e4c51b582dc0d4d690a649eba521cd0c1ee3dc8f0473a0967cdc9ec0874e3",
       "removed_lines": [
         "from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, mamba_inner_fn"
+      ]
+    },
+    "mamba/mamba2.py": {
+      "repo": "mamba",
+      "upstream_path": "mamba_ssm/modules/mamba2.py",
+      "patched": true,
+      "sha256": "605e4439ff0baec8d8acaf4a191d9f0570eea9900065a065909124c472b08707",
+      "removed_lines": [
+        "from mamba_ssm.ops.triton.layernorm_gated import RMSNorm as RMSNormGated",
+        "",
+        "from mamba_ssm.distributed.tensor_parallel import ColumnParallelLinear, RowParallelLinear",
+        "from mamba_ssm.distributed.distributed_utils import all_reduce, reduce_scatter",
+        "",
+        "from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined",
+        "from mamba_ssm.ops.triton.ssd_combined import mamba_split_conv1d_scan_combined",
+        "",
+        "from huggingface_hub import PyTorchModelHubMixin"
+      ]
+    },
+    "mamba/ssd_minimal.py": {
+      "repo": "mamba",
+      "upstream_path": "mamba_ssm/modules/ssd_minimal.py",
+      "patched": true,
+      "sha256": "6442a9fe25a6792258df657392ab1fab4dd873ee777d9dd5783cc76030218e07",
+      "removed_lines": [
+        "from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined"
+      ]
+    },
+    "mamba/layernorm_gated.py": {
+      "repo": "mamba",
+      "upstream_path": "mamba_ssm/ops/triton/layernorm_gated.py",
+      "patched": true,
+      "sha256": "eb6252e247b90f1c8a75946efbc1a221e0c4da701b6757ddae49f3495cf7a42f",
+      "removed_lines": [
+        "import triton",
+        "import triton.language as tl"
       ]
     },
     "mamba/selective_scan_interface.py": {

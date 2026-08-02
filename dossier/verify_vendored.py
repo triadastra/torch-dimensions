@@ -74,6 +74,9 @@ FILES = {
     },
     "s4/LICENSE": ("s4", "LICENSE", False),
     "mamba/mamba_simple.py": ("mamba", "mamba_ssm/modules/mamba_simple.py", True),
+    "mamba/mamba2.py": ("mamba", "mamba_ssm/modules/mamba2.py", True),
+    "mamba/ssd_minimal.py": ("mamba", "mamba_ssm/modules/ssd_minimal.py", True),
+    "mamba/layernorm_gated.py": ("mamba", "mamba_ssm/ops/triton/layernorm_gated.py", True),
     "mamba/selective_scan_interface.py": (
         "mamba",
         "mamba_ssm/ops/selective_scan_interface.py",

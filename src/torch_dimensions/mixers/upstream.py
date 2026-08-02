@@ -38,7 +38,12 @@ import sys
 import torch
 import torch.nn as nn
 
-__all__ = ["UpstreamMambaMixer", "UpstreamS4DMixer", "UpstreamS4Mixer"]
+__all__ = [
+    "UpstreamMamba2Mixer",
+    "UpstreamMambaMixer",
+    "UpstreamS4DMixer",
+    "UpstreamS4Mixer",
+]
 
 _S4_DEPS = ("einops", "numpy", "scipy", "hydra", "omegaconf")
 _PIP_NAMES = {"hydra": "hydra-core"}
@@ -179,6 +184,53 @@ class UpstreamMambaMixer(nn.Module):
         from torch_dimensions._vendor.mamba.mamba_simple import Mamba
 
         self.block = Mamba(d_model, d_state=d_state, d_conv=d_conv, expand=expand, **mamba_args)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.block(x)
+
+
+class UpstreamMamba2Mixer(nn.Module):
+    """The authors' Mamba-2 block, exactly as shipped.
+
+    Wraps ``_vendor/mamba/mamba2.py``'s ``Mamba2`` — the SSD formulation, with
+    multi-head structure and a gated RMSNorm, rather than Mamba-1's per-channel
+    selective scan.
+
+    Off GPU the Triton kernels are unavailable (Triton needs CUDA and has no
+    Metal backend), so this passes upstream's own ``use_mem_eff_path=False`` —
+    their switch for the unfused path — and the chunked scan is computed by
+    their reference ``ssd_minimal_discrete`` ("the same as Listing 1 from the
+    paper", their words) through the adapter in
+    :mod:`torch_dimensions.mixers.mamba2_compat`. The gated norm likewise
+    falls back to their ``rms_norm_ref``. With Triton and CUDA present, the
+    fused kernels are used exactly as upstream intends.
+
+    ``d_model * expand`` must be divisible by ``headdim`` (default 64), which
+    is upstream's own constraint on the head layout.
+    """
+
+    def __init__(
+        self,
+        d_model: int,
+        d_state: int = 128,
+        d_conv: int = 4,
+        expand: int = 2,
+        headdim: int = 64,
+        **mamba_args,
+    ):
+        super().__init__()
+        _require_upstream()
+        from torch_dimensions._vendor.mamba.mamba2 import Mamba2
+
+        mamba_args.setdefault("use_mem_eff_path", torch.cuda.is_available())
+        self.block = Mamba2(
+            d_model,
+            d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
+            headdim=headdim,
+            **mamba_args,
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.block(x)

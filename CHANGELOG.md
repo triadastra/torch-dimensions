@@ -6,6 +6,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Mamba-2, from the authors' code, running on CPU and MPS.**
+  `td.Mamba(..., version=2)` and `td.Mamba2(...)` are the same model — the
+  vendored upstream `Mamba2` block (SSD: multi-head, gated RMSNorm). Its
+  fused path needs Triton and CUDA, so off GPU the block takes upstream's own
+  `use_mem_eff_path=False` route and the chunked scan is computed by *their*
+  reference `ssd_minimal_discrete` ("the same as Listing 1 from the paper"),
+  with the gated norm falling back to their `rms_norm_ref`.
+  `mixers/mamba2_compat.py` is the adapter that presents the fused kernels'
+  calling convention on top of that reference — ours, and verified against an
+  independent naive recurrence in float64 at **3e-16** across non-chunk-
+  aligned lengths, grouped B/C, dt bias, D skip and z gate. MPS-vs-CPU 6e-07,
+  gradients finite. `version=3` is refused with the reason (upstream ships
+  Mamba-3 as Triton-only kernels with no reference implementation).
+
 ### Changed
 - **The default S4/S4D/Mamba implementation is now the original authors'
   code.** `td.S4`, `td.S4D`, and `td.Mamba` construct the vendored upstream

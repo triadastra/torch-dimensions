@@ -41,7 +41,16 @@ from torch_dimensions.mixers.conv import axis_receptive_field as receptive_field
 from torch_dimensions.models.attention import Transformer, TransformerND
 from torch_dimensions.models.conv import CNN, CNNND, TCN, TCNND
 from torch_dimensions.models.rnn import GRU, LSTM
-from torch_dimensions.models.ssm import S4, S4D, S4DND, S4ND, Mamba, MambaND
+from torch_dimensions.models.ssm import (
+    S4,
+    S4D,
+    S4DND,
+    S4ND,
+    Mamba,
+    Mamba2,
+    Mamba2ND,
+    MambaND,
+)
 from torch_dimensions.models.vit import PatchEmbed, ViT
 from torch_dimensions.plan import AxisCoverage, Coverage, ScanPlan, Step
 from torch_dimensions.spec import SPEC_VERSION as spec_version
@@ -57,6 +66,8 @@ __all__ = [
     "TCN",
     "TCNND",
     "Mamba",
+    "Mamba2",
+    "Mamba2ND",
     "MambaND",
     "S4",
     "S4D",

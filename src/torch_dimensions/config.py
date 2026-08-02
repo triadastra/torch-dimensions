@@ -53,7 +53,16 @@ def _models() -> dict[str, type[nn.Module]]:
     from torch_dimensions.models.attention import Transformer
     from torch_dimensions.models.conv import CNN, TCN
     from torch_dimensions.models.rnn import GRU, LSTM
-    from torch_dimensions.models.ssm import S4, S4D, S4DND, S4ND, Mamba, MambaND
+    from torch_dimensions.models.ssm import (
+        S4,
+        S4D,
+        S4DND,
+        S4ND,
+        Mamba,
+        Mamba2,
+        Mamba2ND,
+        MambaND,
+    )
     from torch_dimensions.models.vit import ViT
 
     return {
@@ -66,9 +75,11 @@ def _models() -> dict[str, type[nn.Module]]:
         "s4": S4,
         "s4d": S4D,
         "mamba": Mamba,
+        "mamba2": Mamba2,
         "s4nd": S4ND,
         "s4dnd": S4DND,
         "mamband": MambaND,
+        "mamba2nd": Mamba2ND,
     }
 
 
@@ -269,6 +280,7 @@ def read_config(path: str | Path) -> dict[str, Any]:
 # of checkpoint files: a fresh YAML or dict written today means today's
 # default.
 _PORTABLE_FLAG_KINDS = {"s4", "s4d", "mamba", "s4nd", "s4dnd", "mamband"}
+# mamba2/mamba2nd are absent on purpose: they have no portable build.
 
 
 def _legacy_defaults(cfg: dict[str, Any]) -> dict[str, Any]:

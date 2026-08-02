@@ -37,13 +37,14 @@ import torch.nn as nn
 from torch_dimensions.lattice import Lattice
 from torch_dimensions.mixers.ssm import MambaMixer, S4DMixer, S4Mixer
 from torch_dimensions.mixers.upstream import (
+    UpstreamMamba2Mixer,
     UpstreamMambaMixer,
     UpstreamS4DMixer,
     UpstreamS4Mixer,
 )
 from torch_dimensions.models.base import LatticeModel
 
-__all__ = ["S4", "S4D", "S4DND", "S4ND", "Mamba", "MambaND"]
+__all__ = ["S4", "S4D", "S4DND", "S4ND", "Mamba", "Mamba2", "Mamba2ND", "MambaND"]
 
 
 def _pick(
@@ -137,6 +138,13 @@ class Mamba(LatticeModel):
     By default the layer is the authors' reference ``Mamba`` block (their
     selective scan, end to end); ``portable=True`` selects our pure-torch
     mixer instead.
+
+    ``version=2`` runs the authors' **Mamba-2** block (the SSD formulation:
+    multi-head, gated RMSNorm) — the same object as :class:`Mamba2`, which is
+    simply the spelling that puts the version in the name. Mamba-2 has no
+    ``portable`` build: its whole point is the SSD algorithm, and off GPU it
+    already runs the authors' own reference implementation of it, so a
+    reimplementation would add nothing but a second thing to be wrong.
     """
 
     _mixer: type[nn.Module] = MambaMixer
@@ -147,21 +155,39 @@ class Mamba(LatticeModel):
         n_layers: int = 1,
         lattice=None,
         *,
-        d_state: int = 16,
+        d_state: int | None = None,
         d_conv: int = 4,
         expand: int = 2,
         portable: bool = False,
+        version: int = 1,
         **kw,
     ):
-        self._mixer = _pick(portable, MambaMixer, UpstreamMambaMixer, kw)
-        mixer_kwargs = {
-            "d_state": d_state,
-            "d_conv": d_conv,
-            "expand": expand,
-            **kw.pop("mixer_kwargs", {}),
-        }
+        if version not in (1, 2):
+            # Mamba-3 exists upstream but its kernels are Triton-only with no
+            # reference implementation, so there is nothing to run here.
+            hint = (
+                " Mamba-3 ships upstream as Triton kernels with no pure-torch reference, "
+                "so it cannot run on CPU or MPS; see PLAN.md."
+                if version == 3
+                else ""
+            )
+            raise ValueError(f"Mamba version must be 1 or 2; got {version}.{hint}")
+        if version == 2:
+            if portable:
+                raise ValueError(
+                    "there is no portable build of Mamba-2: off GPU it already runs the "
+                    "authors' own reference SSD implementation. Use version=1 for the "
+                    "portable selective scan."
+                )
+            self._mixer = _pick(False, MambaMixer, UpstreamMamba2Mixer, kw)
+            defaults: dict = {"d_state": 128 if d_state is None else d_state, "d_conv": d_conv}
+        else:
+            self._mixer = _pick(portable, MambaMixer, UpstreamMambaMixer, kw)
+            defaults = {"d_state": 16 if d_state is None else d_state, "d_conv": d_conv}
+        mixer_kwargs = {**defaults, "expand": expand, **kw.pop("mixer_kwargs", {})}
         super().__init__(d_model, n_layers, lattice, mixer_kwargs=mixer_kwargs, **kw)
         self.config["portable"] = portable
+        self.config["version"] = version
 
 
 def _nd_lattice(
@@ -248,6 +274,26 @@ def _nd_variant(base: type[LatticeModel], cls_name: str) -> type[LatticeModel]:
     return ND
 
 
+class Mamba2(Mamba):
+    """Mamba-2 (the SSD formulation) — ``td.Mamba(..., version=2)`` by name.
+
+    Identical in every way to passing ``version=2``; both spellings build the
+    same model and record the same config, so a checkpoint written by one
+    rebuilds under the other. Which reads better is the caller's choice.
+
+    Off GPU the chunked scan is computed by the authors' own reference
+    implementation (``ssd_minimal.py``, "the same as Listing 1 from the
+    paper"); with Triton and CUDA present the fused kernels are used exactly
+    as upstream intends.
+    """
+
+    def __init__(self, d_model: int, n_layers: int = 1, lattice=None, **kw):
+        if kw.pop("version", 2) != 2:
+            raise ValueError("td.Mamba2 is version 2; use td.Mamba(version=...) to choose")
+        super().__init__(d_model, n_layers, lattice, version=2, **kw)
+
+
 S4ND = _nd_variant(S4, "S4ND")
 S4DND = _nd_variant(S4D, "S4DND")
 MambaND = _nd_variant(Mamba, "MambaND")
+Mamba2ND = _nd_variant(Mamba2, "Mamba2ND")
