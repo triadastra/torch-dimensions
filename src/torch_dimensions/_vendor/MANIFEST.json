@@ -1,0 +1,67 @@
+{
+  "repos": {
+    "mamba": {
+      "url": "https://github.com/state-spaces/mamba",
+      "license": "Apache-2.0",
+      "commit": "e9594ce1c732d97440f0332fdc43170a2294dbfa"
+    },
+    "s4": {
+      "url": "https://github.com/state-spaces/s4",
+      "license": "Apache-2.0",
+      "commit": "e757cef57d89e448c413de7325ed5601aceaac13"
+    }
+  },
+  "files": {
+    "s4/s4.py": {
+      "repo": "s4",
+      "upstream_path": "models/s4/s4.py",
+      "sha256": "9f3418b396ec9ccbea30d1f1de92b55e631a3380ebbb19257a73f0219e2a23a6",
+      "removed_lines": [
+        "from pytorch_lightning.utilities import rank_zero_only"
+      ]
+    },
+    "s4/s4d.py": {
+      "repo": "s4",
+      "upstream_path": "models/s4/s4d.py",
+      "sha256": "4aab484e96dba85b2eba14f54c42df103a314a087ca184bfcca30e77d0faea2c",
+      "removed_lines": [
+        "from src.models.nn import DropoutNd"
+      ]
+    },
+    "s4/LICENSE": {
+      "repo": "s4",
+      "upstream_path": "LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "removed_lines": []
+    },
+    "mamba/mamba_simple.py": {
+      "repo": "mamba",
+      "upstream_path": "mamba_ssm/modules/mamba_simple.py",
+      "sha256": "a17e4c51b582dc0d4d690a649eba521cd0c1ee3dc8f0473a0967cdc9ec0874e3",
+      "removed_lines": [
+        "from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, mamba_inner_fn"
+      ]
+    },
+    "mamba/selective_scan_interface.py": {
+      "repo": "mamba",
+      "upstream_path": "mamba_ssm/ops/selective_scan_interface.py",
+      "sha256": "a570f4f15a2eebabf62024a9ffb0d1dde04280300405e1632f43809f448bfb1a",
+      "removed_lines": [
+        "from mamba_ssm.utils.torch import custom_bwd, custom_fwd",
+        "from mamba_ssm.ops.triton.layer_norm import _layer_norm_fwd"
+      ]
+    },
+    "mamba/utils_torch.py": {
+      "repo": "mamba",
+      "upstream_path": "mamba_ssm/utils/torch.py",
+      "sha256": "1c3132a1a747e914874e84b5f300ea80d0297faba6eb9256cb5ac4b3d6413c06",
+      "removed_lines": []
+    },
+    "mamba/LICENSE": {
+      "repo": "mamba",
+      "upstream_path": "LICENSE",
+      "sha256": "760939b000194d04548ede6a857bbe735d1695d8422ec85955c8e2bd7f4b95c5",
+      "removed_lines": []
+    }
+  }
+}

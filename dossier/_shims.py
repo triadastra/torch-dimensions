@@ -1,9 +1,12 @@
 """Import shims that let the upstream research repos load off-GPU.
 
-These repos are *not* vendored into this one. They are cloned on demand into a
-directory **outside** this repository, and this file makes them importable
-from there, so no upstream code enters our tree, our git history, our sdist or
-our wheel. Nothing here is redistribution.
+The clones this file manages live **outside** this repository and are used for
+comparison only — nothing *this file fetches* is redistributed. (Separately,
+the specific Apache-2.0/MIT-licensed reference files that the library does
+redistribute live in `src/torch_dimensions/_vendor`, with their own manifest
+and byte-diff verification; `dossier/verify_vendored.py` checks them against
+the clones made here. Mamba-ND grants no license and is never vendored — it is
+only ever imported from a local clone.)
 
 `external(name)` fetches a shallow clone the first time it is asked for; set
 `TD_EXTERNAL` to choose where they live (default `~/.cache/torch-dimensions/

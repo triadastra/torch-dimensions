@@ -223,15 +223,43 @@ axial kernels.
 suite at ranks 5 and 6 (a rank-6 lattice is 5,040 cells), and the fold
 round-trips are fuzzed there too. Nothing in the machinery counts axes.
 
+## Run the original authors' code
+
+The reference implementations of S4/S4D and Mamba ship inside the package,
+**byte-for-byte** — not our rewrite of them:
+
+```python
+from torch_dimensions.mixers import UpstreamMambaMixer  # the authors' Mamba block
+
+model = td.Mamba(64, n_layers=6, lattice=lat, mixer=UpstreamMambaMixer)
+```
+
+`torch_dimensions/_vendor/` holds the vendored files next to pristine `.orig`
+copies and a manifest pinning the upstream commits. The only edits are
+import-path/optional-dependency patches, every changed line tagged
+`torch-dimensions patch` — and CI fails if any untagged difference exists, so
+"identical to the original" is a checked property, not a promise. Off GPU, the
+Mamba block runs the authors' own `selective_scan_ref`; on CUDA with
+`mamba-ssm` installed it picks up the fused kernels exactly as upstream
+intends. Needs `pip install 'torch-dimensions[upstream]'` (einops, numpy,
+scipy — the originals' own imports).
+
+The portable mixers (`td.S4D`, `td.Mamba` defaults) remain pure-torch, and the
+two agree numerically — that agreement is itself a CI test
+(`tests/test_vendored.py`).
+
 ## License
 
 Apache-2.0, © 2026 Celsia Juilyn Fan. [NOTICE](NOTICE) carries the full
 third-party attribution; the short version:
 
-- The S4/S4D/Mamba mixer mathematics **derives from**
-  [state-spaces/s4](https://github.com/state-spaces/s4) and
-  [state-spaces/mamba](https://github.com/state-spaces/mamba), both Apache-2.0.
-  `mixers/ssm.py` states what was carried over and what deliberately was not.
+- The reference files under `torch_dimensions/_vendor/` are **redistributed
+  verbatim** from [state-spaces/s4](https://github.com/state-spaces/s4) and
+  [state-spaces/mamba](https://github.com/state-spaces/mamba), both
+  Apache-2.0, with their licenses alongside and every patched line tagged.
+- The portable S4/S4D/Mamba mixer mathematics **derives from** the same two
+  repositories. `mixers/ssm.py` states what was carried over and what
+  deliberately was not.
 - Two kernel options (`qk_norm`, `kernel_residual`) are **ideas taken from**
   [BaratiLab/CaFA](https://github.com/BaratiLab/CaFA) (MIT), independently
   implemented.
@@ -240,5 +268,3 @@ third-party attribution; the short version:
   implementation, verified against it. That repository states **no license**,
   so no code from it is used or redistributed here — see [NOTICE](NOTICE),
   which states precisely what that verification does and does not establish.
-
-No third-party code is redistributed in this package.

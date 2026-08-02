@@ -28,21 +28,24 @@ dependencies = ["torch>=2.4"]
 [project.optional-dependencies]
 mamba = ["mamba-ssm>=2.0"]
 fla = ["flash-linear-attention"]
+# The vendored reference implementations (torch_dimensions._vendor) run the
+# original authors' code verbatim; these are the dependencies *their* files
+# import (einops everywhere, numpy+scipy for the S4 family).
+upstream = ["einops", "numpy", "scipy"]
 # A torch pickle executes arbitrary code when it is opened. `.safetensors`
 # checkpoints do not, and `td.save`/`td.load` pick the container from the
 # file extension.
 # safetensors' torch bindings import numpy at runtime, and torch itself does not
 # require it — so the extra says so rather than failing three frames deep.
 safetensors = ["safetensors>=0.4", "numpy"]
-# S4D ships built in (portable, pure torch) — no [s4] extra. The full DPLR S4
-# stays upstream; PLAN.md Phase 7 records what a vendored copy must patch.
 dev = [
   "pytest>=8", "pytest-cov", "ruff>=0.6", "mypy", "hypothesis", "pyyaml",
   # Optional at runtime, mandatory for testing the paths that use them —
-  # otherwise CI skips them and reports green (DEBUG.md #24).
-  "safetensors>=0.4", "numpy",
+  # otherwise CI skips them and reports green (DEBUG.md #24). einops/scipy
+  # are here so tests/test_vendored.py actually runs the vendored originals.
+  "safetensors>=0.4", "numpy", "einops", "scipy",
 ]
-all = ["torch-dimensions[mamba,fla,safetensors]"]
+all = ["torch-dimensions[mamba,fla,safetensors,upstream]"]
 
 [project.urls]
 Homepage = "https://github.com/triadastra/torch-dimensions"
@@ -78,6 +81,9 @@ addopts = "-m 'not gpu'"
 
 [tool.coverage.run]
 source = ["torch_dimensions"]
+# Upstream's code is verified byte-for-byte against their repositories, not
+# line-covered by our tests — coverage of their internals is their business.
+omit = ["*/torch_dimensions/_vendor/*"]
 
 [tool.coverage.report]
 # Measured at 97% when the floor was set. The floor exists to catch a module
@@ -90,6 +96,9 @@ show_missing = true
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+# Vendored upstream files must stay byte-faithful to their sources; linting
+# them would demand edits the byte-diff test exists to forbid.
+extend-exclude = ["src/torch_dimensions/_vendor"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY"]
@@ -98,3 +107,4 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY"]
 python_version = "3.10"
 files = ["src"]
 ignore_missing_imports = true
+exclude = ["src/torch_dimensions/_vendor"]

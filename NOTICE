@@ -8,31 +8,55 @@ licensed under the Apache License, Version 2.0 (see LICENSE).
 Third-party attributions
 ================================================================================
 
-Nothing below is redistributed in this package. These entries record where
-*ideas and mathematics* came from, and — where a file is a derivation — which
-upstream file it derives from. The audit behind this list is in
-dossier/README.md.
+Each entry below states its relationship to the upstream project exactly:
+**redistribution** (their files, shipped verbatim in this package),
+**derivation** (our files, written from their code), or **ideas** (no code
+relationship at all). The audit behind this list is in dossier/README.md.
 
 --------------------------------------------------------------------------------
 state-spaces/s4 — Apache License 2.0
+Copyright the state-spaces authors (Gu, Goel, Ré, et al.)
 https://github.com/state-spaces/s4
 
-src/torch_dimensions/mixers/ssm.py derives the S4D and S4 (DPLR) kernel
-mathematics from `models/s4/s4d.py` and the structured-kernel modules.
-Modified: the fused CUDA/Triton kernels, the pytorch_lightning and hub
-imports, and the transposed-layout plumbing are not carried over, and a
-Nyquist-pole guard was added that upstream does not have. That file's module
-docstring states this in full, as Apache-2.0 section 4(b) asks.
+1. REDISTRIBUTION. src/torch_dimensions/_vendor/s4/ contains the authors'
+   standalone `models/s4/s4.py` and `models/s4/s4d.py`, byte-identical to the
+   upstream commit recorded in _vendor/MANIFEST.json, except for import-path
+   and optional-dependency patches. Statement of changes (Apache-2.0 §4(b)):
+   every modified line is tagged "torch-dimensions patch" in the file itself,
+   a pristine `.orig` copy ships beside each file, and tests/test_vendored.py
+   fails if any untagged difference exists. The upstream LICENSE ships in the
+   same directory.
+
+2. DERIVATION. src/torch_dimensions/mixers/ssm.py derives the S4D and S4
+   (DPLR) kernel mathematics from `models/s4/s4d.py` and the structured-kernel
+   modules. Modified: the fused CUDA/Triton kernels, the pytorch_lightning and
+   hub imports, and the transposed-layout plumbing are not carried over, and a
+   Nyquist-pole guard was added that upstream does not have. That file's
+   module docstring states this in full.
 
 Upstream ships no NOTICE file, so there is none to propagate.
 
 --------------------------------------------------------------------------------
 state-spaces/mamba — Apache License 2.0
+Copyright (c) 2023, Tri Dao, Albert Gu.
 https://github.com/state-spaces/mamba
 
-src/torch_dimensions/mixers/ssm.py derives the selective-scan recurrence from
-`modules/mamba_simple.py`. Modified: the scan is a portable sequential loop
-rather than the fused kernel. Upstream ships no NOTICE file.
+1. REDISTRIBUTION. src/torch_dimensions/_vendor/mamba/ contains the authors'
+   `modules/mamba_simple.py`, `ops/selective_scan_interface.py`, and
+   `utils/torch.py`, byte-identical to the upstream commit recorded in
+   _vendor/MANIFEST.json, except for import-path patches, an optional-Triton
+   guard, and one functional patch: `selective_scan_fn` dispatches to the
+   authors' own `selective_scan_ref` when the CUDA extension is absent.
+   Statement of changes (§4(b)): every modified line is tagged
+   "torch-dimensions patch"; `.orig` copies and the upstream LICENSE ship
+   beside the files; tests/test_vendored.py enforces that no other
+   modification exists.
+
+2. DERIVATION. src/torch_dimensions/mixers/ssm.py derives the selective-scan
+   recurrence from `modules/mamba_simple.py`. Modified: the scan is a portable
+   sequential loop rather than the fused kernel.
+
+Upstream ships no NOTICE file.
 
 --------------------------------------------------------------------------------
 BaratiLab/CaFA — MIT License

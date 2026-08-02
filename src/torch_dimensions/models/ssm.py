@@ -9,11 +9,14 @@ one spatial axis is the 1-D model, and code reading "S4ND" must not be
 running S4. Pass ``lattice=...`` or just ``shape=(32, 32)`` and the lattice
 is constructed for you.
 
-The mixers are the portable implementations in
+The default mixers are the portable implementations in
 :mod:`torch_dimensions.mixers.ssm`: pure torch, verified against the upstream
-reference kernels, and runnable on CPU, CUDA, and MPS alike. How the axes are
-composed stays ``nd_method``'s business (default :func:`~torch_dimensions.
-axial_scan`), exactly as for the RNN family.
+reference kernels, and runnable on CPU, CUDA, and MPS alike. To run the
+original authors' code instead — shipped verbatim in
+``torch_dimensions._vendor`` — substitute it per model:
+``td.Mamba(64, 6, lattice=lat, mixer=td.mixers.UpstreamMambaMixer)``. How the
+axes are composed stays ``nd_method``'s business (default
+:func:`~torch_dimensions.axial_scan`), exactly as for the RNN family.
 """
 
 from __future__ import annotations
