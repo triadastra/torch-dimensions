@@ -11,9 +11,10 @@ loss = model(x).pow(2).mean()  # x: (B, T, 32, 32, 64)
 loss.backward()  # ordinary autograd; nothing custom to call
 ```
 
-> **Status: 0.1.** Built and tested: `Lattice`, `ScanPlan`, the scan, kernel
+> **Status: 0.2.** Built and tested: `Lattice`, `ScanPlan`, the scan, kernel
 > and joint composition families, `LSTM`/`GRU`, `S4`/`S4D`/`Mamba` (portable,
-> pure torch, verified against the upstream reference kernels),
+> pure torch, verified against the upstream reference kernels — plus the
+> authors' originals vendored verbatim, see below),
 > `Transformer`/`ViT`, `CNN`/`TCN`, the data layer, the conformance suite,
 > config/save/load, the architecture viewer, and the device suite (CPU, MPS;
 > CUDA is untested — see [docs/cuda-checklist.md](docs/cuda-checklist.md)).

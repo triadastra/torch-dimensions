@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-03
+
 ### Added
 - **The original authors' S4/S4D/Mamba code, shipped verbatim.**
   `torch_dimensions/_vendor/` redistributes, from state-spaces/s4, the
