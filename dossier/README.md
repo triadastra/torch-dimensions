@@ -18,6 +18,14 @@ matters everywhere below:
   `tests/test_vendored.py` proves the "byte-identical except tagged patches"
   claim offline; `verify_vendored.py` here proves the bytes against the real
   repositories.
+
+  The vendored tier runs on MPS, measured 2026-08-02 (CPU-vs-MPS, float32,
+  shared weights): Mamba 3.0e-08, S4Block diag (S4D) 1.2e-07, S4Block dplr
+  ≤ 9.5e-07 across L=16..256, S4ND 16×16 8.3e-06. The dplr number needed the
+  one functional patch in `kernels/ssm.py`: MPS's power op lands exactly on
+  the Nyquist pole ω = −1 at some lengths (L=64 reproduced NaN in forward and
+  backward), and the tagged guard nudges only an exact hit — a case CPU/CUDA
+  never produce, so their outputs are verified bit-for-bit unchanged.
 - **Clone-on-demand (never redistributed):** everything else these scripts
   compare against — including all of Mamba-ND, which grants no license.
 

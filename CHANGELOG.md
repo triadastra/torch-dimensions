@@ -25,6 +25,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ship beside patched files, `tests/test_vendored.py` fails on any untagged
   difference, and `dossier/verify_vendored.py` proves the bytes against the
   real repositories.
+- **The vendored pipeline runs on MPS.** The DPLR kernel's bilinear
+  transform divides by `1 + ω` at the Nyquist node; MPS's power op lands
+  exactly on ω = −1 at some lengths (L=64 reproduced NaN, forward and
+  backward). A tagged guard in the vendored `ssm.py` nudges only an *exact*
+  pole hit — never true on CPU/CUDA, where outputs are verified bit-for-bit
+  unchanged — after which CPU-vs-MPS agrees ≤ 1e-6 for L=16..256 with finite
+  gradients. Measured parity for the rest: vendored Mamba 3e-8, S4D 1.2e-7,
+  S4ND (16×16) 8e-6.
 - **`UpstreamS4DMixer`, `UpstreamS4Mixer`, `UpstreamMambaMixer`** — the
   vendored originals wrapped in the `(M, A, H)` mixer contract, so the exact
   upstream blocks sweep over any lattice:

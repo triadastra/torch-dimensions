@@ -61,7 +61,17 @@ _S4_PIPELINE = [
 # a `.orig` pristine copy ships beside it; unpatched files ARE the pristine
 # copy and their own sha256 is the check.
 FILES = {
-    **{f"s4/src/{p}": ("s4", f"src/{p}", p == "utils/train.py") for p in _S4_PIPELINE},
+    **{
+        f"s4/src/{p}": (
+            "s4",
+            f"src/{p}",
+            # utils/train.py: training-only imports guarded.
+            # kernels/ssm.py: exact-hit Nyquist-pole guard (MPS portability;
+            # inert on CPU/CUDA — verified bit-for-bit unchanged there).
+            p in ("utils/train.py", "models/sequence/kernels/ssm.py"),
+        )
+        for p in _S4_PIPELINE
+    },
     "s4/LICENSE": ("s4", "LICENSE", False),
     "mamba/mamba_simple.py": ("mamba", "mamba_ssm/modules/mamba_simple.py", True),
     "mamba/selective_scan_interface.py": (

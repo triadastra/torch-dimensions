@@ -27,12 +27,17 @@ https://github.com/state-spaces/s4
    config/registry/train modules — 23 files, byte-identical to the upstream
    commit recorded in _vendor/MANIFEST.json, with their directory structure
    intact so the code's own `src.*` imports run unchanged. Statement of
-   changes (Apache-2.0 §4(b)): exactly one file is modified —
-   `src/utils/train.py`, whose training-only imports (pytorch_lightning,
-   rich, omegaconf) are guarded; every changed line is tagged
-   "torch-dimensions patch", the pristine copy ships as `train.py.orig`, and
-   tests/test_vendored.py fails if any untagged difference exists anywhere.
-   The upstream LICENSE ships in the same directory.
+   changes (Apache-2.0 §4(b)): exactly two files are modified.
+   `src/utils/train.py` guards its training-only imports
+   (pytorch_lightning, rich, omegaconf). `src/models/sequence/kernels/ssm.py`
+   adds a Nyquist-pole guard in `_omega`: the bilinear transform divides by
+   (1 + omega), which is zero when a backend's power op lands exactly on
+   omega = -1 (MPS does at some lengths); the guard nudges only an exact hit
+   and is inert on CPU/CUDA, where outputs are verified bit-for-bit
+   unchanged. Every changed line is tagged "torch-dimensions patch", pristine
+   copies ship as `.orig` beside both files, and tests/test_vendored.py fails
+   if any untagged difference exists anywhere. The upstream LICENSE ships in
+   the same directory.
 
 2. DERIVATION. src/torch_dimensions/mixers/ssm.py derives the S4D and S4
    (DPLR) kernel mathematics from `models/s4/s4d.py` and the structured-kernel

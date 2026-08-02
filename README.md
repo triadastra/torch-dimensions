@@ -240,15 +240,18 @@ s4d = td.S4D(64, 8, lattice=lat, mixer=UpstreamS4DMixer)  # their S4Block, mode=
 
 `torch_dimensions/_vendor/` holds the vendored subtree with its directory
 structure intact and a manifest pinning the upstream commits and hashes.
-Exactly one s4 file is patched (`utils/train.py`, guarding training-only
-imports) and two mamba files (import paths plus one dispatch line); every
-changed line is tagged `torch-dimensions patch`, pristine `.orig` copies ship
-beside patched files — and CI fails if any untagged difference exists, so
-"identical to the original" is a checked property, not a promise. The S4 side
-even constructs itself through upstream's own hydra registry, exactly as
-their configs do. Off GPU, the Mamba block runs the authors' own
-`selective_scan_ref`; on CUDA with `mamba-ssm` installed it picks up the
-fused kernels exactly as upstream intends. Needs
+Exactly two s4 files are patched (`utils/train.py`, guarding training-only
+imports; `kernels/ssm.py`, a Nyquist-pole guard that makes the DPLR kernel
+run on MPS and is verified bit-for-bit inert on CPU/CUDA) and two mamba
+files (import paths plus one dispatch line); every changed line is tagged
+`torch-dimensions patch`, pristine `.orig` copies ship beside patched files —
+and CI fails if any untagged difference exists, so "identical to the
+original" is a checked property, not a promise. The S4 side even constructs
+itself through upstream's own hydra registry, exactly as their configs do.
+Off GPU, the Mamba block runs the authors' own `selective_scan_ref`; on CUDA
+with `mamba-ssm` installed it picks up the fused kernels exactly as upstream
+intends. **Everything vendored runs on CPU, CUDA and MPS** (CPU-vs-MPS ≤ 1e-6
+across the components; Mamba at 3e-8). Needs
 `pip install 'torch-dimensions[upstream]'` (einops, numpy, scipy, hydra-core,
 omegaconf — the originals' own imports).
 

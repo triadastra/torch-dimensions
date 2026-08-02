@@ -723,17 +723,6 @@ class SSMKernelDPLR(SSMKernelDiag):
             np.exp(-2j * np.pi / (L)), dtype=dtype, device=device
         )  # \omega_{2L}
         omega = omega ** torch.arange(0, L // 2 + 1, device=device)
-        # torch-dimensions patch: the bilinear transform below (and the final
-        # torch-dimensions patch: 2/(1+omega) correction in forward) has a pole at the
-        # torch-dimensions patch: Nyquist node omega = -1. CPU/CUDA survive it because float
-        # torch-dimensions patch: rounding lands ~1e-7 off the pole; MPS's power op lands on
-        # torch-dimensions patch: it exactly at some lengths and the kernel goes NaN. Nudge
-        # torch-dimensions patch: only an *exact* hit off the pole, by the same order of
-        # torch-dimensions patch: distance rounding produces elsewhere — never true on
-        # torch-dimensions patch: CPU/CUDA, so their results are bit-for-bit unchanged.
-        eps = torch.finfo(omega.real.dtype).eps  # torch-dimensions patch
-        pole = torch.full_like(omega, complex(-1.0, -eps))  # torch-dimensions patch
-        omega = torch.where(1 + omega == 0, pole, omega)  # torch-dimensions patch
         z = 2 * (1 - omega) / (1 + omega)
 
         # Cache if necessary

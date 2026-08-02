@@ -1,14 +1,14 @@
 {
   "repos": {
-    "s4": {
-      "url": "https://github.com/state-spaces/s4",
-      "license": "Apache-2.0",
-      "commit": "e757cef57d89e448c413de7325ed5601aceaac13"
-    },
     "mamba": {
       "url": "https://github.com/state-spaces/mamba",
       "license": "Apache-2.0",
       "commit": "e9594ce1c732d97440f0332fdc43170a2294dbfa"
+    },
+    "s4": {
+      "url": "https://github.com/state-spaces/s4",
+      "license": "Apache-2.0",
+      "commit": "e757cef57d89e448c413de7325ed5601aceaac13"
     }
   },
   "files": {
@@ -50,7 +50,7 @@
     "s4/src/models/sequence/kernels/ssm.py": {
       "repo": "s4",
       "upstream_path": "src/models/sequence/kernels/ssm.py",
-      "patched": false,
+      "patched": true,
       "sha256": "e2b5d07f4483d1e350642afc285ab52e5bb5e3896e9adad6e1769a500bb66abc",
       "removed_lines": []
     },

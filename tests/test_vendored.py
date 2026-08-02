@@ -224,6 +224,47 @@ def test_upstream_mixer_through_model_api():
     assert torch.isfinite(y).all()
 
 
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="no MPS device")
+def test_pipeline_dplr_on_mps_matches_cpu():
+    """The vendored DPLR kernel on MPS, including the length whose Nyquist
+    node previously landed exactly on the bilinear-transform pole (L=64 gave
+    NaN before the tagged guard in ssm.py; the guard is inert on CPU/CUDA)."""
+    from torch_dimensions.mixers.upstream import UpstreamS4Mixer
+
+    torch.manual_seed(1)
+    cpu = UpstreamS4Mixer(6, d_state=8).eval()
+    mps = UpstreamS4Mixer(6, d_state=8).to("mps")
+    mps.load_state_dict({k: v.to("mps") for k, v in cpu.state_dict().items()})
+    mps.eval()
+    for length in (32, 64, 128):  # 64: the exact pole hit
+        x = torch.randn(2, length, 6)
+        with torch.no_grad():
+            diff = (cpu(x) - mps(x.to("mps")).cpu()).abs().max().item()
+        assert diff < 1e-5, f"L={length}: {diff}"
+
+    x = torch.randn(2, 64, 6, device="mps", requires_grad=True)
+    mps.train()
+    mps(x).pow(2).mean().backward()
+    assert torch.isfinite(x.grad).all()
+    assert all(torch.isfinite(p.grad).all() for p in mps.parameters() if p.grad is not None)
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="no MPS device")
+def test_vendored_mamba_and_s4d_on_mps_match_cpu():
+    from torch_dimensions.mixers.upstream import UpstreamMambaMixer, UpstreamS4DMixer
+
+    for cls, tol in ((UpstreamMambaMixer, 1e-6), (UpstreamS4DMixer, 1e-5)):
+        torch.manual_seed(1)
+        cpu = cls(6, d_state=8).eval()
+        mps = cls(6, d_state=8).to("mps")
+        mps.load_state_dict({k: v.to("mps") for k, v in cpu.state_dict().items()})
+        mps.eval()
+        x = torch.randn(2, 24, 6)
+        with torch.no_grad():
+            diff = (cpu(x) - mps(x.to("mps")).cpu()).abs().max().item()
+        assert diff < tol, f"{cls.__name__}: {diff}"
+
+
 def test_mount_refuses_a_foreign_src(monkeypatch):
     """A process that already imported its own `src` package must get a clear
     error, not silent shadowing in either direction."""

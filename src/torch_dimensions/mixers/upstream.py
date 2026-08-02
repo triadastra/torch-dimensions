@@ -91,12 +91,14 @@ class UpstreamS4Mixer(nn.Module):
     ``bidirectional=True`` their two-sided kernel, ``gate``/``bottleneck``
     the GSS variants.
 
-    A faithfulness note rather than a bug: upstream's bilinear transform has a
-    genuine pole at the Nyquist frequency and survives on CPU/CUDA only
-    because float rounding misses it. On MPS the rounding lands exactly on the
-    pole and the kernel goes NaN. That behaviour ships as-is — the portable
-    :class:`~torch_dimensions.mixers.S4Mixer` carries the guard (PLAN.md
-    Phase 7); the vendored original is deliberately unmodified.
+    A portability note: upstream's bilinear transform has a genuine pole at
+    the Nyquist frequency and survives on CPU/CUDA only because float
+    rounding misses it; MPS's power op lands on it exactly at some lengths
+    (L=64 did) and the kernel went NaN. The vendored ``ssm.py`` carries a
+    tagged guard that nudges only an *exact* pole hit — never true on
+    CPU/CUDA, where results are verified bit-for-bit unchanged — so this
+    layer now runs on CPU, CUDA and MPS alike (CPU-vs-MPS ≤ 1e-6 across
+    L=16..256, gradients finite).
     """
 
     def __init__(self, d_model: int, d_state: int = 64, **layer_args):
