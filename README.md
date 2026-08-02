@@ -11,7 +11,7 @@ loss = model(x).pow(2).mean()  # x: (B, T, 32, 32, 64)
 loss.backward()  # ordinary autograd; nothing custom to call
 ```
 
-> **Status: 0.2.** Built and tested: `Lattice`, `ScanPlan`, the scan, kernel
+> **Status: 0.3.** Built and tested: `Lattice`, `ScanPlan`, the scan, kernel
 > and joint composition families, `LSTM`/`GRU`, `S4`/`S4D`/`Mamba` (portable,
 > pure torch, verified against the upstream reference kernels — plus the
 > authors' originals vendored verbatim, see below),

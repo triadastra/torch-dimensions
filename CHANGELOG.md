@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-03
+
 ### Added
 - **Mamba-2, from the authors' code, running on CPU and MPS.**
   `td.Mamba(..., version=2)` and `td.Mamba2(...)` are the same model — the
