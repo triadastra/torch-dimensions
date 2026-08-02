@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fmtParams, latticeAxisOf } from "../spec.js";
 
@@ -8,7 +8,7 @@ const S = {
     height: "100%",
     overflowY: "auto",
     padding: "18px 20px",
-    background: "#10141d",
+    background: "linear-gradient(180deg, #131926 0%, #10141d 42%, #0e121a 100%)",
     borderRight: "1px solid #1e2635",
     flexShrink: 0,
   },
@@ -45,6 +45,8 @@ const S = {
     fontSize: 13,
   },
   layer: (active) => ({
+    position: "relative",
+    overflow: "hidden",
     display: "flex",
     alignItems: "center",
     gap: 8,
@@ -52,9 +54,20 @@ const S = {
     borderRadius: 6,
     cursor: "pointer",
     fontSize: 13,
-    background: active ? "#23304a" : "transparent",
-    border: active ? "1px solid #3b4d75" : "1px solid transparent",
+    background: active ? "#22304c" : "transparent",
+    border: active ? "1px solid #41568a" : "1px solid transparent",
+    boxShadow: active ? "inset 3px 0 0 #ffc061" : "none",
   }),
+  // The sweep's progress *through the active layer*, drawn behind its row.
+  // The 3-D wavefront already shows this, but only for whichever axis is on
+  // screen; here it is legible even when the camera is pointed elsewhere.
+  layerFill: {
+    position: "absolute",
+    inset: 0,
+    transformOrigin: "left center",
+    background: "linear-gradient(90deg, rgba(255,192,97,0.20), rgba(255,192,97,0.05))",
+    pointerEvents: "none",
+  },
   chip: {
     fontSize: 11,
     padding: "1px 7px",
@@ -134,6 +147,25 @@ const STATUS = {
   done: { color: "#9ece6a", label: "done" },
   stopped: { color: "#8b95a8", label: "stopped" },
 };
+
+// Progress through the active layer, written straight to the DOM node. Going
+// through React state here would re-render the whole panel sixty times a
+// second to move one bar.
+function LayerFill({ anim }) {
+  const ref = useRef();
+  useEffect(() => {
+    let raf;
+    const tick = () => {
+      const el = ref.current;
+      if (el) el.style.transform = `scaleX(${anim.current.progress})`;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [anim]);
+  return <div ref={ref} style={S.layerFill} />;
+}
+
 
 function LossChart({ metrics }) {
   const w = 276;
@@ -286,6 +318,7 @@ export default function Sidebar({
   onSample,
   onFile,
   live,
+  anim,
 }) {
   const { spec } = parsed;
   const m = spec.model;
@@ -293,7 +326,7 @@ export default function Sidebar({
   const dirGlyph = (r) => (r ? "←" : "→");
 
   return (
-    <div style={S.panel}>
+    <div style={S.panel} className="td-panel">
       <div style={S.h1}>torch-dimensions</div>
       <div style={S.sub}>architecture viewer &middot; spec v{spec.version}</div>
 
@@ -405,13 +438,13 @@ export default function Sidebar({
 
       <div style={S.section}>sweep animation</div>
       <div style={{ ...S.controls, marginTop: 0, marginBottom: 6 }}>
-        <button style={S.btn} onClick={onTogglePlay}>
+        <button style={S.btn} className="td-btn" onClick={onTogglePlay}>
           {playing ? "⏸ pause" : "▶ play"}
         </button>
-        <button style={S.btn} onClick={() => onSelectLayer(layerIndex - 1)}>
+        <button style={S.btn} className="td-btn" onClick={() => onSelectLayer(layerIndex - 1)}>
           ◀ prev
         </button>
-        <button style={S.btn} onClick={() => onSelectLayer(layerIndex + 1)}>
+        <button style={S.btn} className="td-btn" onClick={() => onSelectLayer(layerIndex + 1)}>
           next ▶
         </button>
       </div>
@@ -428,9 +461,13 @@ export default function Sidebar({
           <div
             key={i}
             style={S.layer(i === layerIndex)}
+            className="td-row"
             onClick={() => onSelectLayer(i)}
           >
-            <span style={{ color: "#8b95a8", width: 28 }}>L{i}</span>
+            {i === layerIndex && anim && <LayerFill anim={anim} />}
+            <span style={{ color: "#8b95a8", width: 28, position: "relative" }}>
+              L{i}
+            </span>
             {joint ? (
               <>
                 <b style={{ color: "#5eead4" }}>{(l.axes ?? []).join(" ⊕ ")}</b>

@@ -9,6 +9,22 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.3.0] - 2026-08-03
 
 ### Added
+- **The viewer reads as motion instead of a slideshow.** The wavefront is a
+  gaussian that travels and swells the cells it passes, rather than a hard
+  stripe switching cells between two flat states; behind it a wake decays
+  onto a floor, so "which part of the axis is done" stays legible however
+  far back the front has gone. Fog, a ground grid and a gradient sky give
+  the rank-4 dimensional stacking the depth it needs to stop reading as a
+  wall of cubes. The direction arrow now rides the front — derived from the
+  same `screenOffset` the cells use, because computing it from the screen
+  extent put the arrow at one end while the glow was at the other, two
+  lattice axes sharing one screen dimension above rank 3. The camera drifts
+  on its own until you touch it, then stops for good. Axis labels scale with
+  the model, so they are the same apparent size on a 5x7 lattice and a
+  rank-4 stack. The active layer's row fills with its own progress, driven
+  by the same animation ref the scene uses so nothing re-renders at 60fps.
+  The directionless families keep their single uniform pulse: a travelling
+  ripple would look better and would imply an ordering they do not have.
 - **Mamba-2, from the authors' code, running on CPU and MPS.**
   `td.Mamba(..., version=2)` and `td.Mamba2(...)` are the same model — the
   vendored upstream `Mamba2` block (SSD: multi-head, gated RMSNorm). Its

@@ -35,6 +35,26 @@ export function makeLayout(shape) {
     return coord[axis];
   }
 
+  // Where a lattice coordinate along one axis lands on screen. Not the same as
+  // scaling the screen extent: above rank 3 several lattice axes share a screen
+  // dimension, so "half way along x" and "half way along axis 3" are different
+  // distances. Anything drawn *at* the wavefront has to use this.
+  function screenOffset(axis, coord) {
+    const sd = dimOf[axis];
+    const along = coord * strides[axis];
+    return sd === 1 ? center[1] - along : along - center[sd];
+  }
+
   const radius = Math.hypot(...blockExtent) / 2;
-  return { position, axisCoord, strides, dimOf, blockExtent, radius, rank };
+  return {
+    position,
+    axisCoord,
+    screenOffset,
+    strides,
+    dimOf,
+    center,
+    blockExtent,
+    radius,
+    rank,
+  };
 }

@@ -13,6 +13,31 @@
         font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif;
         overflow: hidden;
       }
+
+      /* Hover and transition live here rather than in the inline styles the
+         components use, because inline styles cannot express :hover. */
+      .td-row {
+        transition: background 140ms ease, border-color 140ms ease,
+          transform 140ms ease;
+      }
+      .td-row:hover { background: #1b2437 !important; transform: translateX(2px); }
+      .td-btn { transition: background 140ms ease, border-color 140ms ease; }
+      .td-btn:hover { background: #263352 !important; border-color: #3b4d75 !important; }
+      .td-card { transition: border-color 200ms ease; }
+
+      /* The scrollbar is part of the panel, not a system artefact glued to it. */
+      .td-panel::-webkit-scrollbar { width: 10px; }
+      .td-panel::-webkit-scrollbar-thumb {
+        background: #222c40; border-radius: 99px; border: 3px solid #10141d;
+      }
+      .td-panel::-webkit-scrollbar-thumb:hover { background: #33415e; }
+      .td-panel::-webkit-scrollbar-track { background: transparent; }
+
+      @keyframes td-pulse {
+        0%, 100% { opacity: 0.55; }
+        50% { opacity: 1; }
+      }
+      .td-live { animation: td-pulse 1.6s ease-in-out infinite; }
     </style>
   </head>
   <body>

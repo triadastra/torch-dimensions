@@ -163,8 +163,18 @@ export default function App() {
         onSample={onSample}
         onFile={onFile}
         live={sampleKey === LIVE_KEY ? live : null}
+        anim={anim}
       />
-      <div style={{ flex: 1, position: "relative" }}>
+      <div
+        style={{
+          flex: 1,
+          position: "relative",
+          // The canvas is alpha; this is the sky behind it. A flat fill made
+          // the far cubes sit on nothing once fog took their contrast away.
+          background:
+            "radial-gradient(120% 90% at 62% 32%, #16203a 0%, #0d1220 45%, #070a10 100%)",
+        }}
+      >
         {scene}
         {error && (
           <div
