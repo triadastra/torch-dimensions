@@ -7,13 +7,17 @@ the package.
 Upstream code relates to this project in two tiers, and the distinction
 matters everywhere below:
 
-- **Vendored (redistributed):** the Apache-2.0 reference files in
-  `src/torch_dimensions/_vendor/` — the authors' standalone `s4.py`/`s4d.py`
-  and Mamba's `mamba_simple.py`/`selective_scan_interface.py` — shipped
-  byte-identical to a pinned commit, `.orig` copies and licenses alongside,
-  every patched line tagged. `tests/test_vendored.py` proves the "byte-
-  identical except tagged patches" claim offline; `verify_vendored.py` here
-  proves the `.orig` bytes against the real repositories.
+- **Vendored (redistributed):** the Apache-2.0 reference code in
+  `src/torch_dimensions/_vendor/` — for s4, the pipeline subtree their
+  `train.py` actually runs (`S4Block`, `S4ND`, kernels, HiPPO, utils; 23
+  files, directory structure intact, mounted as the `src` package so their
+  own imports and hydra string-targets resolve unchanged); for Mamba,
+  `mamba_simple.py`/`selective_scan_interface.py`/`utils/torch.py` — shipped
+  byte-identical to a pinned commit, licenses alongside, every patched line
+  tagged and pristine `.orig` copies beside the three patched files.
+  `tests/test_vendored.py` proves the "byte-identical except tagged patches"
+  claim offline; `verify_vendored.py` here proves the bytes against the real
+  repositories.
 - **Clone-on-demand (never redistributed):** everything else these scripts
   compare against — including all of Mamba-ND, which grants no license.
 
@@ -44,8 +48,8 @@ which was considered and rejected: a distilled copy is a fork we would
 maintain forever, and it would put *our* judgement about which modules matter
 inside the very check whose value is that it runs *their* code. What the
 project does vendor (see the tiers above) threads that needle differently —
-whole files, byte-identical, chosen because the authors themselves publish
-them as standalone reference implementations, with the byte-identity machine-
+whole files, byte-identical, the closure their own training entrypoint
+imports rather than a hand-picked digest, with the byte-identity machine-
 checked rather than promised. The sparse clones remain the ground truth the
 vendored copies are verified against, and the only route to unlicensed code.
 

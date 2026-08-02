@@ -1,42 +1,195 @@
 {
   "repos": {
-    "mamba": {
-      "url": "https://github.com/state-spaces/mamba",
-      "license": "Apache-2.0",
-      "commit": "e9594ce1c732d97440f0332fdc43170a2294dbfa"
-    },
     "s4": {
       "url": "https://github.com/state-spaces/s4",
       "license": "Apache-2.0",
       "commit": "e757cef57d89e448c413de7325ed5601aceaac13"
+    },
+    "mamba": {
+      "url": "https://github.com/state-spaces/mamba",
+      "license": "Apache-2.0",
+      "commit": "e9594ce1c732d97440f0332fdc43170a2294dbfa"
     }
   },
   "files": {
-    "s4/s4.py": {
+    "s4/src/models/sequence/modules/s4block.py": {
       "repo": "s4",
-      "upstream_path": "models/s4/s4.py",
-      "sha256": "9f3418b396ec9ccbea30d1f1de92b55e631a3380ebbb19257a73f0219e2a23a6",
-      "removed_lines": [
-        "from pytorch_lightning.utilities import rank_zero_only"
-      ]
+      "upstream_path": "src/models/sequence/modules/s4block.py",
+      "patched": false,
+      "sha256": "128a17a83ba242c06b386fd9a387d6a7acd7bed8481eb8a1af8340fb094f1e28",
+      "removed_lines": []
     },
-    "s4/s4d.py": {
+    "s4/src/models/sequence/modules/s4nd.py": {
       "repo": "s4",
-      "upstream_path": "models/s4/s4d.py",
-      "sha256": "4aab484e96dba85b2eba14f54c42df103a314a087ca184bfcca30e77d0faea2c",
+      "upstream_path": "src/models/sequence/modules/s4nd.py",
+      "patched": false,
+      "sha256": "0d6f5bf35c79e58ecc053023a432ebe959355e7a51ce640da86eab5863267f5e",
+      "removed_lines": []
+    },
+    "s4/src/models/sequence/kernels/__init__.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/sequence/kernels/__init__.py",
+      "patched": false,
+      "sha256": "86dac0960532e587a27b737ce29556a0d64475421a3b2845f41f1e8f764addea",
+      "removed_lines": []
+    },
+    "s4/src/models/sequence/kernels/fftconv.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/sequence/kernels/fftconv.py",
+      "patched": false,
+      "sha256": "0b2418b6410443204f4f8d57558dd179ea87b0e2e73212618cafc5de253fc00a",
+      "removed_lines": []
+    },
+    "s4/src/models/sequence/kernels/kernel.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/sequence/kernels/kernel.py",
+      "patched": false,
+      "sha256": "67e28427c2f482950248b5cadcc5b0f303ef9647183e53c09d94b51f9f421c0e",
+      "removed_lines": []
+    },
+    "s4/src/models/sequence/kernels/ssm.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/sequence/kernels/ssm.py",
+      "patched": false,
+      "sha256": "e2b5d07f4483d1e350642afc285ab52e5bb5e3896e9adad6e1769a500bb66abc",
+      "removed_lines": []
+    },
+    "s4/src/models/sequence/kernels/dplr.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/sequence/kernels/dplr.py",
+      "patched": false,
+      "sha256": "afd6f4d978c76b81930095c75d8fbf7edc97bed45921bc8f0e23d0de7f6eb36d",
+      "removed_lines": []
+    },
+    "s4/src/models/sequence/__init__.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/sequence/__init__.py",
+      "patched": false,
+      "sha256": "3786a4ed2066dab16dc42374d3e593042e7ef242e8e3d67ae6a108748f4b081a",
+      "removed_lines": []
+    },
+    "s4/src/models/sequence/base.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/sequence/base.py",
+      "patched": false,
+      "sha256": "801ba176ad57c19ab7cdfeaa2c78a3ce74fec225eb6e4490fddf1474b64d3475",
+      "removed_lines": []
+    },
+    "s4/src/models/nn/__init__.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/nn/__init__.py",
+      "patched": false,
+      "sha256": "499b0fb6449625962b445ae2c22faa9751ed563b3b5e4e17559843f3ff15cd0c",
+      "removed_lines": []
+    },
+    "s4/src/models/nn/linear.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/nn/linear.py",
+      "patched": false,
+      "sha256": "60c8827cacfccb00f33f12e36fb0d6862671256cd1631a8ba9dc98c363574458",
+      "removed_lines": []
+    },
+    "s4/src/models/nn/activation.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/nn/activation.py",
+      "patched": false,
+      "sha256": "552c1b8b37f89f32528047835a4d02d8abb3d5ccc3fd783faf97c0f3fe2b65e5",
+      "removed_lines": []
+    },
+    "s4/src/models/nn/normalization.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/nn/normalization.py",
+      "patched": false,
+      "sha256": "b01adaf8941004c6f7ce88055e9a6b72387795e133acbfe604f34f586e16f1bc",
+      "removed_lines": []
+    },
+    "s4/src/models/nn/dropout.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/nn/dropout.py",
+      "patched": false,
+      "sha256": "4cbe734786c1149f8ed8d6d2bdced4a519c172afbfc8d369dc7f493cfdde027f",
+      "removed_lines": []
+    },
+    "s4/src/models/hippo/hippo.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/hippo/hippo.py",
+      "patched": false,
+      "sha256": "d947076e3bc29d4c72c159c235eeacb76eb7daad03cd6571b632d9ab502500ed",
+      "removed_lines": []
+    },
+    "s4/src/models/functional/cauchy.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/functional/cauchy.py",
+      "patched": false,
+      "sha256": "8ac0f11626e2685d087b25cc132e0da2b4178811da22da17a0f8d03e50d6d265",
+      "removed_lines": []
+    },
+    "s4/src/models/functional/vandermonde.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/functional/vandermonde.py",
+      "patched": false,
+      "sha256": "d873abe5584640efd6890074f8986ce0e2c98774486dc5d7a9b3c12fc0ca6d41",
+      "removed_lines": []
+    },
+    "s4/src/models/functional/krylov.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/functional/krylov.py",
+      "patched": false,
+      "sha256": "8acd93ba051e140c953f82406a147ebf66b2fec82c4382e8fc0c2dd0ab87dd41",
+      "removed_lines": []
+    },
+    "s4/src/models/functional/toeplitz.py": {
+      "repo": "s4",
+      "upstream_path": "src/models/functional/toeplitz.py",
+      "patched": false,
+      "sha256": "8c0a02468f48fa59a667c0549b2f7d381dfa5dbfaabbc8f391f1593f9565a968",
+      "removed_lines": []
+    },
+    "s4/src/utils/__init__.py": {
+      "repo": "s4",
+      "upstream_path": "src/utils/__init__.py",
+      "patched": false,
+      "sha256": "2d457202b57b5038c5e798c9f1692f58f6dd6ce7bdfe6506304663057a2fa919",
+      "removed_lines": []
+    },
+    "s4/src/utils/config.py": {
+      "repo": "s4",
+      "upstream_path": "src/utils/config.py",
+      "patched": false,
+      "sha256": "8b6f94b7f4f0d6d6adaa3ce9cbdde9acb7e1e740e19cc1427bdab1525f876ad7",
+      "removed_lines": []
+    },
+    "s4/src/utils/registry.py": {
+      "repo": "s4",
+      "upstream_path": "src/utils/registry.py",
+      "patched": false,
+      "sha256": "7983720933f47239164fc32d1d9239bf6a25ea14adf644ad7b3d2e3eaea50d86",
+      "removed_lines": []
+    },
+    "s4/src/utils/train.py": {
+      "repo": "s4",
+      "upstream_path": "src/utils/train.py",
+      "patched": true,
+      "sha256": "3518650f1a54a523c6aa1a4cb206462894fb1a1a5707b6750377b075c585d0b2",
       "removed_lines": [
-        "from src.models.nn import DropoutNd"
+        "import pytorch_lightning as pl",
+        "import rich.syntax",
+        "import rich.tree",
+        "from omegaconf import DictConfig, OmegaConf",
+        "from pytorch_lightning.utilities import rank_zero_only"
       ]
     },
     "s4/LICENSE": {
       "repo": "s4",
       "upstream_path": "LICENSE",
+      "patched": false,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
       "removed_lines": []
     },
     "mamba/mamba_simple.py": {
       "repo": "mamba",
       "upstream_path": "mamba_ssm/modules/mamba_simple.py",
+      "patched": true,
       "sha256": "a17e4c51b582dc0d4d690a649eba521cd0c1ee3dc8f0473a0967cdc9ec0874e3",
       "removed_lines": [
         "from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, mamba_inner_fn"
@@ -45,6 +198,7 @@
     "mamba/selective_scan_interface.py": {
       "repo": "mamba",
       "upstream_path": "mamba_ssm/ops/selective_scan_interface.py",
+      "patched": true,
       "sha256": "a570f4f15a2eebabf62024a9ffb0d1dde04280300405e1632f43809f448bfb1a",
       "removed_lines": [
         "from mamba_ssm.utils.torch import custom_bwd, custom_fwd",
@@ -54,12 +208,14 @@
     "mamba/utils_torch.py": {
       "repo": "mamba",
       "upstream_path": "mamba_ssm/utils/torch.py",
+      "patched": false,
       "sha256": "1c3132a1a747e914874e84b5f300ea80d0297faba6eb9256cb5ac4b3d6413c06",
       "removed_lines": []
     },
     "mamba/LICENSE": {
       "repo": "mamba",
       "upstream_path": "LICENSE",
+      "patched": false,
       "sha256": "760939b000194d04548ede6a857bbe735d1695d8422ec85955c8e2bd7f4b95c5",
       "removed_lines": []
     }

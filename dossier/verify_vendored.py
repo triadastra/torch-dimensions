@@ -27,15 +27,50 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 VENDOR = REPO_ROOT / "src" / "torch_dimensions" / "_vendor"
 MANIFEST = VENDOR / "MANIFEST.json"
 
-# vendored path (relative to _vendor) -> (repo key in _shims.UPSTREAM, upstream path)
+# The s4 side is the *pipeline* their train.py runs (under src/), vendored
+# with its directory structure intact so the code's own `src.*` imports and
+# hydra string-targets resolve unchanged; see _vendor/s4/__init__.py.
+_S4_PIPELINE = [
+    "models/sequence/modules/s4block.py",
+    "models/sequence/modules/s4nd.py",
+    "models/sequence/kernels/__init__.py",
+    "models/sequence/kernels/fftconv.py",
+    "models/sequence/kernels/kernel.py",
+    "models/sequence/kernels/ssm.py",
+    "models/sequence/kernels/dplr.py",
+    "models/sequence/__init__.py",
+    "models/sequence/base.py",
+    "models/nn/__init__.py",
+    "models/nn/linear.py",
+    "models/nn/activation.py",
+    "models/nn/normalization.py",
+    "models/nn/dropout.py",
+    "models/hippo/hippo.py",
+    "models/functional/cauchy.py",
+    "models/functional/vandermonde.py",
+    "models/functional/krylov.py",
+    "models/functional/toeplitz.py",
+    "utils/__init__.py",
+    "utils/config.py",
+    "utils/registry.py",
+    "utils/train.py",
+]
+
+# vendored path (relative to _vendor) -> (repo key, upstream path, patched?)
+# `patched` means the working copy differs from upstream by tagged lines and
+# a `.orig` pristine copy ships beside it; unpatched files ARE the pristine
+# copy and their own sha256 is the check.
 FILES = {
-    "s4/s4.py": ("s4", "models/s4/s4.py"),
-    "s4/s4d.py": ("s4", "models/s4/s4d.py"),
-    "s4/LICENSE": ("s4", "LICENSE"),
-    "mamba/mamba_simple.py": ("mamba", "mamba_ssm/modules/mamba_simple.py"),
-    "mamba/selective_scan_interface.py": ("mamba", "mamba_ssm/ops/selective_scan_interface.py"),
-    "mamba/utils_torch.py": ("mamba", "mamba_ssm/utils/torch.py"),
-    "mamba/LICENSE": ("mamba", "LICENSE"),
+    **{f"s4/src/{p}": ("s4", f"src/{p}", p == "utils/train.py") for p in _S4_PIPELINE},
+    "s4/LICENSE": ("s4", "LICENSE", False),
+    "mamba/mamba_simple.py": ("mamba", "mamba_ssm/modules/mamba_simple.py", True),
+    "mamba/selective_scan_interface.py": (
+        "mamba",
+        "mamba_ssm/ops/selective_scan_interface.py",
+        True,
+    ),
+    "mamba/utils_torch.py": ("mamba", "mamba_ssm/utils/torch.py", False),
+    "mamba/LICENSE": ("mamba", "LICENSE", False),
 }
 
 
@@ -43,20 +78,21 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def orig_of(rel: str) -> Path:
-    """The pristine copy: `.orig` beside each patched module, LICENSE as-is."""
+def orig_of(rel: str, patched: bool) -> Path:
+    """The pristine copy: `.orig` beside each patched module, the file itself
+    otherwise (an unpatched vendored file IS upstream's bytes)."""
     p = VENDOR / rel
-    return p if rel.endswith("LICENSE") else p.with_suffix(p.suffix + ".orig")
+    return p.with_suffix(p.suffix + ".orig") if patched else p
 
 
-def removed_lines(rel: str) -> list[str]:
+def removed_lines(rel: str, patched: bool) -> list[str]:
     """Lines of the original that the patched working copy no longer contains,
     recorded in the manifest so the offline test can pin deletions exactly."""
-    if rel.endswith("LICENSE"):
+    if not patched:
         return []
     import difflib
 
-    a = orig_of(rel).read_text().splitlines()
+    a = orig_of(rel, patched).read_text().splitlines()
     b = (VENDOR / rel).read_text().splitlines()
     return [
         line[1:]
@@ -67,7 +103,7 @@ def removed_lines(rel: str) -> list[str]:
 
 def write_manifest() -> None:
     repos = {}
-    for key in {repo for repo, _ in FILES.values()}:
+    for key in {repo for repo, _, _ in FILES.values()}:
         path = external(key)  # clones if absent
         commit = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=path, capture_output=True, text=True, check=True
@@ -79,12 +115,13 @@ def write_manifest() -> None:
         }
 
     files = {}
-    for rel, (repo, upstream_path) in FILES.items():
+    for rel, (repo, upstream_path, patched) in FILES.items():
         files[rel] = {
             "repo": repo,
             "upstream_path": upstream_path,
-            "sha256": sha256(orig_of(rel)),
-            "removed_lines": removed_lines(rel),
+            "patched": patched,
+            "sha256": sha256(orig_of(rel, patched)),
+            "removed_lines": removed_lines(rel, patched),
         }
     MANIFEST.write_text(json.dumps({"repos": repos, "files": files}, indent=2) + "\n")
     print(f"wrote {MANIFEST}")
@@ -122,7 +159,7 @@ def verify() -> int:
             failures += 1
             continue
         theirs = hashlib.sha256(show.stdout).hexdigest()
-        ours = sha256(orig_of(rel))
+        ours = sha256(orig_of(rel, entry["patched"]))
         ok = theirs == ours == entry["sha256"]
         print(f"  {rel}: {'byte-identical to upstream ' + pinned[:12] if ok else 'MISMATCH'}")
         if not ok:

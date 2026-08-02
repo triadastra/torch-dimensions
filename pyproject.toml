@@ -30,8 +30,9 @@ mamba = ["mamba-ssm>=2.0"]
 fla = ["flash-linear-attention"]
 # The vendored reference implementations (torch_dimensions._vendor) run the
 # original authors' code verbatim; these are the dependencies *their* files
-# import (einops everywhere, numpy+scipy for the S4 family).
-upstream = ["einops", "numpy", "scipy"]
+# import (einops everywhere; numpy+scipy for HiPPO; hydra+omegaconf because
+# upstream's S4Block builds its inner layer through their hydra registry).
+upstream = ["einops", "numpy", "scipy", "hydra-core", "omegaconf"]
 # A torch pickle executes arbitrary code when it is opened. `.safetensors`
 # checkpoints do not, and `td.save`/`td.load` pick the container from the
 # file extension.
@@ -41,9 +42,10 @@ safetensors = ["safetensors>=0.4", "numpy"]
 dev = [
   "pytest>=8", "pytest-cov", "ruff>=0.6", "mypy", "hypothesis", "pyyaml",
   # Optional at runtime, mandatory for testing the paths that use them —
-  # otherwise CI skips them and reports green (DEBUG.md #24). einops/scipy
-  # are here so tests/test_vendored.py actually runs the vendored originals.
-  "safetensors>=0.4", "numpy", "einops", "scipy",
+  # otherwise CI skips them and reports green (DEBUG.md #24). The [upstream]
+  # deps are here so tests/test_vendored.py actually runs the vendored
+  # originals.
+  "safetensors>=0.4", "numpy", "einops", "scipy", "hydra-core", "omegaconf",
 ]
 all = ["torch-dimensions[mamba,fla,safetensors,upstream]"]
 

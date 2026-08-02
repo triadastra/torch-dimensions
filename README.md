@@ -226,26 +226,35 @@ round-trips are fuzzed there too. Nothing in the machinery counts axes.
 ## Run the original authors' code
 
 The reference implementations of S4/S4D and Mamba ship inside the package,
-**byte-for-byte** — not our rewrite of them:
+**byte-for-byte** — not our rewrite of them. For S4 that means the pipeline
+their `train.py` actually runs (`S4Block`, its kernels, HiPPO, the S4ND
+layer), not a standalone re-export; for Mamba, the reference block and the
+authors' own pure-torch selective scan:
 
 ```python
-from torch_dimensions.mixers import UpstreamMambaMixer  # the authors' Mamba block
+from torch_dimensions.mixers import UpstreamMambaMixer, UpstreamS4DMixer
 
 model = td.Mamba(64, n_layers=6, lattice=lat, mixer=UpstreamMambaMixer)
+s4d = td.S4D(64, 8, lattice=lat, mixer=UpstreamS4DMixer)  # their S4Block, mode='diag'
 ```
 
-`torch_dimensions/_vendor/` holds the vendored files next to pristine `.orig`
-copies and a manifest pinning the upstream commits. The only edits are
-import-path/optional-dependency patches, every changed line tagged
-`torch-dimensions patch` — and CI fails if any untagged difference exists, so
-"identical to the original" is a checked property, not a promise. Off GPU, the
-Mamba block runs the authors' own `selective_scan_ref`; on CUDA with
-`mamba-ssm` installed it picks up the fused kernels exactly as upstream
-intends. Needs `pip install 'torch-dimensions[upstream]'` (einops, numpy,
-scipy — the originals' own imports).
+`torch_dimensions/_vendor/` holds the vendored subtree with its directory
+structure intact and a manifest pinning the upstream commits and hashes.
+Exactly one s4 file is patched (`utils/train.py`, guarding training-only
+imports) and two mamba files (import paths plus one dispatch line); every
+changed line is tagged `torch-dimensions patch`, pristine `.orig` copies ship
+beside patched files — and CI fails if any untagged difference exists, so
+"identical to the original" is a checked property, not a promise. The S4 side
+even constructs itself through upstream's own hydra registry, exactly as
+their configs do. Off GPU, the Mamba block runs the authors' own
+`selective_scan_ref`; on CUDA with `mamba-ssm` installed it picks up the
+fused kernels exactly as upstream intends. Needs
+`pip install 'torch-dimensions[upstream]'` (einops, numpy, scipy, hydra-core,
+omegaconf — the originals' own imports).
 
-The portable mixers (`td.S4D`, `td.Mamba` defaults) remain pure-torch, and the
-two agree numerically — that agreement is itself a CI test
+The portable mixers (`td.S4D`, `td.Mamba` defaults) remain pure-torch, and
+the two agree numerically — the pipeline's S4D kernel matches ours **bitwise**
+with shared parameters, and that agreement is itself a CI test
 (`tests/test_vendored.py`).
 
 ## License

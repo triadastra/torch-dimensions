@@ -2,15 +2,20 @@
 
 Three claims, all checked offline on every run:
 
-1. Each ``.orig`` file's sha256 matches MANIFEST.json — the manifest is the
-   link to the upstream commit, and ``dossier/verify_vendored.py`` proves the
-   hashes against the real repositories.
-2. Each working copy differs from its ``.orig`` only in lines tagged
+1. Every vendored file's pristine bytes match MANIFEST.json — the manifest is
+   the link to the upstream commit, and ``dossier/verify_vendored.py`` proves
+   the hashes against the real repositories. For unpatched files the vendored
+   file *is* the pristine copy; patched files ship a ``.orig`` beside them.
+2. Each patched file differs from its ``.orig`` only in lines tagged
    ``torch-dimensions patch``, and deletes exactly the lines the manifest
    records. Any other edit — however small — fails here.
 3. The originals *agree with our portable mixers numerically*, which is the
    point of shipping them: anyone can run this file and watch the reference
    implementation and the rewrite produce the same numbers.
+
+The s4 side is the pipeline upstream's train.py actually runs (S4Block and
+everything under it), mounted as the ``src`` package exactly as their repo
+convention expects — see ``torch_dimensions._vendor.s4``.
 """
 
 from __future__ import annotations
@@ -29,29 +34,30 @@ VENDOR = Path(td.__file__).parent / "_vendor"
 MANIFEST = json.loads((VENDOR / "MANIFEST.json").read_text())
 
 upstream_deps = pytest.importorskip("einops", reason="vendored modules need the [upstream] extra")
+pytest.importorskip("hydra", reason="the s4 pipeline needs hydra-core (the [upstream] extra)")
 
 MARKER = "torch-dimensions patch"
 
 
 def _orig(rel: str) -> Path:
     p = VENDOR / rel
-    return p if rel.endswith("LICENSE") else p.with_suffix(p.suffix + ".orig")
+    return p.with_suffix(p.suffix + ".orig") if MANIFEST["files"][rel]["patched"] else p
 
 
 @pytest.mark.parametrize("rel", sorted(MANIFEST["files"]))
-def test_orig_hash_matches_manifest(rel):
+def test_pristine_bytes_match_manifest(rel):
     entry = MANIFEST["files"][rel]
     digest = hashlib.sha256(_orig(rel).read_bytes()).hexdigest()
     assert digest == entry["sha256"], (
-        f"{rel}: .orig no longer matches the manifest — the pristine copy was edited, "
+        f"{rel}: pristine copy no longer matches the manifest — the file was edited, "
         "or the manifest was not regenerated (dossier/verify_vendored.py --write-manifest)"
     )
 
 
-@pytest.mark.parametrize("rel", sorted(MANIFEST["files"]))
+@pytest.mark.parametrize(
+    "rel", sorted(r for r in MANIFEST["files"] if MANIFEST["files"][r]["patched"])
+)
 def test_patches_are_exactly_the_documented_ones(rel):
-    if rel.endswith("LICENSE"):
-        return  # shipped as-is; covered by the hash test
     entry = MANIFEST["files"][rel]
     a = _orig(rel).read_text().splitlines()
     b = (VENDOR / rel).read_text().splitlines()
@@ -68,7 +74,9 @@ def test_patches_are_exactly_the_documented_ones(rel):
     # a try-guard, textually intact. Everything genuinely new must be tagged.
     removed_stripped = {line.strip() for line in removed}
     unmarked = [
-        line for line in added if MARKER not in line and line.strip() not in removed_stripped
+        line
+        for line in added
+        if MARKER not in line and line.strip() not in removed_stripped and line.strip()
     ]
     assert not unmarked, f"{rel}: added lines without the '{MARKER}' tag: {unmarked}"
     assert removed == entry["removed_lines"], (
@@ -78,34 +86,59 @@ def test_patches_are_exactly_the_documented_ones(rel):
 
 
 def test_manifest_covers_every_vendored_module():
-    on_disk = {str(p.relative_to(VENDOR)) for p in VENDOR.rglob("*.py") if "__init__" not in p.name}
-    assert on_disk == set(MANIFEST["files"]) - {"s4/LICENSE", "mamba/LICENSE"}, (
-        "a vendored module exists that MANIFEST.json does not account for (or vice versa)"
+    ours = {"__init__.py", "s4/__init__.py", "mamba/__init__.py"}  # our loaders, not upstream's
+    on_disk = {
+        str(p.relative_to(VENDOR))
+        for p in VENDOR.rglob("*.py")
+        if str(p.relative_to(VENDOR)) not in ours
+    }
+    expected = {r for r in MANIFEST["files"] if r.endswith(".py")}
+    assert on_disk == expected, (
+        "vendored modules and MANIFEST.json disagree.\n"
+        f"on disk but not accounted for: {sorted(on_disk - expected)}\n"
+        f"in manifest but missing on disk: {sorted(expected - on_disk)}"
     )
+    for rel, entry in MANIFEST["files"].items():
+        if entry["patched"]:
+            assert (VENDOR / (rel + ".orig")).exists(), f"{rel}: patched but no .orig beside it"
 
 
 # --- the originals against our portable mixers -------------------------------
 
 
-def test_upstream_s4d_kernel_equals_portable_kernel():
-    """Their S4DKernel and our _S4DKernel implement the same formula — copying
-    parameters across must give the same kernel to float32 epsilon."""
-    from torch_dimensions._vendor.s4.s4d import S4DKernel
+def _pipeline():
+    from torch_dimensions._vendor.s4 import mount
+
+    mount()
+
+
+def test_pipeline_s4d_kernel_equals_portable_kernel():
+    """The pipeline's SSMKernelDiag (init='diag-lin', disc='zoh' — the S4D-Lin
+    setup) and our _S4DKernel implement the same formula: copying parameters
+    across must give the same kernel to float32 epsilon."""
+    _pipeline()
+    from src.models.sequence.kernels.ssm import SSMKernelDiag
+
     from torch_dimensions.mixers.ssm import _S4DKernel
 
     torch.manual_seed(0)
     h, n, length = 5, 16, 48
-    theirs = S4DKernel(h, N=n)
+    theirs = SSMKernelDiag(d_model=h, d_state=n, init="diag-lin", disc="zoh", dt_transform="exp")
     ours = _S4DKernel(h, d_state=n)
     with torch.no_grad():
-        ours.log_dt.copy_(theirs.log_dt)
-        ours.C.copy_(theirs.C)
-        ours.log_A_real.copy_(theirs.log_A_real)
-        ours.A_imag.copy_(theirs.A_imag)
+        theirs.inv_dt.copy_(ours.log_dt.unsqueeze(-1))
+        theirs.A_real.copy_(ours.log_A_real)  # both store log(-Re A) under 'exp'
+        theirs.A_imag.copy_(ours.A_imag)  # 'none' transform stores -Im A directly
+        # The pipeline keeps the negative-imaginary conjugate half (A = -re - i*im)
+        # where ours keeps the positive; 2*Re(sum C exp(dtA t)) is unchanged iff C
+        # is conjugated along with A. B is constant ones under diag-lin.
+        c = torch.view_as_complex(ours.C.detach().clone())
+        theirs.C.copy_(torch.view_as_real(c.conj().resolve_conj()).unsqueeze(0))
 
-    k_theirs = theirs(length)
-    k_ours = ours(length)
-    assert torch.allclose(k_ours, k_theirs, atol=1e-6), (k_ours - k_theirs).abs().max().item()
+    k_theirs, _ = theirs.forward(L=length)  # (channels=1, H, L)
+    k_ours = ours(length)  # (H, L)
+    diff = (k_ours - k_theirs[0]).abs().max().item()
+    assert diff < 1e-6, diff
 
 
 def test_upstream_mamba_equals_portable_mixer():
@@ -134,8 +167,9 @@ def test_upstream_mamba_equals_portable_mixer():
     assert diff < 1e-5, diff
 
 
-def test_upstream_s4d_runs_as_mixer_on_a_lattice():
-    """The verbatim S4D block swept over a 2-D lattice by our composition."""
+def test_pipeline_s4d_runs_as_mixer_on_a_lattice():
+    """The real S4Block (mode='diag'), built through upstream's own hydra
+    registry, swept over a 2-D lattice by our composition."""
     from torch_dimensions.mixers.upstream import UpstreamS4DMixer
 
     torch.manual_seed(0)
@@ -147,8 +181,8 @@ def test_upstream_s4d_runs_as_mixer_on_a_lattice():
     assert torch.isfinite(out).all()
 
 
-def test_upstream_s4_block_runs():
-    """The full DPLR S4Block, verbatim, on CPU."""
+def test_pipeline_s4_dplr_runs():
+    """The full DPLR S4Block — the layer upstream's registry calls "s4"."""
     from torch_dimensions.mixers.upstream import UpstreamS4Mixer
 
     torch.manual_seed(0)
@@ -158,6 +192,20 @@ def test_upstream_s4_block_runs():
         y = mixer(x)
     assert y.shape == x.shape
     assert torch.isfinite(y).all()
+
+
+def test_pipeline_s4nd_is_importable():
+    """The real S4ND layer ships too — the module their registry calls
+    "s4nd". Constructing it here proves the vendored subtree is complete."""
+    _pipeline()
+    from src.models.sequence.modules.s4nd import S4ND
+
+    torch.manual_seed(0)
+    layer = S4ND(d_model=6, dim=2, l_max=(8, 9), contract_version=1).eval()
+    x = torch.randn(2, 6, 8, 9)  # their layout: (B, H, *spatial)
+    with torch.no_grad():
+        y, _ = layer(x)
+    assert y.shape == x.shape
 
 
 def test_upstream_mixer_through_model_api():
@@ -174,6 +222,21 @@ def test_upstream_mixer_through_model_api():
         y = model(x)
     assert y.shape == x.shape
     assert torch.isfinite(y).all()
+
+
+def test_mount_refuses_a_foreign_src(monkeypatch):
+    """A process that already imported its own `src` package must get a clear
+    error, not silent shadowing in either direction."""
+    import sys
+    import types
+
+    from torch_dimensions._vendor.s4 import mount
+
+    foreign = types.ModuleType("src")
+    foreign.__path__ = ["/somewhere/else/src"]
+    monkeypatch.setitem(sys.modules, "src", foreign)
+    with pytest.raises(ImportError, match="cannot coexist"):
+        mount()
 
 
 def test_upstream_extra_missing_message(monkeypatch):

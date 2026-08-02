@@ -18,14 +18,21 @@ state-spaces/s4 — Apache License 2.0
 Copyright the state-spaces authors (Gu, Goel, Ré, et al.)
 https://github.com/state-spaces/s4
 
-1. REDISTRIBUTION. src/torch_dimensions/_vendor/s4/ contains the authors'
-   standalone `models/s4/s4.py` and `models/s4/s4d.py`, byte-identical to the
-   upstream commit recorded in _vendor/MANIFEST.json, except for import-path
-   and optional-dependency patches. Statement of changes (Apache-2.0 §4(b)):
-   every modified line is tagged "torch-dimensions patch" in the file itself,
-   a pristine `.orig` copy ships beside each file, and tests/test_vendored.py
-   fails if any untagged difference exists. The upstream LICENSE ships in the
-   same directory.
+1. REDISTRIBUTION. src/torch_dimensions/_vendor/s4/src/ contains the
+   pipeline subtree that upstream's train.py runs: the S4Block layer
+   (`src/models/sequence/modules/s4block.py`), the S4ND layer (`s4nd.py`),
+   the kernel modules (`fftconv.py`, `ssm.py`, `dplr.py`, `kernel.py`), the
+   HiPPO construction, the functional kernels (`cauchy.py`, `vandermonde.py`,
+   `krylov.py`, `toeplitz.py`), the `nn` components, and the `utils`
+   config/registry/train modules — 23 files, byte-identical to the upstream
+   commit recorded in _vendor/MANIFEST.json, with their directory structure
+   intact so the code's own `src.*` imports run unchanged. Statement of
+   changes (Apache-2.0 §4(b)): exactly one file is modified —
+   `src/utils/train.py`, whose training-only imports (pytorch_lightning,
+   rich, omegaconf) are guarded; every changed line is tagged
+   "torch-dimensions patch", the pristine copy ships as `train.py.orig`, and
+   tests/test_vendored.py fails if any untagged difference exists anywhere.
+   The upstream LICENSE ships in the same directory.
 
 2. DERIVATION. src/torch_dimensions/mixers/ssm.py derives the S4D and S4
    (DPLR) kernel mathematics from `models/s4/s4d.py` and the structured-kernel

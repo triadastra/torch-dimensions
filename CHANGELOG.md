@@ -8,25 +8,33 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **The original authors' S4/S4D/Mamba code, shipped verbatim.**
-  `torch_dimensions/_vendor/` redistributes the reference implementations
-  from state-spaces/s4 (`s4.py`, `s4d.py`) and state-spaces/mamba
-  (`mamba_simple.py`, `selective_scan_interface.py`, `utils/torch.py`), both
-  Apache-2.0, byte-identical to pinned upstream commits except for
-  import-path/optional-dependency patches — every changed line tagged
-  `torch-dimensions patch`, pristine `.orig` copies and the upstream LICENSEs
-  beside the files, commits and hashes pinned in `MANIFEST.json`.
-  `tests/test_vendored.py` fails on any untagged difference, and
-  `dossier/verify_vendored.py` proves the `.orig` bytes against the real
-  repositories. Off GPU, Mamba's selective scan dispatches to the authors' own
-  `selective_scan_ref` (the one functional patch); on CUDA the fused kernels
-  are picked up exactly as upstream intends.
+  `torch_dimensions/_vendor/` redistributes, from state-spaces/s4, the
+  pipeline subtree their `train.py` actually runs — `S4Block` (the layer
+  their registry calls `"s4"`), the S4ND layer, the kernel modules
+  (`fftconv`, `ssm`, `dplr`, `kernel`), HiPPO, the functional kernels, and
+  the `nn`/`utils` modules they import (23 files) — and, from
+  state-spaces/mamba, `mamba_simple.py`, `selective_scan_interface.py`, and
+  `utils/torch.py`. Both Apache-2.0, byte-identical to pinned upstream
+  commits; the s4 tree keeps its directory structure and is mounted as the
+  `src` package (their own repo convention), so even hydra's string-target
+  registry resolves unchanged and **zero s4 import lines are patched**. The
+  only patched files: `utils/train.py` (training-only imports guarded) and
+  the two mamba files (import paths plus one dispatch line: off GPU,
+  `selective_scan_fn` runs the authors' own `selective_scan_ref`). Every
+  changed line is tagged `torch-dimensions patch`, pristine `.orig` copies
+  ship beside patched files, `tests/test_vendored.py` fails on any untagged
+  difference, and `dossier/verify_vendored.py` proves the bytes against the
+  real repositories.
 - **`UpstreamS4DMixer`, `UpstreamS4Mixer`, `UpstreamMambaMixer`** — the
   vendored originals wrapped in the `(M, A, H)` mixer contract, so the exact
   upstream blocks sweep over any lattice:
-  `td.Mamba(64, 6, lattice=lat, mixer=UpstreamMambaMixer)`. CI checks they
-  agree numerically with the portable mixers (S4D kernel to 1e-6 with shared
-  parameters; Mamba to 1e-5). Needs the new `[upstream]` extra (einops,
-  numpy, scipy — the originals' own imports).
+  `td.Mamba(64, 6, lattice=lat, mixer=UpstreamMambaMixer)`. The S4 mixers
+  construct upstream's real `S4Block` through their own hydra registry
+  (`mode='diag'` for S4D, `mode='dplr'` for S4). CI checks the originals
+  against the portable mixers: the pipeline's S4D kernel matches ours
+  **bitwise** with shared parameters; Mamba to 1e-5. Needs the new
+  `[upstream]` extra (einops, numpy, scipy, hydra-core, omegaconf — the
+  originals' own imports).
 - **Kernel-family options from the CaFA reference implementation**:
   `qk_norm=` (RMS-normalize query and key; no new parameters) and
   `kernel_residual=` (a learnable `gamma * I` added to the kernel *before* the
