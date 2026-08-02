@@ -26,7 +26,11 @@ import types
 import torch
 import torch.nn.functional as F
 
+from torch_dimensions.mixers._kernels import load_upstream, prefer_upstream
+
 __all__ = ["mamba_chunk_scan_combined", "mamba_split_conv1d_scan_combined", "triton_stub"]
+
+_SSD = "mamba_ssm.ops.triton.ssd_combined"
 
 
 def triton_stub() -> tuple[types.ModuleType, types.ModuleType]:
@@ -117,7 +121,31 @@ def mamba_chunk_scan_combined(
 
     Shapes follow upstream: ``x`` (b, l, h, p), ``dt`` (b, l, h), ``A`` (h,),
     ``B``/``C`` (b, l, g, n), ``D`` (h,) or (h, p), ``z`` (b, l, h, p).
+
+    On CUDA the real fused kernel runs instead — decided here, per call, so
+    that a machine which merely *has* ``mamba_ssm`` installed does not send
+    CPU tensors into a CUDA kernel.
     """
+    fused = load_upstream(_SSD, "mamba_chunk_scan_combined") if prefer_upstream(x) else None
+    if fused is not None:
+        return fused(
+            x,
+            dt,
+            A,
+            B,
+            C,
+            chunk_size,
+            D=D,
+            z=z,
+            dt_bias=dt_bias,
+            initial_states=initial_states,
+            seq_idx=seq_idx,
+            cu_seqlens=cu_seqlens,
+            dt_softplus=dt_softplus,
+            dt_limit=dt_limit,
+            return_final_states=return_final_states,
+            return_varlen_states=return_varlen_states,
+        )
     if seq_idx is not None or cu_seqlens is not None or return_varlen_states:
         raise NotImplementedError(
             "variable-length sequences (seq_idx / cu_seqlens) are only supported by "
@@ -169,12 +197,15 @@ def mamba_chunk_scan_combined(
     return (y, final_state) if return_final_states else y
 
 
-def mamba_split_conv1d_scan_combined(*_a, **_k):
+def mamba_split_conv1d_scan_combined(*args, **kwargs):
     """Upstream's fully fused path (conv + scan + norm + out-projection in one
     kernel). There is no reference implementation of it, and unpicking it here
     would be our arithmetic rather than theirs — so instead the adapter passes
     ``use_mem_eff_path=False``, which is upstream's own switch for taking the
-    unfused path through the very same module."""
+    unfused path through the very same module. On CUDA the real kernel runs."""
+    fused = load_upstream(_SSD, "mamba_split_conv1d_scan_combined")
+    if fused is not None and prefer_upstream(*args):
+        return fused(*args, **kwargs)
     raise NotImplementedError(
         "the fully fused Mamba-2 path needs Triton and CUDA; construct the mixer with "
         "use_mem_eff_path=False (what torch-dimensions does off-GPU) to take upstream's "

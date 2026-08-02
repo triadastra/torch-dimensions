@@ -49,6 +49,8 @@ from torch_dimensions.models.ssm import (
     Mamba,
     Mamba2,
     Mamba2ND,
+    Mamba3,
+    Mamba3ND,
     MambaND,
 )
 from torch_dimensions.models.vit import PatchEmbed, ViT
@@ -68,6 +70,8 @@ __all__ = [
     "Mamba",
     "Mamba2",
     "Mamba2ND",
+    "Mamba3",
+    "Mamba3ND",
     "MambaND",
     "S4",
     "S4D",

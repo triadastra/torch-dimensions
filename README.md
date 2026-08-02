@@ -237,8 +237,25 @@ scan:
 model = td.Mamba(64, n_layers=6, lattice=lat)  # the authors' Mamba block, verbatim
 s4d = td.S4D(64, 8, lattice=lat)  # their S4Block(mode='diag'), verbatim
 
+td.Mamba2(64, 6, lattice=lat)  # or td.Mamba(..., version=2) — the SSD block
+td.Mamba3(64, 6, lattice=lat)  # or version=3 — rotary state, trapezoidal rule
+
 light = td.S4D(64, 8, lattice=lat, portable=True)  # our pure-torch build, zero extra deps
 ```
+
+**Which implementation runs is decided per call.** A CUDA tensor plus an
+importable Triton kernel runs the authors' fused kernel; anything else — no
+Triton, a failed import, CPU or MPS tensors — runs the torch path, so a
+machine that merely *has* the CUDA packages installed never sends a CPU
+tensor into a CUDA kernel. `TD_FORCE_TORCH_KERNELS=1` forces the torch path.
+
+Mamba-3 is the one model whose *scan* is not the authors' code off GPU: they
+ship it only as Triton, with no pure-torch reference, so
+`mixers/mamba3_compat.py` transcribes the recurrence — which is why that
+mixer is `Mamba3Mixer` and not `Upstream…`. It is checked against a second
+independently written form (3e-15, float64), a third direct sum in a limiting
+case (2e-16), and gradcheck; it is *not* checked against their kernel, and
+the package says so rather than implying otherwise.
 
 The originals' own dependencies (einops, numpy, scipy, hydra-core, omegaconf)
 are **installed on first use** — never at import, never for `portable=True`,

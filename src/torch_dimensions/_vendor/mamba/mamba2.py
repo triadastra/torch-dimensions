@@ -31,14 +31,15 @@ try:  # torch-dimensions patch: tensor-parallel training only; unused with proce
 except ImportError:  # torch-dimensions patch
     ColumnParallelLinear = RowParallelLinear = all_reduce = reduce_scatter = None  # torch-dimensions patch
 
-try:  # torch-dimensions patch: the fused CUDA/Triton path when available...
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined
-    from mamba_ssm.ops.triton.ssd_combined import mamba_split_conv1d_scan_combined
-except ImportError:  # torch-dimensions patch: ...otherwise the authors' own reference SSD
-    from torch_dimensions.mixers.mamba2_compat import (  # torch-dimensions patch
-        mamba_chunk_scan_combined,  # torch-dimensions patch
-        mamba_split_conv1d_scan_combined,  # torch-dimensions patch
-    )  # torch-dimensions patch
+# torch-dimensions patch: these dispatch per call — the real fused kernel when the
+# torch-dimensions patch: tensors are on CUDA and it imports, the authors' own reference
+# torch-dimensions patch: SSD otherwise. Deciding per call rather than at import keeps a
+# torch-dimensions patch: machine that merely has mamba_ssm installed from sending CPU
+# torch-dimensions patch: tensors into a CUDA kernel.
+from torch_dimensions.mixers.mamba2_compat import (  # torch-dimensions patch
+    mamba_chunk_scan_combined,  # torch-dimensions patch
+    mamba_split_conv1d_scan_combined,  # torch-dimensions patch
+)  # torch-dimensions patch
 
 try:  # torch-dimensions patch: the Hub mixin adds no computation
     from huggingface_hub import PyTorchModelHubMixin

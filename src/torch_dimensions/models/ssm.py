@@ -37,6 +37,7 @@ import torch.nn as nn
 from torch_dimensions.lattice import Lattice
 from torch_dimensions.mixers.ssm import MambaMixer, S4DMixer, S4Mixer
 from torch_dimensions.mixers.upstream import (
+    Mamba3Mixer,
     UpstreamMamba2Mixer,
     UpstreamMambaMixer,
     UpstreamS4DMixer,
@@ -44,7 +45,18 @@ from torch_dimensions.mixers.upstream import (
 )
 from torch_dimensions.models.base import LatticeModel
 
-__all__ = ["S4", "S4D", "S4DND", "S4ND", "Mamba", "Mamba2", "Mamba2ND", "MambaND"]
+__all__ = [
+    "S4",
+    "S4D",
+    "S4DND",
+    "S4ND",
+    "Mamba",
+    "Mamba2",
+    "Mamba2ND",
+    "Mamba3",
+    "Mamba3ND",
+    "MambaND",
+]
 
 
 def _pick(
@@ -140,11 +152,18 @@ class Mamba(LatticeModel):
     mixer instead.
 
     ``version=2`` runs the authors' **Mamba-2** block (the SSD formulation:
-    multi-head, gated RMSNorm) — the same object as :class:`Mamba2`, which is
-    simply the spelling that puts the version in the name. Mamba-2 has no
-    ``portable`` build: its whole point is the SSD algorithm, and off GPU it
-    already runs the authors' own reference implementation of it, so a
-    reimplementation would add nothing but a second thing to be wrong.
+    multi-head, gated RMSNorm) and ``version=3`` their **Mamba-3** block
+    (rotary state, trapezoidal discretization) — the same objects as
+    :class:`Mamba2` and :class:`Mamba3`, which are simply the spellings that
+    put the version in the name.
+
+    Neither has a ``portable`` build, for different reasons. Mamba-2 already
+    runs the authors' own reference SSD off GPU, so a reimplementation would
+    add nothing but a second thing to be wrong. Mamba-3 has no upstream
+    reference at all: its scan is Triton-only, so off GPU the recurrence is
+    computed by our transcription of it — see
+    :class:`~torch_dimensions.mixers.Mamba3Mixer`, which is named without
+    ``Upstream`` precisely because those numbers are ours.
     """
 
     _mixer: type[nn.Module] = MambaMixer
@@ -162,25 +181,25 @@ class Mamba(LatticeModel):
         version: int = 1,
         **kw,
     ):
-        if version not in (1, 2):
-            # Mamba-3 exists upstream but its kernels are Triton-only with no
-            # reference implementation, so there is nothing to run here.
-            hint = (
-                " Mamba-3 ships upstream as Triton kernels with no pure-torch reference, "
-                "so it cannot run on CPU or MPS; see PLAN.md."
-                if version == 3
-                else ""
-            )
-            raise ValueError(f"Mamba version must be 1 or 2; got {version}.{hint}")
-        if version == 2:
-            if portable:
-                raise ValueError(
-                    "there is no portable build of Mamba-2: off GPU it already runs the "
-                    "authors' own reference SSD implementation. Use version=1 for the "
-                    "portable selective scan."
+        if version not in (1, 2, 3):
+            raise ValueError(f"Mamba version must be 1, 2 or 3; got {version}")
+        if version in (2, 3) and portable:
+            raise ValueError(
+                f"there is no portable build of Mamba-{version}: off GPU it already runs "
+                + (
+                    "the authors' own reference SSD implementation"
+                    if version == 2
+                    else "their block around a transcribed scan (mixers/mamba3_compat.py)"
                 )
+                + ". Use version=1 for the portable selective scan."
+            )
+        if version == 3:
+            self._mixer = _pick(False, MambaMixer, Mamba3Mixer, kw)
+            # Mamba-3 has no depthwise conv: the rotary state replaces it.
+            defaults: dict = {"d_state": 128 if d_state is None else d_state}
+        elif version == 2:
             self._mixer = _pick(False, MambaMixer, UpstreamMamba2Mixer, kw)
-            defaults: dict = {"d_state": 128 if d_state is None else d_state, "d_conv": d_conv}
+            defaults = {"d_state": 128 if d_state is None else d_state, "d_conv": d_conv}
         else:
             self._mixer = _pick(portable, MambaMixer, UpstreamMambaMixer, kw)
             defaults = {"d_state": 16 if d_state is None else d_state, "d_conv": d_conv}
@@ -293,7 +312,29 @@ class Mamba2(Mamba):
         super().__init__(d_model, n_layers, lattice, version=2, **kw)
 
 
+class Mamba3(Mamba):
+    """Mamba-3 — ``td.Mamba(..., version=3)`` by name.
+
+    Identical in every way to passing ``version=3``; both spellings build the
+    same model and record the same config, so a checkpoint written by one
+    rebuilds under the other.
+
+    The block is the authors', verbatim — rotary state, trapezoidal
+    discretization, heavy-tail ``A``. The *scan* is theirs only on CUDA: it
+    ships upstream as Triton alone, so elsewhere it is computed by our
+    transcription of the same recurrence. See
+    :class:`~torch_dimensions.mixers.Mamba3Mixer` for exactly what that does
+    and does not establish.
+    """
+
+    def __init__(self, d_model: int, n_layers: int = 1, lattice=None, **kw):
+        if kw.pop("version", 3) != 3:
+            raise ValueError("td.Mamba3 is version 3; use td.Mamba(version=...) to choose")
+        super().__init__(d_model, n_layers, lattice, version=3, **kw)
+
+
 S4ND = _nd_variant(S4, "S4ND")
 S4DND = _nd_variant(S4D, "S4DND")
 MambaND = _nd_variant(Mamba, "MambaND")
 Mamba2ND = _nd_variant(Mamba2, "Mamba2ND")
+Mamba3ND = _nd_variant(Mamba3, "Mamba3ND")

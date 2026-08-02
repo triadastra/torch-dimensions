@@ -39,6 +39,7 @@ import torch
 import torch.nn as nn
 
 __all__ = [
+    "Mamba3Mixer",
     "UpstreamMamba2Mixer",
     "UpstreamMambaMixer",
     "UpstreamS4DMixer",
@@ -227,6 +228,58 @@ class UpstreamMamba2Mixer(nn.Module):
             d_model,
             d_state=d_state,
             d_conv=d_conv,
+            expand=expand,
+            headdim=headdim,
+            **mamba_args,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.block(x)
+
+
+class Mamba3Mixer(nn.Module):
+    """Upstream's Mamba-3 block, with its scan retranscribed for this machine.
+
+    **Not named ``Upstream…``, and the difference is real.** The block is the
+    authors' ``_vendor/mamba/mamba3.py``, verbatim: the projections, the
+    heavy-tail activation on ``A``, the rotary phase, the gated norms, the
+    head layout. But Mamba-3's scan ships *only* as Triton — there is no
+    pure-torch reference beside it, as there is for Mamba-1 and Mamba-2 — so
+    off GPU the recurrence is computed by
+    :mod:`torch_dimensions.mixers.mamba3_compat`, **which is our code**.
+
+    On CUDA with Triton present, the authors' kernels run and the numbers are
+    entirely theirs. Elsewhere the numbers come from our transcription, which
+    is checked against a second, independently written form of the same
+    recurrence (float64 agreement ~3e-15), against a third direct-sum
+    implementation in the ``trap -> 1`` limit (2e-16), and by gradcheck — but
+    *not* against their kernel, which no machine here can run. That gap is
+    stated rather than papered over.
+
+    Mamba-3 is MIMO-capable upstream via TileLang kernels; ``is_mimo=True``
+    is left to the CUDA path and refused here.
+    """
+
+    def __init__(
+        self,
+        d_model: int,
+        d_state: int = 128,
+        expand: int = 2,
+        headdim: int = 64,
+        **mamba_args,
+    ):
+        super().__init__()
+        _require_upstream()
+        if mamba_args.get("is_mimo"):
+            raise ValueError(
+                "Mamba-3's MIMO path is implemented upstream in TileLang kernels that "
+                "need CUDA; only the SISO path runs here. Pass is_mimo=False (the default)."
+            )
+        from torch_dimensions._vendor.mamba.mamba3 import Mamba3
+
+        self.block = Mamba3(
+            d_model,
+            d_state=d_state,
             expand=expand,
             headdim=headdim,
             **mamba_args,

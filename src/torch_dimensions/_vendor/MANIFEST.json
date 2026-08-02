@@ -1,14 +1,14 @@
 {
   "repos": {
-    "s4": {
-      "url": "https://github.com/state-spaces/s4",
-      "license": "Apache-2.0",
-      "commit": "e757cef57d89e448c413de7325ed5601aceaac13"
-    },
     "mamba": {
       "url": "https://github.com/state-spaces/mamba",
       "license": "Apache-2.0",
       "commit": "e9594ce1c732d97440f0332fdc43170a2294dbfa"
+    },
+    "s4": {
+      "url": "https://github.com/state-spaces/s4",
+      "license": "Apache-2.0",
+      "commit": "e757cef57d89e448c413de7325ed5601aceaac13"
     }
   },
   "files": {
@@ -193,6 +193,18 @@
       "sha256": "a17e4c51b582dc0d4d690a649eba521cd0c1ee3dc8f0473a0967cdc9ec0874e3",
       "removed_lines": [
         "from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, mamba_inner_fn"
+      ]
+    },
+    "mamba/mamba3.py": {
+      "repo": "mamba",
+      "upstream_path": "mamba_ssm/modules/mamba3.py",
+      "patched": true,
+      "sha256": "930c3dfa04dea8444b1c9ee8b6ac9cbbc7ef492dc5ae1f4c83051ef953eca33c",
+      "removed_lines": [
+        "from mamba_ssm.ops.triton.layernorm_gated import RMSNorm as RMSNormGated",
+        "from mamba_ssm.ops.triton.mamba3.mamba3_siso_combined import mamba3_siso_combined",
+        "",
+        "from mamba_ssm.ops.triton.mamba3.mamba3_mimo_rotary_step import apply_rotary_qk_inference_fwd"
       ]
     },
     "mamba/mamba2.py": {

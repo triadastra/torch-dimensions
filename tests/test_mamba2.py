@@ -144,10 +144,10 @@ def test_save_load_round_trips_the_version(tmp_path):
 
 
 def test_unsupported_versions_are_refused_with_a_reason():
-    with pytest.raises(ValueError, match="Mamba-3 ships upstream as Triton kernels"):
-        td.Mamba(64, 1, version=3)
-    with pytest.raises(ValueError, match="must be 1 or 2"):
-        td.Mamba(64, 1, version=0)
+    # Versions 1, 2 and 3 all exist; anything else is a typo, not a model.
+    for bad in (0, 4):
+        with pytest.raises(ValueError, match="must be 1, 2 or 3"):
+            td.Mamba(64, 1, version=bad)
     with pytest.raises(ValueError, match="no portable build of Mamba-2"):
         td.Mamba(64, 1, version=2, portable=True)
 

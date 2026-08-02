@@ -18,10 +18,31 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   calling convention on top of that reference — ours, and verified against an
   independent naive recurrence in float64 at **3e-16** across non-chunk-
   aligned lengths, grouped B/C, dt bias, D skip and z gate. MPS-vs-CPU 6e-07,
-  gradients finite. `version=3` is refused with the reason (upstream ships
-  Mamba-3 as Triton-only kernels with no reference implementation).
+  gradients finite.
+- **Mamba-3 — the authors' block, with their Triton scan transcribed into
+  PyTorch.** `td.Mamba(..., version=3)`, `td.Mamba3(...)` and `td.Mamba3ND`
+  build the vendored upstream `Mamba3` block (rotary state, trapezoidal
+  discretization, heavy-tail `A`). Unlike Mamba-1 and Mamba-2, upstream
+  ships **no pure-torch reference** for Mamba-3 — the recurrence exists only
+  as ~6,300 lines of Triton — so off GPU it is computed by
+  `mixers/mamba3_compat.py`, **our transcription**, and the mixer is called
+  `Mamba3Mixer` rather than `Upstream…` for exactly that reason. What is
+  established: the chunked and recurrent forms, written independently, agree
+  to **3e-15** in float64; a third direct O(L^2) sum agrees at **2e-16** in
+  the `trap -> 1` limit; `trap -> 0` removes the current step as the
+  trapezoid claims; chunk size does not change the answer; gradcheck passes
+  (the 1,788-line Triton backward is not ported — autograd differentiates
+  the forward). What is *not* established: equality with their kernel, which
+  no CUDA-less machine can check. MPS-vs-CPU 1.4e-06.
 
 ### Changed
+- **Fused kernels are now chosen per call, not per install.** A CUDA tensor
+  plus an importable Triton kernel runs the authors' kernel; anything else
+  (no Triton, a failed import, CPU or MPS tensors) runs the torch path.
+  Deciding at import time got the in-between case wrong: Triton installs
+  fine on a CUDA-less box, so the kernel was picked and then died on the
+  first CPU tensor. `TD_FORCE_TORCH_KERNELS=1` forces the torch path, which
+  is how the fallback gets exercised on a CUDA machine.
 - **The default S4/S4D/Mamba implementation is now the original authors'
   code.** `td.S4`, `td.S4D`, and `td.Mamba` construct the vendored upstream
   blocks by default; `portable=True` selects the pure-torch mixers (the old

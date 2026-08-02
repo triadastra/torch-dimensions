@@ -61,6 +61,8 @@ def _models() -> dict[str, type[nn.Module]]:
         Mamba,
         Mamba2,
         Mamba2ND,
+        Mamba3,
+        Mamba3ND,
         MambaND,
     )
     from torch_dimensions.models.vit import ViT
@@ -76,10 +78,12 @@ def _models() -> dict[str, type[nn.Module]]:
         "s4d": S4D,
         "mamba": Mamba,
         "mamba2": Mamba2,
+        "mamba3": Mamba3,
         "s4nd": S4ND,
         "s4dnd": S4DND,
         "mamband": MambaND,
         "mamba2nd": Mamba2ND,
+        "mamba3nd": Mamba3ND,
     }
 
 

@@ -54,17 +54,18 @@ Copyright (c) 2023, Tri Dao, Albert Gu.
 https://github.com/state-spaces/mamba
 
 1. REDISTRIBUTION. src/torch_dimensions/_vendor/mamba/ contains the authors'
-   `modules/mamba_simple.py`, `modules/mamba2.py`, `modules/ssd_minimal.py`,
-   `ops/selective_scan_interface.py`, `ops/triton/layernorm_gated.py`, and
-   `utils/torch.py`, byte-identical to the upstream commit recorded in
-   _vendor/MANIFEST.json, except for import-path patches, an optional-Triton
-   guard, and dispatch patches that route to the authors' *own* reference
-   implementations when the CUDA/Triton kernels are absent:
-   `selective_scan_fn` -> their `selective_scan_ref` (Mamba-1),
-   `mamba_chunk_scan_combined` -> their `ssd_minimal_discrete` (Mamba-2),
-   and gated `RMSNorm.forward` -> their `rms_norm_ref`. The adapter that
-   presents the fused kernels' calling convention on top of those references
-   is our own code and lives outside this directory, in
+   `modules/mamba_simple.py`, `modules/mamba2.py`, `modules/mamba3.py`,
+   `modules/ssd_minimal.py`, `ops/selective_scan_interface.py`,
+   `ops/triton/layernorm_gated.py`, and `utils/torch.py`, byte-identical to
+   the upstream commit recorded in _vendor/MANIFEST.json, except for
+   import-path patches, optional-Triton guards, and dispatch patches that
+   choose an implementation per call: on CUDA the authors' fused kernels, and
+   otherwise, for Mamba-1 and Mamba-2, the authors' *own* reference
+   implementations — `selective_scan_fn` -> their `selective_scan_ref`,
+   `mamba_chunk_scan_combined` -> their `ssd_minimal_discrete`, and gated
+   `RMSNorm.forward` -> their `rms_norm_ref`. The adapters presenting the
+   fused kernels' calling convention on top of those references are our own
+   code and live outside this directory, in
    src/torch_dimensions/mixers/mamba2_compat.py.
    Statement of changes (§4(b)): every modified line is tagged
    "torch-dimensions patch"; `.orig` copies and the upstream LICENSE ship
@@ -74,6 +75,20 @@ https://github.com/state-spaces/mamba
 2. DERIVATION. src/torch_dimensions/mixers/ssm.py derives the selective-scan
    recurrence from `modules/mamba_simple.py`. Modified: the scan is a portable
    sequential loop rather than the fused kernel.
+
+3. DERIVATION — MAMBA-3'S SCAN, WHICH IS THE ONE PLACE OUR OWN ARITHMETIC
+   STANDS IN FOR THEIRS. Unlike Mamba-1 and Mamba-2, Mamba-3 ships no
+   pure-torch reference: its recurrence exists upstream only as Triton
+   kernels (`ops/triton/mamba3/*`), which require CUDA. Off GPU, the vendored
+   `modules/mamba3.py` therefore calls
+   src/torch_dimensions/mixers/mamba3_compat.py, which is **our
+   transcription** of the recurrence those kernels implement — written from
+   `mamba3_siso_step.py` and `angle_dt.py`, sharing no expression with them.
+   It computes in float32 with exact trigonometric functions where the
+   kernels use bfloat16 and PTX approximations, so it does not reproduce
+   their numbers bit for bit and does not claim to. On CUDA the authors'
+   kernels are called and the numbers are entirely theirs. No code from
+   `ops/triton/mamba3/` is copied or redistributed.
 
 Upstream ships no NOTICE file.
 
