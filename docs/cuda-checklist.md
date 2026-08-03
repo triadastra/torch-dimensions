@@ -1,23 +1,69 @@
 # CUDA verification checklist
 
-**Status: not yet run.** The device suite was written to run on whatever
-accelerator exists — but it has only ever *executed* on CPU and Apple Silicon
-(MPS). Until somebody runs this page on a CUDA machine, "works on CUDA" is a
-design claim here, not a tested one, and the README says so.
+**Status: run, on an NVIDIA RTX 5090 (Blackwell, sm_120), 4 August 2026.**
+torch 2.12.1+cu130, Triton 3.7.1, Linux. Results below, and the raw output is
+checked in at [`CUDA bench/cuda_check.txt`](../CUDA%20bench/cuda_check.txt).
 
-Since 0.3.1 that gap matters more than it did: the library ships the original
-authors' fused kernels and chooses between them and a portable path per call,
-and **not one line of that choice has executed on a GPU.**
+```
+13 passed · 0 failed · 1 skipped · 1 recorded
+```
 
-This is deliberately a checklist rather than a CI job: GitHub's GPU runners
-are paid, and the honest interim is a documented procedure that takes about
-fifteen minutes on a free Colab T4.
+The page used to say "not yet run", and that mattered: since 0.3.1 the library
+ships the original authors' fused kernels and chooses between them and a
+portable path per call, and none of that choice had ever executed on a GPU.
+What the run established:
+
+| claim | result |
+|---|---|
+| `prefer_upstream` is True for a CUDA tensor | **True** — the fused path is reachable, verified for the first time |
+| `prefer_upstream` is False for a CPU tensor on a CUDA box | False |
+| `TD_FORCE_TORCH_KERNELS` overrides CUDA | honoured |
+| vendored **S4 (DPLR)**, CUDA vs CPU, L=32/64/128 | **1.90e-07** — including L=64, where MPS lands exactly on the Nyquist pole; the guard is provably inert on CUDA |
+| vendored **S4D** | 2.85e-07 |
+| vendored **Mamba-1** | 2.30e-07 |
+| vendored **Mamba-2** | 4.38e-07 |
+| **Mamba-3** block end to end on CUDA | runs, gradients finite |
+| rank-1 LSTM vs the pre-norm residual, under cuDNN | **bitwise identical** (0.0) |
+| device placement refused in both directions | raises, as designed |
+| autocast fp16 / bf16 through the kernel family | finite, output stays float32 |
+| absent cells stay inert on CUDA | 0.0 |
+
+And the full suite on the same machine: **1211 passed, 6 skipped, 0 failed** —
+the skips are the MPS-only tests, which is what should skip on an NVIDIA box.
+
+## What is still not established
+
+**Mamba-3's Triton kernel has never been compared against our PyTorch
+transcription.** That is the one comparison no CPU or MPS machine can make, and
+it did not happen here either: `mamba-ssm` and `causal-conv1d` have no wheel for
+sm_120 and fail to build from source against CUDA 13, so the fused Mamba
+entry points were never importable. Every vendored Mamba number above is
+therefore *reference path on CUDA*, not *fused kernel on CUDA*.
+
+Our transcription remains validated three other ways — against an
+independently written recurrent form (3.6e-15 in float64), against a direct
+sum in the `trap -> 1` limit (2.2e-16), and by gradcheck — but not against the
+kernel it was transcribed from. Anyone with an Ampere or Ada card, where
+`mamba-ssm` installs cleanly, can close this by running the same one command.
+
+## Two bugs this run found
+
+Both were invisible on a machine without a GPU, and both were the same mistake:
+dispatching on a property of the **box** instead of the **tensor**.
+
+1. `UpstreamMamba2Mixer` defaulted `use_mem_eff_path` to
+   `torch.cuda.is_available()`, so on a CUDA machine every CPU-resident Mamba-2
+   asked for a kernel it could not reach and raised on its first forward — a
+   CPU sanity check, a CPU test, the CPU half of any device comparison.
+2. The vendored gated RMSNorm dispatched on `_HAS_TRITON`, sending a CPU tensor
+   into a Triton kernel on any box that had both a GPU and Triton.
 
 ---
 
 ## The short version
 
-Two commands on a free Colab T4, in a GPU runtime:
+To re-run it anywhere — a free Colab T4 is enough — two commands in a GPU
+runtime:
 
 ```python
 !git clone --depth 1 https://github.com/triadastra/torch-dimensions

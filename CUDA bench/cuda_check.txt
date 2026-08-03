@@ -1,0 +1,40 @@
+
+=== environment
+  python        3.12.3 on Linux-5.15.0-78-generic-x86_64-with-glibc2.35
+  torch         2.12.1+cu130 (cuda 13.0)
+  torch-dims    0.3.1
+  device        NVIDIA GeForce RTX 5090
+  capability    (12, 0)
+  triton        3.7.1
+  mamba_ssm     not installed — fused paths will fall back
+
+=== dispatch: which implementation actually runs
+  [PASS] prefer_upstream is True for a CUDA tensor — returned True; the fused path is reachable
+  [PASS] prefer_upstream is False for a CPU tensor on a CUDA box — returned False
+  [PASS] TD_FORCE_TORCH_KERNELS overrides CUDA — returned False with the override set
+  [info] the fused Mamba-1 / Mamba-2 kernels import — neither importable — install mamba-ssm to exercise the fused paths
+
+=== the vendored models on CUDA
+  [PASS] vendored Mamba-1: CUDA agrees with CPU — relative 2.30e-07 (fused vs reference; bf16 tolerated)
+  [PASS] vendored Mamba-2: CUDA agrees with CPU — relative 4.38e-07
+  [PASS] vendored S4 (DPLR): CUDA agrees with CPU — the Nyquist guard — worst relative over L=32/64/128 1.90e-07
+  [PASS] vendored S4D: CUDA agrees with CPU — relative 2.85e-07
+
+=== Mamba-3: our transcription against the kernel it came from
+  (the one comparison no CPU or MPS machine can make)
+  [skip] Mamba-3 SISO: Triton kernel vs our PyTorch transcription — mamba_ssm's Mamba-3 Triton kernels are not importable
+  [PASS] Mamba-3 block end to end on CUDA — output (2, 64, 64), gradients finite=True
+
+=== claims the README makes
+  [PASS] rank-1 LSTM is still bitwise identical to nn.LSTM under cuDNN — max |difference| 0.000e+00 (bitwise)
+  [PASS] device placement is refused in both directions — raised RuntimeError as it should
+  [PASS] autocast fp16 through the kernel family's cancellation guard — fp16 autocast output finite=True, dtype torch.float32
+  [PASS] autocast bf16 through the kernel family — finite=True
+  [PASS] absent cells stay inert on CUDA — max |difference| from absent-cell noise 0.000e+00
+
+=== summary
+  13 passed · 0 failed · 1 skipped · 1 recorded
+
+Also run the suite itself:  pytest tests/ -q
+(the device tests must report cuda, not skipped — a green run with no
+ CUDA present proves nothing)

@@ -171,12 +171,14 @@ The test suite is the product as much as the models are:
   upstream's; the full S4 (DPLR) kernel matches upstream at 3e-8 and a dense
   state-space reference at machine precision; the Mamba scan matches
   `selective_scan_ref` at 1e-6.
-- **Portable by construction.** Pure torch throughout, so the device suite
-  runs against whatever accelerator exists — verified on CPU and Apple Silicon
-  (MPS). CUDA *should* work and has never been run: that is a design claim, not
-  a test result, until someone works through
-  [docs/cuda-checklist.md](docs/cuda-checklist.md). Fused CUDA kernels are a
-  planned fast path, not a requirement.
+- **Portable by construction, and now measured on all three.** Pure torch
+  throughout, so the device suite runs against whatever accelerator exists —
+  verified on CPU, Apple Silicon (MPS) **and CUDA**: the full suite passes on an
+  RTX 5090 (1211 passed, 0 failed) and every CUDA claim the library makes runs
+  as one file, [`scripts/cuda_check.py`](scripts/cuda_check.py), reporting 13
+  passed / 0 failed. The two devices agree to **3.11e-06 in float32** and
+  2.2e-16 in float64. See [docs/cuda-checklist.md](docs/cuda-checklist.md) for
+  the results and the one gap that remains.
 - **Reproductions and benchmarks, with hardware attached.** sMNIST at 99.53%
   with `td.S4D` ([RESULTS.md](RESULTS.md)); the fold, the families and the
   factorization crossover measured rather than asserted
@@ -195,8 +197,8 @@ The test suite is the product as much as the models are:
 - **[Adding an nd_method](docs/adding-a-method.md)** — changing *how* the axes
   are handled, including the two bugs the conformance suite found in this
   project's own example strategy.
-- **[CUDA verification checklist](docs/cuda-checklist.md)** — the procedure for
-  the device this library has never actually run on.
+- **[CUDA verification checklist](docs/cuda-checklist.md)** — every CUDA claim
+  as one runnable file, and what it reported on an RTX 5090.
 
 ## Install
 
@@ -287,27 +289,72 @@ the two agree numerically — the pipeline's S4D kernel matches ours **bitwise**
 with shared parameters, and that agreement is itself a CI test
 (`tests/test_vendored.py`).
 
-## Device benchmarks
+## Device benchmarks — RTX 5090 vs Apple M1 Ultra
 
-Sixteen models trained identically on two machines, for comparison:
+Sixteen models trained identically on two machines, plus a no-optimiser
+numerical comparison and a per-machine scorecard. Everything below is in the
+repository and reproducible.
 
-| directory | hardware |
+| artifact | what it is |
 |---|---|
-| `MPS bench` | Apple Mac Studio, M1 Ultra (Metal / MPS) |
-| `CUDA bench` | NVIDIA RTX 5090 |
+| [`MPS bench/`](MPS%20bench) | 16 trained checkpoints — Apple Mac Studio, M1 Ultra (Metal / MPS) |
+| [`CUDA bench/`](CUDA%20bench) | the same 16 — NVIDIA RTX 5090 · [`cuda_check.txt`](CUDA%20bench/cuda_check.txt) |
+| [`MPS agree/`](MPS%20agree), [`CUDA agree/`](CUDA%20agree) | one forward + backward from fixed weights, no optimiser |
+| [`init weights/`](init%20weights) | the shared starting weights both machines load |
+| [**AGREEMENT.md**](AGREEMENT.md) | do the two devices compute the same thing? |
+| [**COMPARISON.md**](COMPARISON.md) | do they train to the same place, and how fast? |
+| [`MPS bench/SCORECARD.md`](MPS%20bench/SCORECARD.md), [`CUDA bench/SCORECARD.md`](CUDA%20bench/SCORECARD.md) | per-machine model ranking, one column per question |
+| [**BENCH-README.md**](BENCH-README.md) | the design, and what the comparison cannot show |
+| [**BENCHMARK-DESIGN.md**](BENCHMARK-DESIGN.md) | why three benchmarks rather than one |
 
-Every model is built on CPU under one fixed seed and only then moved to the
-device, and every batch is drawn on CPU — so both machines start from
-bit-identical weights on bit-identical data and every difference is
-arithmetic. On CUDA the vendored models take the authors' fused kernels while
-MPS takes the reference path, which makes those rows a fused-vs-reference
-check rather than merely a device one. See [BENCH-README.md](BENCH-README.md)
-for what the comparison can and cannot show.
+### The headline numbers
+
+**In float32, worst output difference between the two devices: 3.11e-06.**
+Thirteen of sixteen models are at or below 1e-06. In float64 they agree to
+2.2e-16 — the last bit. Full table in [AGREEMENT.md](AGREEMENT.md).
+
+Two things had to be fixed before that number meant anything, and both are
+worth knowing if you benchmark across devices yourself:
+
+- **CUDA does not run float32 by default.** `cudnn.allow_tf32` ships as `True`,
+  so cuDNN convolutions and RNNs execute in TF32 — 10 mantissa bits against
+  float32's 23. That alone accounted for the entire original 1.96e-04 gap;
+  turning it off moves the convolutional models by three orders of magnitude.
+  `agreement.py` therefore defaults to `--tf32 off`, and `pretrain.py` to
+  `--tf32 torch` so its speed numbers describe what you actually get.
+- **A fixed seed does not give identical S4 weights across platforms.**
+  `hippo.nplr` diagonalises with `torch.linalg.eigh`, whose eigenvalues are
+  unique but whose eigenvectors are fixed only up to a phase — so macOS and
+  Linux produce different (both valid) `B` and `P`. Pass `--init` to share one
+  set of weights; see [benchmarks/init_weights.py](benchmarks/init_weights.py).
+
+On CUDA the vendored models take the authors' fused kernels while MPS takes the
+reference path, so those rows are a **fused-vs-reference** check rather than
+merely a device one.
+
+### Reproduce
 
 ```bash
-python benchmarks/pretrain.py --out "CUDA bench"
+python benchmarks/agreement.py --out "MPS agree"  --init "init weights"   # writes
+python benchmarks/agreement.py --out "CUDA agree" --init "init weights"   # loads
+python benchmarks/compare_agreement.py "MPS agree" "CUDA agree" --out AGREEMENT.md
+
+python benchmarks/pretrain.py --out "CUDA bench" --init "init weights"
 python benchmarks/compare.py "MPS bench" "CUDA bench" --out COMPARISON.md
+python benchmarks/scorecard.py "CUDA bench" --out "CUDA bench/SCORECARD.md"
 ```
+
+Every CUDA claim the library makes runs as one file:
+
+```bash
+python scripts/cuda_check.py
+```
+
+On the RTX 5090 that reports **13 passed, 0 failed, 1 skipped** — the skip is
+Mamba-3's Triton kernel, which needs `mamba-ssm` and has no sm_120 wheel. The
+full output is checked in at [`CUDA bench/cuda_check.txt`](CUDA%20bench/cuda_check.txt),
+and the reasoning behind each check is in
+[docs/cuda-checklist.md](docs/cuda-checklist.md).
 
 ## License
 

@@ -4,17 +4,21 @@
 
 Runs on CPU too — the CUDA-only checks report `skip` with the reason, so the
 harness itself can be verified without a GPU and the Colab run is one command
-rather than fifteen manual steps. That distinction is the whole point: the
-checklist in docs/cuda-checklist.md has existed since 0.1 and has never been
-run, and a procedure nobody runs protects nothing.
+rather than fifteen manual steps. That distinction is the whole point: a
+procedure nobody runs protects nothing.
 
-**What is at stake, specifically.** Since 0.3.1 the library ships the original
-authors' S4, Mamba-1, Mamba-2 and Mamba-3 and chooses per call between their
-fused CUDA kernels and a portable path. Every part of that choice is untested:
-`prefer_upstream` has never once returned True on real hardware, no fused
-kernel has ever run, and Mamba-3's PyTorch transcription has never been
-compared against the Triton kernel it was transcribed from — the one
-comparison no CPU or MPS machine can make.
+**It has now been run**, on an RTX 5090 (sm_120, torch 2.12.1+cu130): 13
+passed, 0 failed, 1 skipped. `prefer_upstream` returns True on real hardware,
+the vendored S4 DPLR agrees with CPU at 1.9e-07 including L=64 where MPS lands
+on the Nyquist pole, and the rank-1 LSTM is still bitwise identical under
+cuDNN. Output in `CUDA bench/cuda_check.txt`; results table in
+docs/cuda-checklist.md.
+
+**The one thing still not established**, and the skip above: Mamba-3's PyTorch
+transcription has never been compared against the Triton kernel it came from.
+`mamba-ssm` has no sm_120 wheel and does not build against CUDA 13, so the
+fused entry points were never importable even on the 5090. An Ampere or Ada
+card would close it.
 
 Each check prints `pass`, `fail`, `skip` or `info` with the number behind it.
 `info` is for measurements that have no pass/fail — a benchmark, or a fact
@@ -330,7 +334,7 @@ def _():
 
 @check("absent cells stay inert on CUDA")
 def _():
-    """The library's central sparse guarantee, on a device it has never run on."""
+    """The library's central sparse guarantee, on CUDA."""
     valid = torch.rand(6, 8) > 0.3
     valid[0, 0] = True
     sparse = td.Lattice(shape=(6, 8), names=("h", "w"), valid=valid, time=True)

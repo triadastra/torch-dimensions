@@ -6,6 +6,90 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Verified
+- **CUDA, on real hardware, for the first time.** An NVIDIA RTX 5090
+  (Blackwell, sm_120; torch 2.12.1+cu130) ran the full suite — **1211 passed,
+  6 skipped, 0 failed** — and `scripts/cuda_check.py` reported **13 passed, 0
+  failed, 1 skipped**. `prefer_upstream` returns True on a GPU for the first
+  time; the vendored S4 DPLR agrees with CPU at **1.9e-07 including L=64**,
+  where MPS lands exactly on the Nyquist pole, so the guard is provably inert
+  on CUDA; the rank-1 LSTM is still bitwise identical under cuDNN. Results in
+  [docs/cuda-checklist.md](docs/cuda-checklist.md), raw output in
+  `CUDA bench/cuda_check.txt`.
+- **The device comparison, corrected twice and then meaningful.** Worst float32
+  output difference between the RTX 5090 and an M1 Ultra is **3.11e-06**, with
+  13 of 16 models at or below 1e-06 and float64 agreement at **2.2e-16**. See
+  [AGREEMENT.md](AGREEMENT.md) and [COMPARISON.md](COMPARISON.md).
+
+### Fixed
+- **Mamba-2 chose its fused path from the box, not the tensor.**
+  `use_mem_eff_path` defaulted to `torch.cuda.is_available()`, so on a machine
+  with a GPU every CPU-resident Mamba-2 asked for a kernel it could not reach
+  and raised `NotImplementedError` on its first forward — every CPU sanity
+  check, every CPU test, and the CPU half of any device comparison. It now
+  dispatches per call, gated on the `mamba-ssm` entry point the path actually
+  calls rather than on Triton alone, and refuses float64 where the fused kernel
+  has no instantiation.
+- **The vendored gated RMSNorm did the same thing**, dispatching on
+  `_HAS_TRITON` and sending a CPU tensor into a Triton kernel on any box with
+  both a GPU and Triton.
+- **`agreement.py` saved every tensor as `.float()`**, putting a float32 floor
+  (~1.2e-07) under the float64 comparison whose only purpose is to measure
+  beneath it. The float64 column had been reporting the saving code.
+- **`agreement.py --only` rewrote `agreement.json`** with just the subset it
+  ran, silently dropping every other model's result.
+- **`scripts/cuda_check.py` had three bugs of its own**, unrunnable until a GPU
+  existed: it fed a 16-wide input to every mixer regardless of `d_model`, and
+  compared a full four-layer model against a bare `nn.LSTM`. Widths are now
+  required rather than defaulted.
+- **The examples' `register_nd_method` leaked into the global registry** for
+  every test that ran afterwards.
+
+### Changed
+- **A fixed seed does not give identical S4/S4D weights across platforms, and
+  the benchmarks no longer pretend it does.** `hippo.nplr` diagonalises with
+  `torch.linalg.eigh`: eigenvalues are unique and matched across macOS and
+  Linux to twelve decimals — which is exactly why this hid, since `A_imag`
+  looked perfect — but eigenvectors are fixed only up to a phase, so `B` and
+  `P` differed by a relative 1.5 and 0.53. The comparison was reporting a
+  2.6e-01 difference for the vendored S4D, unchanged in float64, that was two
+  different models rather than two devices. Both benchmarks now take `--init`
+  and share one set of starting weights; the same pair agrees at 4e-07, and
+  after 300 optimiser steps their losses agree to 8.9e-07. Every run records
+  `weights_from` per model, and `compare.py` refuses to describe two runs as
+  comparable when they did not share weights.
+- **CUDA does not run float32 by default, and the benchmarks now say which
+  precision they used.** `cudnn.allow_tf32` ships as `True`, so cuDNN
+  convolutions and RNNs execute in TF32 — 10 mantissa bits against float32's
+  23 — which accounted for the *entire* original 1.96e-04 device gap and
+  explains why only LSTM, GRU, CNN and TCN were affected while attention,
+  Mamba and S4 sat at ~2e-07. With it off, `tcn_2d_sparse` improves 1024x and
+  `cnn_2d_sparse` 839x. `agreement.py` defaults to `--tf32 off` because a
+  numerical comparison must compare like with like; `pretrain.py` defaults to
+  `--tf32 torch`, which touches nothing, so its speed numbers describe what a
+  user actually gets. Both record the settings *as observed*, since on a
+  machine without CUDA they do nothing and a manifest claiming otherwise would
+  assert a control that was never applied.
+
+### Added
+- **`benchmarks/compare_agreement.py`** — the cross-device numerical report,
+  elementwise on the saved tensors rather than on summary statistics, with
+  output and gradient reported separately. A gradient of an SSM frequency is
+  cancellation-dominated and cannot meet a float32 bound by construction
+  (`A_imag`: 1.35e-04 in float32, 4.87e-15 in float64); the report names that
+  case instead of flagging an ill-conditioned quantity as disagreement.
+- **`benchmarks/init_weights.py`** and **`benchmarks/precision.py`** — the two
+  controls above, each documenting the measurement it exists to protect.
+- **`tests/test_matrix.py`** — 13 mixers x 4 methods, all 52 cells, five
+  invariants each. The library's thesis is that any mixer composes with any
+  method; the diagonal of a matrix is not the matrix.
+- **`tests/test_published_checkpoints.py`** — every shipped checkpoint loads
+  with `strict=True` into the model its manifest names, and runs. The published
+  weights are a compatibility contract, and an untested contract is a promise.
+- **`tests/test_init_weights.py`**, **`tests/test_precision.py`**, and Mamba-2
+  dispatch tests.
+
+
 ## [0.3.1] - 2026-08-03
 
 ### Added

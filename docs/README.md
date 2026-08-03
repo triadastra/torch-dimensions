@@ -6,9 +6,10 @@
 - **[Adding an nd_method](adding-a-method.md)** — changing *how* the axes are
   handled rather than what happens along one, including the two bugs the
   conformance suite found in this project's own example strategy.
-- **[CUDA verification checklist](cuda-checklist.md)** — the procedure for the
-  device the library has never actually run on. Fifteen minutes on a free
-  Colab T4.
+- **[CUDA verification checklist](cuda-checklist.md)** — every CUDA claim as
+  one runnable file, and what it reported on an RTX 5090: 13 passed, 0 failed,
+  plus the one gap that a Blackwell card could not close. Fifteen minutes on a
+  free Colab T4 to re-run.
 
 Elsewhere in the repo: [DESIGN.md](../DESIGN.md) (the architecture),
 [PLAN.md](../PLAN.md) (what is built and what is next),
