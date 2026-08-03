@@ -37,6 +37,20 @@ const S = {
   },
   shape: { fontSize: 11, color: "#6b7a96", fontVariantNumeric: "tabular-nums" },
   note: { fontSize: 10.5, color: "#5d6b84", marginTop: 5, lineHeight: 1.45 },
+  finding: (level) => ({
+    display: "flex",
+    gap: 7,
+    alignItems: "baseline",
+    fontSize: 11.5,
+    lineHeight: 1.45,
+    padding: "5px 9px",
+    borderRadius: 6,
+    marginBottom: 4,
+    background: level === "warn" ? "#26202c" : "#141d22",
+    border: `1px solid ${level === "warn" ? "#5c4426" : "#22402f"}`,
+    color: level === "warn" ? "#f0c88a" : "#9dcaa8",
+  }),
+  hist: { display: "block", marginTop: 6 },
   empty: {
     color: "#5d6b84",
     fontSize: 12.5,
@@ -424,6 +438,51 @@ function OperatorPanel({ operator, mixer }) {
   );
 }
 
+// The distribution, which says things min/max/std cannot: the same three
+// numbers describe a healthy spread and a spike at zero with two outliers.
+function Histogram({ histogram }) {
+  if (!histogram?.bins?.length) return null;
+  const bins = histogram.bins;
+  const peak = Math.max(...bins, 1);
+  const w = 250;
+  const h = 26;
+  const bw = w / bins.length;
+  return (
+    <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={S.hist}>
+      {bins.map((c, i) => {
+        const t = c / peak;
+        return (
+          <rect
+            key={i}
+            x={i * bw}
+            y={h - Math.max(c > 0 ? 1 : 0, t * h)}
+            width={Math.max(1, bw - 0.6)}
+            height={Math.max(c > 0 ? 1 : 0, t * h)}
+            fill="#6d8ac9"
+            opacity={0.45 + 0.5 * t}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+// Findings, not a score. Each one carries the number that produced it, because
+// "this layer looks unhealthy" is not something anyone can act on.
+function Health({ notes }) {
+  if (!notes?.length) return null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      {notes.map((n, i) => (
+        <div key={i} style={S.finding(n.level)}>
+          <span>{n.level === "warn" ? "▲" : "●"}</span>
+          <span>{n.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TensorCard({ tensor }) {
   const body =
     tensor.role === "linear" ? (
@@ -442,6 +501,7 @@ function TensorCard({ tensor }) {
         <span style={S.shape}>{tensor.shape.join(" × ")}</span>
       </div>
       {body}
+      <Histogram histogram={tensor.histogram} />
       <div style={S.note}>
         {tensor.sampled
           ? `drawn as a ${tensor.rows}×${tensor.cols} stride-${tensor.stride.join("/")} sample of ${tensor.stats.n.toLocaleString()} weights`
@@ -494,6 +554,7 @@ export default function Weights({ weights, layerIndex }) {
 
   return (
     <div>
+      <Health notes={layer.health} />
       <OperatorPanel operator={layer.operator} mixer={layer.mixer} />
       {hasSSM && (
         <div style={S.card}>

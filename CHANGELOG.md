@@ -31,6 +31,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   diagonal while attention carries none — because attention's mixing is
   computed from the data and is not in the parameters to draw at all. That
   last case is reported in those words rather than as an empty diagram.
+- **Findings, histograms, and a frequency told apart from a decay.** Each
+  layer reports what is actually wrong with its weights, as measurements
+  rather than a score: how many output units are dead (judged against the
+  tensor's own scale, since an absolute threshold means nothing across
+  initialisations), and what the SSM decay rates are. The decay is reported
+  as a *rate*, not as a per-step retention, because the retention is
+  `exp(-rate·dt)` and `dt` is a different learned tensor — at unit dt a Mamba
+  state with rate 8 reads as instant forgetting where its learned dt of ~0.01
+  makes it 92% a step, the opposite conclusion. Uniform decay is not flagged
+  when the states are separated by frequency instead, which is exactly how
+  S4D-Lin initialises: a check that fires on the default configuration is a
+  check people learn to ignore. Every tensor also carries a histogram, since
+  min/max/std describe a healthy spread and a spike at zero with two outliers
+  identically.
 - **Weights stream while training.** `examples/viewer_live.py` refreshes the
   digest on the eval cadence, so the diagrams show what the model holds now
   rather than what it held when the page was opened. On the eval cadence and

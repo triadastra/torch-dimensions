@@ -49,6 +49,8 @@ def _role(name: str, param: torch.Tensor, owner: nn.Module | None) -> str:
     if param.ndim == 1:
         if "bias" in lower:
             return "bias"
+        if "a_imag" in lower:
+            return "ssm_freq"
         if "_log" in lower or lower.endswith("a_log"):
             return "ssm_decay"
         if lower.endswith(".d") or lower == "d":
@@ -59,7 +61,13 @@ def _role(name: str, param: torch.Tensor, owner: nn.Module | None) -> str:
     if isinstance(owner, nn.Linear):
         return "linear"
     # SSM parameters live on plain Modules, so they are named rather than typed.
-    if "a_log" in lower or "a_real" in lower or "a_imag" in lower or lower.endswith("a"):
+    # The imaginary part sets how fast a state *oscillates*, not how fast it
+    # decays. Lumping it in with the decay made the health check read a
+    # frequency as a retention and report a healthy S4D as forgetting
+    # instantly — a false statement about the user's model.
+    if "a_imag" in lower:
+        return "ssm_freq"
+    if "a_log" in lower or "a_real" in lower or lower.endswith("a"):
         return "ssm_decay"
     if lower.endswith("b") or ".b" in lower:
         return "ssm_in"
@@ -126,6 +134,7 @@ def _tensors(module: nn.Module, max_units: int) -> list[dict[str, Any]]:
                 "owner": type(owner).__name__ if owner is not None else None,
                 **_sample(param, max_units),
                 "stats": _stats(param),
+                "histogram": _histogram(param),
             }
         )
     return out
@@ -229,6 +238,115 @@ def _operator(mixer: nn.Module, length: int, width: int) -> dict[str, Any] | Non
     }
 
 
+def _histogram(param: torch.Tensor, bins: int = 24) -> dict[str, Any]:
+    """The distribution, which says things the extremes do not.
+
+    Two tensors with identical min/max/std can be a healthy spread or a spike
+    at zero with two outliers, and only the shape tells them apart.
+    """
+    t = param.detach().to(torch.float32).cpu().reshape(-1)
+    if t.numel() == 0:
+        return {"bins": [], "lo": 0.0, "hi": 0.0}
+    lo, hi = float(t.min()), float(t.max())
+    if hi - lo < 1e-12:
+        return {"bins": [t.numel()], "lo": lo, "hi": hi}
+    counts = torch.histc(t, bins=bins, min=lo, max=hi)
+    return {"bins": [int(c) for c in counts], "lo": round(lo, 5), "hi": round(hi, 5)}
+
+
+def _health(module: nn.Module, tensors: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """What is actually wrong with these weights, stated as findings.
+
+    Not a score and not a verdict — each entry is a measurement with the
+    number that produced it, because "layer 3 looks unhealthy" is not
+    something anyone can act on and "9 of 64 output units are dead" is.
+    """
+    notes: list[dict[str, str]] = []
+    params = dict(module.named_parameters())
+
+    for entry in tensors:
+        param = params.get(entry["name"])
+        if param is None or param.ndim < 2:
+            continue
+        t = param.detach().to(torch.float32).cpu()
+        scale = float(t.abs().max())
+        if scale <= 0:
+            notes.append({"level": "warn", "text": f"{entry['name']} is entirely zero"})
+            continue
+        # A unit no input can move, or that moves nothing: capacity paid for
+        # and not used. Judged relative to the tensor's own scale, since an
+        # absolute threshold means nothing across different initialisations.
+        rows = t.reshape(t.shape[0], -1).abs().max(dim=1).values
+        dead = int((rows < 1e-3 * scale).sum())
+        if dead:
+            notes.append(
+                {
+                    "level": "warn",
+                    "text": f"{entry['name']}: {dead} of {t.shape[0]} output units are dead "
+                    f"(peak weight below 0.1% of the tensor's own maximum)",
+                }
+            )
+
+    # How fast each state decays. The temptation is to turn this into a
+    # per-step retention and warn when states "forget immediately" — but the
+    # decay a state actually applies is exp(-rate * dt), and `dt` is a
+    # separate learned parameter living in another tensor. At unit dt a
+    # Mamba state with rate 8 looks like instant forgetting; with its learned
+    # dt of ~0.01 it retains 92% a step, which is the opposite conclusion. So
+    # the rates are reported as rates, and dt is named as the other half.
+    for entry in tensors:
+        if entry["role"] != "ssm_decay":
+            continue
+        param = params.get(entry["name"])
+        if param is None:
+            continue
+        rate = torch.exp(param.detach().to(torch.float32).cpu().clamp(max=20))
+        n = rate.numel()
+        lo, hi = float(rate.min()), float(rate.max())
+        if hi <= 0:
+            notes.append({"level": "warn", "text": f"{entry['name']}: every decay rate is zero"})
+            continue
+        spread = hi / max(lo, 1e-12)
+        if spread < 1.05 and n > 1:
+            # Uniform decay is not automatically a fault. S4D-Lin gives every
+            # state the same real part on purpose and separates them by
+            # frequency instead, so the states differ — just not in how long
+            # they remember. Warning without checking that would fire on a
+            # correctly initialised S4D every time, and a diagnostic that
+            # cries wolf on the default configuration gets ignored.
+            freqs = [
+                params[t["name"]]
+                for t in tensors
+                if t["role"] == "ssm_freq" and t["name"] in params
+            ]
+            varied = any(float(f.detach().float().std()) > 1e-6 for f in freqs)
+            if varied:
+                notes.append(
+                    {
+                        "level": "ok",
+                        "text": f"all {n} decay rates sit at {hi:.3g}; the states are "
+                        "separated by frequency rather than by timescale",
+                    }
+                )
+            else:
+                notes.append(
+                    {
+                        "level": "warn",
+                        "text": f"all {n} decay rates are within 5% of {hi:.3g} and the "
+                        "states share a frequency too: the extra state size buys nothing",
+                    }
+                )
+        else:
+            notes.append(
+                {
+                    "level": "ok",
+                    "text": f"{n} decay rates span {lo:.3g}–{hi:.3g}; a state retains "
+                    f"exp(-rate·dt) a step, so the learned dt sets the memory with them",
+                }
+            )
+    return notes
+
+
 def weights(
     model: nn.Module, *, max_units: int = MAX_UNITS, operator_size: int = 16
 ) -> dict[str, Any]:
@@ -260,11 +378,14 @@ def weights(
         for i, mixer in enumerate(mixers):
             if mixer is None:
                 continue
+            tensors = _tensors(mixer, max_units)
             layers.append(
                 {
                     "layer": i,
                     "mixer": type(mixer).__name__,
-                    "tensors": _tensors(mixer, max_units),
+                    "tensors": tensors,
+                    "n_params": sum(t["stats"]["n"] for t in tensors),
+                    "health": _health(mixer, tensors),
                     "operator": (
                         _operator(mixer, operator_size, int(d_model or 0))
                         if operator_size
@@ -281,11 +402,14 @@ def weights(
         for i, kernel in enumerate(kernels):
             if kernel is None:
                 continue
+            tensors = _tensors(kernel, max_units)
             layers.append(
                 {
                     "layer": len(layers) if mixers is None else i,
                     "mixer": type(kernel).__name__,
-                    "tensors": _tensors(kernel, max_units),
+                    "tensors": tensors,
+                    "n_params": sum(t["stats"]["n"] for t in tensors),
+                    "health": _health(kernel, tensors),
                     "operator": None,
                 }
             )

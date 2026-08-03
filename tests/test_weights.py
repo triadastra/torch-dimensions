@@ -286,7 +286,8 @@ def test_roles_fall_back_sensibly_for_unusual_names():
     assert _role("gamma", one_d, None) == "vector"  # a plain 1-D parameter
     assert _role("kernel.B", two_d, None) == "ssm_in"
     assert _role("kernel.C", two_d, None) == "ssm_out"
-    assert _role("A_imag", two_d, None) == "ssm_decay"
+    assert _role("A_imag", two_d, None) == "ssm_freq"  # a frequency, not a decay
+    assert _role("kernel.log_A_real", two_d, None) == "ssm_decay"
     assert _role("mystery", two_d, None) == "linear"  # 2-D and nothing else fits
 
 
@@ -368,3 +369,70 @@ def test_serving_without_a_bundle_says_which_path_is_missing(tmp_path, monkeypat
     monkeypatch.setattr(td.viz, "BUNDLE", tmp_path / "nope")
     with pytest.raises(FileNotFoundError):
         td.viz.serve(td.LSTM(16, 1, LAT), port=0)
+
+
+# --- findings: measurements a reader can act on ------------------------------
+
+
+def _health(model):
+    return td.viz.weights(model, operator_size=0)["layers"][0]["health"]
+
+
+def test_an_ssm_reports_its_decay_rates_as_rates():
+    """Not as a per-step retention. The decay a state applies is
+    exp(-rate * dt) and `dt` is a *different* learned tensor: at unit dt a
+    Mamba state with rate 8 reads as instant forgetting, while with its
+    learned dt of ~0.01 it retains 92% a step. Reporting the rate is true;
+    reporting a retention without dt is not."""
+    notes = _health(td.Mamba(32, 1, LAT, portable=True, d_state=8))
+    text = " ".join(n["text"] for n in notes)
+    assert "decay rates span" in text
+    assert "dt" in text  # the other half is named
+    assert all(n["level"] == "ok" for n in notes)
+
+
+def test_uniform_decay_is_not_reported_as_a_fault_when_frequencies_differ():
+    """S4D-Lin gives every state the same real part on purpose and separates
+    them by frequency. A check that warned here would fire on a correctly
+    initialised S4D every time, and a diagnostic that cries wolf on the
+    default configuration gets ignored."""
+    notes = _health(td.S4D(32, 1, LAT, portable=True, d_state=16))
+    assert [n["level"] for n in notes] == ["ok"]
+    assert "frequency" in notes[0]["text"]
+
+
+def test_genuinely_degenerate_states_are_reported():
+    """Same decay *and* same frequency is a bank of states doing one state's
+    job, and that must be caught — otherwise the check above is just silence."""
+    model = td.S4D(32, 1, LAT, portable=True, d_state=16)
+    with torch.no_grad():
+        for mixer in model.nd.mixers:
+            mixer.kernel.A_imag.zero_()
+    assert any(n["level"] == "warn" for n in _health(model))
+
+
+def test_dead_units_are_counted_against_the_tensor_s_own_scale():
+    """An absolute threshold means nothing across initialisations, so a dead
+    unit is one whose peak weight is negligible relative to its own tensor."""
+    model = td.Transformer(32, 1, LAT)
+    with torch.no_grad():
+        model.nd.mixers[0].proj.weight[:4] = 0.0
+    notes = _health(model)
+    assert any("4 of 32 output units are dead" in n["text"] for n in notes)
+
+
+def test_the_frequency_parameter_is_not_mistaken_for_a_decay():
+    """`A_imag` sets how fast a state oscillates, not how fast it fades.
+    Classifying it as decay made the health check read a frequency as a
+    retention and call a healthy S4D instantly-forgetting."""
+    payload = td.viz.weights(td.S4D(16, 1, LAT, portable=True, d_state=8))
+    assert _by_name(payload, "kernel.A_imag")["role"] == "ssm_freq"
+    assert _by_name(payload, "kernel.log_A_real")["role"] == "ssm_decay"
+
+
+def test_every_tensor_carries_a_histogram():
+    payload = td.viz.weights(td.LSTM(16, 1, LAT))
+    for tensor in payload["layers"][0]["tensors"]:
+        hist = tensor["histogram"]
+        assert sum(hist["bins"]) == tensor["stats"]["n"]
+        assert hist["lo"] <= hist["hi"]
