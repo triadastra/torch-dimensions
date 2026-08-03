@@ -14,27 +14,29 @@ relative to the larger tensor's magnitude.
 
 | model | dtype | output | worst gradient | which gradient | loss (MPS agree) | loss (CUDA agree) |
 |---|---|---|---|---|---|---|
-| `lstm_2d_sparse` ⚠ | float32 | 1.21e-04 | 5.19e-04 | `nd.norms.3.weight` | 0.657720 | 0.657708 |
-| `gru_2d_sparse` ⚠ | float32 | 1.82e-04 | 4.25e-04 | `nd.norms.3.bias` | 1.002386 | 1.002378 |
+| `lstm_2d_sparse` ⚠ | float32 | 2.66e-06 | 3.05e-06 | `nd.mixers.5.rnn.weight_hh_l0` | 0.657720 | 0.657720 |
+| `gru_2d_sparse` ⚠ | float32 | 3.11e-06 | 1.67e-06 | `nd.mixers.5.rnn.weight_hh_l0` | 1.002386 | 1.002386 |
 | `s4d_portable_2d` ⚠ | float32 | 3.88e-07 | 1.36e-04 | `nd.mixers.0.kernel.A_imag` | 0.633561 | 0.633561 |
-| `s4d_upstream_2d` | float32 | 3.99e-07 | 2.31e-05 | `nd.mixers.3.block.layer.kernel.A_real` | 0.560619 | 0.560619 |
-| `s4_upstream_2d` | float32 | 4.11e-07 | 2.24e-05 | `nd.mixers.1.block.layer.kernel.A_imag` | 0.550349 | 0.550349 |
+| `s4d_upstream_2d` ⚠ | float32 | 3.99e-07 | 2.31e-05 | `nd.mixers.3.block.layer.kernel.A_real` | 0.560619 | 0.560619 |
+| `s4_upstream_2d` ⚠ | float32 | 4.11e-07 | 2.24e-05 | `nd.mixers.1.block.layer.kernel.A_imag` | 0.550349 | 0.550349 |
 | `mamba_portable_2d` | float32 | 2.87e-07 | 9.40e-07 | `nd.mixers.2.out_proj.weight` | 0.486116 | 0.486116 |
 | `mamba_upstream_2d` | float32 | 2.87e-07 | 9.40e-07 | `nd.mixers.2.block.out_proj.weight` | 0.486116 | 0.486116 |
 | `mamba2_2d` | float32 | 8.75e-07 | 5.13e-07 | `nd.mixers.1.block.A_log` | 1.445458 | 1.445458 |
-| `mamba3_2d` | float32 | 9.97e-07 | 2.76e-06 | `nd.mixers.1.block.C_bias` | 1.139720 | 1.139720 |
+| `mamba3_2d` ⚠ | float32 | 9.97e-07 | 2.76e-06 | `nd.mixers.1.block.C_bias` | 1.139720 | 1.139720 |
 | `transformer_scan_2d` | float32 | 6.65e-07 | 6.44e-07 | `nd.mixers.1.proj.weight` | 19.463812 | 19.463810 |
-| `transformer_cafa_2d` | float32 | 5.00e-07 | 1.36e-06 | `nd.bias.0` | 19.429951 | 19.429951 |
+| `transformer_cafa_2d` ⚠ | float32 | 5.00e-07 | 1.36e-06 | `nd.bias.0` | 19.429951 | 19.429951 |
 | `transformer_flatten_2d` | float32 | 6.83e-07 | 5.78e-07 | `nd.mixers.1.mlp.2.weight` | 19.420815 | 19.420813 |
-| `cnn_2d_sparse` ⚠ | float32 | 1.96e-04 | 2.12e-04 | `nd.norms.3.weight` | 0.920592 | 0.920584 |
-| `tcn_2d_sparse` ⚠ | float32 | 1.16e-04 | 8.93e-03 | `nd.mixers.3.convs.0.weight` | 0.606166 | 0.606155 |
-| `mamba_upstream_3d` | float32 | 4.33e-07 | 1.05e-06 | `nd.mixers.3.block.in_proj.weight` | 0.678931 | 0.678931 |
-| `lstm_3d` ⚠ | float32 | 1.44e-04 | 4.94e-04 | `nd.norms.0.weight` | 0.899200 | 0.899185 |
+| `cnn_2d_sparse` | float32 | 3.51e-07 | 3.58e-07 | `nd.mixers.0.convs.0.weight` | 0.920592 | 0.920592 |
+| `tcn_2d_sparse` | float32 | 2.79e-07 | 2.06e-07 | `nd.mixers.1.convs.0.weight` | 0.606166 | 0.606166 |
+| `mamba_upstream_3d` ⚠ | float32 | 4.33e-07 | 1.05e-06 | `nd.mixers.3.block.in_proj.weight` | 0.678931 | 0.678931 |
+| `lstm_3d` ⚠ | float32 | 2.54e-06 | 1.73e-06 | `nd.mixers.5.rnn.weight_hh_l0` | 0.899200 | 0.899200 |
 
-⚠ marks a difference above 1e-04.
+⚠ marks a difference above 1e-06, in the output or in any gradient.
 
 ## What this says
 
 - 16 of 16 model-dtype pairs compared successfully.
-- Worst output difference across everything: 1.96e-04.
-- 6 pair(s) above 1e-04: `lstm_2d_sparse` (float32), `gru_2d_sparse` (float32), `s4d_portable_2d` (float32), `cnn_2d_sparse` (float32), `tcn_2d_sparse` (float32), `lstm_3d` (float32). For a vendored model on CUDA this is the expected signature of the fused kernel being a different implementation of the same recurrence, not evidence that either side is wrong.
+- Worst **output** difference across everything: 3.11e-06.
+- Worst **gradient** difference: 1.36e-04 on `nd.mixers.0.kernel.A_imag`.
+- 9 pair(s) above 1e-06: `lstm_2d_sparse` (float32), `gru_2d_sparse` (float32), `s4d_portable_2d` (float32), `s4d_upstream_2d` (float32), `s4_upstream_2d` (float32), `mamba3_2d` (float32), `transformer_cafa_2d` (float32), `mamba_upstream_3d` (float32), `lstm_3d` (float32).
+- A row flagged only on a *gradient* of an SSM frequency (`A_imag`, `A_real`) is cancellation, not disagreement: those gradients sum oscillating terms that nearly cancel, and the same pair that differs by 1.35e-04 in float32 differs by 4.87e-15 in float64. A row flagged on its *output* is worth reading — for a vendored model on CUDA it is the expected signature of the fused kernel being a different implementation of the same recurrence.

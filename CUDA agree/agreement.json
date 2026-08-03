@@ -4,6 +4,12 @@
   "torch": "2.12.1+cu130",
   "torch_dimensions": "0.3.1",
   "seed": 20260803,
+  "precision": {
+    "tf32_requested": "off",
+    "cudnn_tf32": false,
+    "matmul_tf32": false,
+    "cudnn_enabled": true
+  },
   "dtypes": [
     "float32",
     "float64"
@@ -11,11 +17,11 @@
   "models": {
     "lstm_2d_sparse": {
       "float32": {
-        "loss": 0.6577075123786926,
-        "output_sum": 171.14788975846022,
-        "output_absmax": 4.129190444946289,
-        "input_grad_sum": 0.032328714747563936,
-        "grad_norm": 0.8434755879792363,
+        "loss": 0.6577203869819641,
+        "output_sum": 171.28984436485916,
+        "output_absmax": 4.129184246063232,
+        "input_grad_sum": 0.032332833943655714,
+        "grad_norm": 0.8434898367308771,
         "n_grads": 38,
         "weights_from": "loaded"
       },
@@ -31,11 +37,11 @@
     },
     "gru_2d_sparse": {
       "float32": {
-        "loss": 1.0023777484893799,
-        "output_sum": 1749.6690582185984,
-        "output_absmax": 4.759915828704834,
-        "input_grad_sum": 0.11368642024172004,
-        "grad_norm": 2.1198490347870775,
+        "loss": 1.0023863315582275,
+        "output_sum": 1749.8374859374017,
+        "output_absmax": 4.759840965270996,
+        "input_grad_sum": 0.11373923764040228,
+        "grad_norm": 2.1198202413993337,
         "n_grads": 38,
         "weights_from": "loaded"
       },
@@ -251,11 +257,11 @@
     },
     "cnn_2d_sparse": {
       "float32": {
-        "loss": 0.9205837249755859,
-        "output_sum": 2583.707972873468,
-        "output_absmax": 5.100329875946045,
-        "input_grad_sum": 0.15777889121090993,
-        "grad_norm": 2.1297971552263006,
+        "loss": 0.9205924272537231,
+        "output_sum": 2583.7418496473692,
+        "output_absmax": 5.100550651550293,
+        "input_grad_sum": 0.1577480408741394,
+        "grad_norm": 2.129771894392253,
         "n_grads": 18,
         "weights_from": "loaded"
       },
@@ -271,11 +277,11 @@
     },
     "tcn_2d_sparse": {
       "float32": {
-        "loss": 0.6061553359031677,
-        "output_sum": 1940.9966058642603,
-        "output_absmax": 4.214599132537842,
-        "input_grad_sum": 0.10020898882066831,
-        "grad_norm": 0.7989456381983249,
+        "loss": 0.606166422367096,
+        "output_sum": 1940.9966999511234,
+        "output_absmax": 4.21469783782959,
+        "input_grad_sum": 0.10023973914212547,
+        "grad_norm": 0.7990484365840285,
         "n_grads": 26,
         "weights_from": "loaded"
       },
@@ -311,11 +317,11 @@
     },
     "lstm_3d": {
       "float32": {
-        "loss": 0.8991847038269043,
-        "output_sum": 62.77570581110194,
-        "output_absmax": 4.041250228881836,
-        "input_grad_sum": -0.03430343193031149,
-        "grad_norm": 1.0845061207688784,
+        "loss": 0.8992003202438354,
+        "output_sum": 63.27163375704549,
+        "output_absmax": 4.041237831115723,
+        "input_grad_sum": -0.034302294512599474,
+        "grad_norm": 1.0845238452506227,
         "n_grads": 38,
         "weights_from": "loaded"
       },

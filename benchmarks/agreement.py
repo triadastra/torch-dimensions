@@ -29,6 +29,7 @@ import platform
 from pathlib import Path
 
 import init_weights
+import precision
 import torch
 
 import torch_dimensions as td
@@ -128,9 +129,11 @@ if __name__ == "__main__":
     ap.add_argument("--device", default=None)
     ap.add_argument("--only", default=None)
     init_weights.add_argument(ap)
+    precision.add_arguments(ap, tf32_default="off")
     args = ap.parse_args()
 
     device = pick_device(args.device)
+    prec = precision.apply(args)
     init = Path(args.init) if args.init else None
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -142,7 +145,8 @@ if __name__ == "__main__":
         print("note: MPS has no float64; the precision control is unavailable here")
 
     names = args.only.split(",") if args.only else list(pretrain.ZOO)
-    print(f"device: {device} ({device_name(device)})\nmodels: {len(names)}\n")
+    print(f"device: {device} ({device_name(device)})\nmodels: {len(names)}")
+    print(f"{precision.describe(prec)}\n")
 
     records: dict[str, dict] = {}
     for i, name in enumerate(names, 1):
@@ -178,6 +182,7 @@ if __name__ == "__main__":
                 "torch": torch.__version__,
                 "torch_dimensions": getattr(td, "__version__", "unknown"),
                 "seed": SEED,
+                "precision": prec,
                 "dtypes": [label for label, _ in dtypes],
                 "models": records,
             },

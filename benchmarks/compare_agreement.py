@@ -31,11 +31,18 @@ from pathlib import Path
 
 import torch
 
-# float32 has ~1.2e-7 of epsilon; a couple of orders above that is ordinary for
-# a long reduction reassociated by a different backend. Past this, the more
-# likely explanation is a different computation, which is a finding either way
-# rather than a failure — hence "notable", not "fail".
-NOTABLE = 1e-4
+# The bound this project holds itself to in float32. float32 epsilon is
+# ~1.2e-07, so 1e-06 is roughly eight ulps — reachable for a forward pass
+# through several layers, and the measured worst output difference across the
+# whole zoo is 3.1e-06 (the three cuDNN RNNs; everything else is under).
+#
+# Gradients are judged by the same number but do not always obey it, and that
+# is a property of the quantity rather than of the device: the derivative with
+# respect to an SSM frequency is a sum of oscillating terms that nearly cancel,
+# so its *relative* error in float32 is large by construction. `A_imag` differs
+# by 1.35e-04 in float32 and 4.87e-15 in float64 — eleven orders — which is
+# what cancellation looks like and what a different computation does not.
+NOTABLE = 1e-6
 
 
 def rel(a: torch.Tensor, b: torch.Tensor) -> float:
@@ -155,7 +162,7 @@ def main() -> int:
     ]
     lines += [
         "",
-        f"⚠ marks a difference above {NOTABLE:.0e}.",
+        f"⚠ marks a difference above {NOTABLE:.0e}, in the output or in any gradient.",
         "",
         "## What this says",
         "",
@@ -163,14 +170,25 @@ def main() -> int:
     ]
     if ok:
         worst = max(ok, key=lambda c: c["output"])
-        lines.append(f"- Worst output difference across everything: {worst['output']:.2e}.")
+        lines.append(f"- Worst **output** difference across everything: {worst['output']:.2e}.")
+        wg = max(ok, key=lambda c: c["grad_worst"] or 0)
+        lines.append(
+            f"- Worst **gradient** difference: {wg['grad_worst']:.2e} on `{wg['grad_worst_name']}`."
+        )
     if flagged:
         lines.append(
             f"- {len(flagged)} pair(s) above {NOTABLE:.0e}: "
             + ", ".join(f"`{n}` ({d})" for n, d, _ in flagged)
-            + ". For a vendored model on CUDA this is the expected signature of "
-            "the fused kernel being a different implementation of the same "
-            "recurrence, not evidence that either side is wrong."
+            + "."
+        )
+        lines.append(
+            "- A row flagged only on a *gradient* of an SSM frequency (`A_imag`, "
+            "`A_real`) is cancellation, not disagreement: those gradients sum "
+            "oscillating terms that nearly cancel, and the same pair that differs "
+            "by 1.35e-04 in float32 differs by 4.87e-15 in float64. A row flagged "
+            "on its *output* is worth reading — for a vendored model on CUDA it is "
+            "the expected signature of the fused kernel being a different "
+            "implementation of the same recurrence."
         )
     else:
         lines.append(

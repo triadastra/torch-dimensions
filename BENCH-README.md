@@ -62,43 +62,61 @@ on — the difference is invisible in the losses otherwise.
 
 ## How close can two devices actually get?
 
-Three separate questions hide inside "do they agree", and separating them
-moves the answer by nine orders of magnitude. Measured **in one process on the
-5090**, so the torch version and the platform are held fixed and only the
-device varies:
+The headline number was 1.96e-04 and it was **not the hardware**. CUDA does
+not run float32 by default: `torch.backends.cudnn.allow_tf32` ships as `True`,
+so every cuDNN convolution and RNN runs in TF32 — 10 mantissa bits where
+float32 has 23. (`matmul.allow_tf32` ships as `False`, which is exactly why
+attention, Mamba and S4 were never affected and sat at ~2e-07 all along.)
 
-| model | float32 | float64 |
-|---|---|---|
-| `lstm_2d_sparse` | 1.21e-04 | **2.69e-16** |
-| `cnn_2d_sparse` | 1.96e-04 | **2.83e-16** |
-| `s4d_upstream_2d` | 1.77e-07 | **2.20e-16** |
-| `mamba_upstream_2d` | 1.28e-07 | 1.48e-09 |
+Comparing MPS float32 against CUDA TF32 and calling the difference a device
+difference is a category error. Measured CPU-against-CUDA on the 5090, so only
+the device varies:
 
-- **In float64 the devices agree to about one part in 1e16** — the last bit.
-  So the differences are float non-associativity and nothing else: the same
-  terms summed in a different order.
-- **In float32, 1e-7 is not reachable and should not be asked for.** float32
-  machine epsilon is 1.19e-07, so "under 1e-7" means bit-identical output from
-  cuDNN, Metal and a pure-torch loop. Note that `s4d_upstream` and
-  `mamba_upstream` are already at 1.3–1.8e-07 — they are *at* the floor, not
-  above it. The ~1e-04 rows are four to six layers of that floor compounding.
-- **`mamba_upstream` stops at 1.5e-09** rather than 1e-16, because its scan
-  casts internally (`A_log.float()`) — a deliberate upstream choice for fp16
-  stability, not a device difference.
+| model | TF32 on (torch's default) | TF32 off | + cuDNN off |
+|---|---|---|---|
+| `tcn_2d_sparse` | 1.16e-04 | **1.13e-07** | — |
+| `cnn_2d_sparse` | 1.96e-04 | **2.34e-07** | — |
+| `gru_2d_sparse` | 1.82e-04 | 3.13e-06 | **1.50e-07** |
+| `lstm_2d_sparse` | 1.21e-04 | 2.66e-06 | **1.73e-07** |
+| `lstm_3d` | 1.44e-04 | 2.57e-06 | **1.77e-07** |
+| the other eleven | ~2e-07 | ~2e-07 | — |
 
-Two consequences worth stating plainly:
+`agreement.py` therefore runs with **`--tf32 off` by default**: a numerical
+comparison has to compare like with like. `pretrain.py` keeps TF32 **on**,
+because that is what a user gets and what the speed numbers should reflect.
+Both record the setting in their JSON.
 
-**MPS cannot take this route.** Metal has no float64 at all, so on Apple
-silicon the float32 column is the only column, and 1e-04 is where it ends. The
-sub-1e-16 numbers above are CPU-vs-CUDA.
+### Where that leaves the float32 bound
 
-**The float32 result is not contaminated by the version skew.** The two
-machines run torch 2.13.0 and 2.12.1. Same-process CPU-vs-CUDA gives 1.21e-04
-and 1.96e-04 for the LSTM and the CNN — the same three digits as the
-cross-machine MPS-vs-CUDA comparison. At float32 there is no headroom for the
-version to show; it only becomes visible in float64, where the cross-machine
-comparison flattens out at ~5e-07 while the same-process one reaches 2e-16.
-That residual is the torch version, not the hardware.
+**Worst output difference, MPS vs CUDA: 3.11e-06** — down from 1.96e-04.
+Thirteen of the sixteen models are at or below **1e-06**; the three at
+2.5–3.1e-06 are the cuDNN RNNs, and that residual is not precision but
+*algorithm* — cuDNN's fused LSTM/GRU is a different implementation, and
+disabling it brings them to 1.5–1.8e-07 like everything else. That is left
+visible rather than configured away, since the fused kernel is what runs.
+
+**Gradients are judged by the same bound and one class does not meet it.** The
+derivative with respect to an SSM frequency sums oscillating terms that nearly
+cancel, so its *relative* error in float32 is large by construction:
+`A_imag` differs by **1.35e-04 in float32 and 4.87e-15 in float64**. Eleven
+orders between the two is what cancellation looks like; a genuinely different
+computation does not shrink when you add mantissa bits. No setting fixes this,
+and none should — the quantity is ill-conditioned, not the arithmetic.
+
+**In float64 the devices agree to the last bit**: 2.2e-16 to 2.8e-16, and
+4.9e-15 for the cancellation-heavy SSM gradients. Mamba stops at 1.5e-09
+because its scan casts internally (`A_log.float()`) for fp16 stability — an
+upstream choice, not a device difference.
+
+**MPS cannot take the float64 route at all.** Metal has no float64, so on
+Apple silicon float32 is the only column there is, and 3.11e-06 is the answer.
+
+**The float32 result is not contaminated by the torch version skew.** The two
+machines run torch 2.13.0 and 2.12.1. Same-process CPU-vs-CUDA reproduces the
+cross-machine MPS-vs-CUDA numbers to three digits, so at float32 there is no
+headroom for the version to show. It appears only in float64, where the
+cross-machine comparison flattens at ~5e-07 while the same-process one reaches
+2e-16 — that residual is the torch version, not the hardware.
 
 ## What the comparison can and cannot show
 

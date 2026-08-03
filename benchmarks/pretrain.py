@@ -31,6 +31,7 @@ import time
 from pathlib import Path
 
 import init_weights
+import precision
 import torch
 import torch.nn as nn
 
@@ -273,9 +274,11 @@ def main() -> int:
     ap.add_argument("--t-len", type=int, default=6)
     ap.add_argument("--only", default=None, help="comma-separated subset of model names")
     init_weights.add_argument(ap)
+    precision.add_arguments(ap, tf32_default="torch")
     args = ap.parse_args()
 
     device = pick_device(args.device)
+    prec = precision.apply(args)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     init = Path(args.init) if args.init else None
@@ -283,7 +286,8 @@ def main() -> int:
     names = args.only.split(",") if args.only else list(ZOO)
     print(f"device: {device} ({device_name(device)})")
     print(f"models: {len(names)}   steps: {args.steps}")
-    print(f"weights: {init if init else 'from the seed (see --init)'}\n")
+    print(f"weights: {init if init else 'from the seed (see --init)'}")
+    print(f"{precision.describe(prec)}\n")
 
     results = []
     for i, name in enumerate(names, 1):
@@ -325,6 +329,7 @@ def main() -> int:
         "torch_cuda": torch.version.cuda,
         "torch_dimensions": getattr(td, "__version__", "unknown"),
         "seed": SEED,
+        "precision": prec,
         "steps": args.steps,
         "batch": args.batch,
         "t_len": args.t_len,

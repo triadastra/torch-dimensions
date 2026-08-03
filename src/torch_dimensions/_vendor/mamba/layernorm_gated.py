@@ -440,7 +440,11 @@ class RMSNorm(torch.nn.Module):
     def forward(self, x, z=None):
         """If z is not None, we do norm(x) * silu(z) if norm_before_gate, else norm(x * silu(z))
         """
-        if not _HAS_TRITON:  # torch-dimensions patch: same computation, this file's own reference
+        # torch-dimensions patch: `_HAS_TRITON` is a property of the box, but a
+        # Triton kernel needs a CUDA *tensor*. On a box with both a GPU and  # torch-dimensions patch
+        # Triton, a CPU-resident block reached the kernel and raised "Pointer  # torch-dimensions patch
+        # argument cannot be accessed from Triton (cpu tensor?)".  # torch-dimensions patch
+        if not _HAS_TRITON or not x.is_cuda:  # torch-dimensions patch: this file's own reference
             return rms_norm_ref(x, self.weight, self.bias, z=z, eps=self.eps,  # torch-dimensions patch
                                 group_size=self.group_size,  # torch-dimensions patch
                                 norm_before_gate=self.norm_before_gate)  # torch-dimensions patch
