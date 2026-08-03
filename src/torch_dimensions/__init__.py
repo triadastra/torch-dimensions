@@ -54,6 +54,7 @@ from torch_dimensions.models.ssm import (
     MambaND,
 )
 from torch_dimensions.models.vit import PatchEmbed, ViT
+from torch_dimensions.optim import param_groups, warmup_cosine
 from torch_dimensions.plan import AxisCoverage, Coverage, ScanPlan, Step
 from torch_dimensions.spec import SPEC_VERSION as spec_version
 from torch_dimensions.spec import spec
@@ -88,6 +89,8 @@ __all__ = [
     "S4DND",
     "S4ND",
     "PatchEmbed",
+    "param_groups",
+    "warmup_cosine",
     "Transformer",
     "TransformerND",
     "ViT",

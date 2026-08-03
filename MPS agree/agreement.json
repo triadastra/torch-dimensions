@@ -1,0 +1,172 @@
+{
+  "device": "mps",
+  "device_name": "Apple arm64 (MPS)",
+  "torch": "2.13.0",
+  "torch_dimensions": "0.3.1",
+  "seed": 20260803,
+  "dtypes": [
+    "float32"
+  ],
+  "models": {
+    "lstm_2d_sparse": {
+      "float32": {
+        "loss": 0.6577204465866089,
+        "output_sum": 171.28886599931866,
+        "output_absmax": 4.129186630249023,
+        "input_grad_sum": 0.032332793554815,
+        "grad_norm": 0.8434897931963228,
+        "n_grads": 38
+      }
+    },
+    "gru_2d_sparse": {
+      "float32": {
+        "loss": 1.002386212348938,
+        "output_sum": 1749.8379492461681,
+        "output_absmax": 4.759849548339844,
+        "input_grad_sum": 0.11373912010458298,
+        "grad_norm": 2.1198200965552814,
+        "n_grads": 38
+      }
+    },
+    "s4d_portable_2d": {
+      "float32": {
+        "loss": 0.6335614919662476,
+        "output_sum": 64.81032895040698,
+        "output_absmax": 4.182639122009277,
+        "input_grad_sum": 0.08073959498506156,
+        "grad_norm": 0.8627356438818098,
+        "n_grads": 38
+      }
+    },
+    "s4d_upstream_2d": {
+      "float32": {
+        "loss": 0.5606191158294678,
+        "output_sum": 388.790186869679,
+        "output_absmax": 4.032330513000488,
+        "input_grad_sum": 0.11131489287072327,
+        "grad_norm": 0.8440731811330991,
+        "n_grads": 42
+      }
+    },
+    "s4_upstream_2d": {
+      "float32": {
+        "loss": 0.5503487586975098,
+        "output_sum": 343.6822957508266,
+        "output_absmax": 4.062697410583496,
+        "input_grad_sum": 0.1011621619691141,
+        "grad_norm": 0.8342575852522781,
+        "n_grads": 46
+      }
+    },
+    "mamba_portable_2d": {
+      "float32": {
+        "loss": 0.48611560463905334,
+        "output_sum": -120.93015982047655,
+        "output_absmax": 3.7346246242523193,
+        "input_grad_sum": 0.012844238022807986,
+        "grad_norm": 0.28551676446110036,
+        "n_grads": 46
+      }
+    },
+    "mamba_upstream_2d": {
+      "float32": {
+        "loss": 0.48611560463905334,
+        "output_sum": -120.93015173985623,
+        "output_absmax": 3.7346246242523193,
+        "input_grad_sum": 0.0128442388959229,
+        "grad_norm": 0.2855167661649821,
+        "n_grads": 46
+      }
+    },
+    "mamba2_2d": {
+      "float32": {
+        "loss": 1.4454578161239624,
+        "output_sum": 369.9832646995783,
+        "output_absmax": 4.905056953430176,
+        "input_grad_sum": 0.16860242729308084,
+        "grad_norm": 5.928436944383681,
+        "n_grads": 42
+      }
+    },
+    "mamba3_2d": {
+      "float32": {
+        "loss": 1.1397203207015991,
+        "output_sum": 1599.349276907742,
+        "output_absmax": 5.738320350646973,
+        "input_grad_sum": 0.026481781475013122,
+        "grad_norm": 9.480261377640016,
+        "n_grads": 42
+      }
+    },
+    "transformer_scan_2d": {
+      "float32": {
+        "loss": 19.46381187438965,
+        "output_sum": -293.49418672546744,
+        "output_absmax": 12.901665687561035,
+        "input_grad_sum": -0.4557149344473146,
+        "grad_norm": 31.15384332547461,
+        "n_grads": 54
+      }
+    },
+    "transformer_cafa_2d": {
+      "float32": {
+        "loss": 19.429950714111328,
+        "output_sum": -40.105077385902405,
+        "output_absmax": 13.832277297973633,
+        "input_grad_sum": -1.687932983506471,
+        "grad_norm": 21.61956248570444,
+        "n_grads": 94
+      }
+    },
+    "transformer_flatten_2d": {
+      "float32": {
+        "loss": 19.420814514160156,
+        "output_sum": -349.6461801379919,
+        "output_absmax": 12.919079780578613,
+        "input_grad_sum": -0.46635136764962226,
+        "grad_norm": 13.454731929791407,
+        "n_grads": 54
+      }
+    },
+    "cnn_2d_sparse": {
+      "float32": {
+        "loss": 0.9205924272537231,
+        "output_sum": 2583.741870545782,
+        "output_absmax": 5.100550651550293,
+        "input_grad_sum": 0.1577480350897531,
+        "grad_norm": 2.1297718900959635,
+        "n_grads": 18
+      }
+    },
+    "tcn_2d_sparse": {
+      "float32": {
+        "loss": 0.606166422367096,
+        "output_sum": 1940.9967103488743,
+        "output_absmax": 4.21469783782959,
+        "input_grad_sum": 0.1002397393604042,
+        "grad_norm": 0.7990484434874322,
+        "n_grads": 26
+      }
+    },
+    "mamba_upstream_3d": {
+      "float32": {
+        "loss": 0.6789306402206421,
+        "output_sum": -1026.1730913782958,
+        "output_absmax": 3.8567235469818115,
+        "input_grad_sum": -0.03764883164330968,
+        "grad_norm": 0.42821589986591196,
+        "n_grads": 68
+      }
+    },
+    "lstm_3d": {
+      "float32": {
+        "loss": 0.899200439453125,
+        "output_sum": 63.26894080033526,
+        "output_absmax": 4.041238307952881,
+        "input_grad_sum": -0.03430233454491827,
+        "grad_norm": 1.0845238212243868,
+        "n_grads": 38
+      }
+    }
+  }
+}

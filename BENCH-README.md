@@ -1,5 +1,24 @@
 # Device benchmarks — CUDA vs MPS
 
+> Three benchmarks, not one, and a corrected training recipe. The reasoning is
+> in [BENCHMARK-DESIGN.md](BENCHMARK-DESIGN.md); the short version is that
+> "do the devices agree?" and "how fast is it?" and "does it train the same?"
+> are different questions, and one run answering all three answers none of
+> them cleanly.
+>
+> | bench | command | question |
+> |---|---|---|
+> | **A — agreement** | `benchmarks/agreement.py` | do the devices compute the same thing? No optimiser, so nothing amplifies |
+> | **B — training** | `benchmarks/pretrain.py` | does it train to the same place? |
+> | **scorecard** | `benchmarks/scorecard.py` | how do the models compare on this task |
+>
+> Training now uses the recipe the upstream authors specify — AdamW,
+> `betas=(0.9, 0.95)`, `td.param_groups` reading their own `_optim` and
+> `_no_weight_decay` tags, linear warmup into cosine decay, gradient clipping.
+> The earlier run used plain Adam and ignored both sets of tags, which is why
+> it needed hand-picked per-family learning rates; one rate now trains all
+> sixteen.
+
 Two runs of the same sixteen models, trained identically on two machines:
 
 | directory | hardware | what runs there |

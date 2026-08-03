@@ -63,13 +63,18 @@ def sync(device: str) -> None:
         torch.mps.synchronize()
 
 
-# Learning rates are per family and chosen so that **every** model converges.
-# That is a requirement of the comparison, not a nicety: a diverging run
-# amplifies a 1e-7 arithmetic difference into an arbitrary one within a few
-# steps, and comparing two chaotic trajectories measures the chaos rather than
-# the devices. At 1e-2 the attention models and Mamba-3 blew up in three steps.
-LR_DEFAULT = 1e-2
-LR_ATTENTION = 1e-3
+# One recipe for every model, which is only possible because `td.param_groups`
+# reads the tags the upstream authors put on their own parameters: s4's
+# `_optim` and Mamba's `_no_weight_decay`. Training an SSM's `A` and `dt` at
+# the projection rate with weight decay is what made the earlier runs diverge
+# at 1e-2 and forced hand-picked per-family rates — which were themselves a
+# confound, since a device comparison should hold everything it is not
+# measuring fixed. See BENCHMARK-DESIGN.md.
+LR = 3e-3
+BETAS = (0.9, 0.95)
+WEIGHT_DECAY = 0.1
+GRAD_CLIP = 1.0
+WARMUP_FRACTION = 0.1
 
 
 # --- the matrix ------------------------------------------------------------
@@ -116,14 +121,12 @@ ZOO: dict[str, dict] = {
         "lat": sparse_2d,
     },
     "mamba2_2d": {
-        "lr": LR_ATTENTION,
         "build": lambda lat: td.Mamba2(
             64, 4, lat, d_input=1, mixer_kwargs={"d_state": 16, "headdim": 32}
         ),
         "lat": sparse_2d,
     },
     "mamba3_2d": {
-        "lr": LR_ATTENTION,
         "build": lambda lat: td.Mamba3(
             64, 4, lat, d_input=1, mixer_kwargs={"d_state": 64, "headdim": 32}
         ),
@@ -131,17 +134,14 @@ ZOO: dict[str, dict] = {
     },
     # --- attention, across all three compositions
     "transformer_scan_2d": {
-        "lr": LR_ATTENTION,
         "build": lambda lat: td.Transformer(32, 4, lat, d_input=1),
         "lat": sparse_2d,
     },
     "transformer_cafa_2d": {
-        "lr": LR_ATTENTION,
         "build": lambda lat: td.Transformer(32, 4, lat, d_input=1, method=td.cafa),
         "lat": sparse_2d,
     },
     "transformer_flatten_2d": {
-        "lr": LR_ATTENTION,
         "build": lambda lat: td.Transformer(32, 4, lat, d_input=1, method=td.flatten),
         "lat": sparse_2d,
     },
@@ -180,8 +180,14 @@ def train_one(name: str, cfg: dict, device: str, steps: int, batch: int, t_len: 
     n_params = sum(p.numel() for p in model.parameters())
 
     model, head = model.to(device), head.to(device)
-    lr = cfg.get("lr", LR_DEFAULT)
-    opt = torch.optim.Adam([*model.parameters(), *head.parameters()], lr=lr)
+    lr = cfg.get("lr", LR)
+    opt = torch.optim.AdamW(
+        td.param_groups(model, lr=lr, weight_decay=WEIGHT_DECAY)
+        + [{"params": list(head.parameters()), "lr": lr, "weight_decay": WEIGHT_DECAY}],
+        lr=lr,
+        betas=BETAS,
+    )
+    sched = td.warmup_cosine(opt, warmup=max(1, int(steps * WARMUP_FRACTION)), total=steps)
 
     mask = lat.mask(torch.float32).to(device)
     w_dim = lat.tensor_dim(lat.axis_names[-1])
@@ -200,7 +206,9 @@ def train_one(name: str, cfg: dict, device: str, steps: int, batch: int, t_len: 
         loss = (head(model(x)) - y).pow(2).mean()
         opt.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_([*model.parameters(), *head.parameters()], GRAD_CLIP)
         opt.step()
+        sched.step()
         losses.append(float(loss.detach()))
     sync(device)
     seconds = time.perf_counter() - started
@@ -219,6 +227,7 @@ def train_one(name: str, cfg: dict, device: str, steps: int, batch: int, t_len: 
             "name": name,
             "n_params": n_params,
             "lr": lr,
+            "recipe": "adamw+param_groups+warmup_cosine+clip",
             "steps": steps,
             "init_weight_norm": init_norm,
             "final_weight_norm": weight_norm(model),
