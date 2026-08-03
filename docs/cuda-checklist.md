@@ -1,10 +1,13 @@
 # CUDA verification checklist
 
-**Status: not yet run.** Everything in this library is pure torch and the
-device suite was written to run on whatever accelerator exists — but it has
-only ever *executed* on CPU and Apple Silicon (MPS). Until somebody runs this
-page on a CUDA machine, "works on CUDA" is a design claim here, not a tested
-one, and the README says so.
+**Status: not yet run.** The device suite was written to run on whatever
+accelerator exists — but it has only ever *executed* on CPU and Apple Silicon
+(MPS). Until somebody runs this page on a CUDA machine, "works on CUDA" is a
+design claim here, not a tested one, and the README says so.
+
+Since 0.3.1 that gap matters more than it did: the library ships the original
+authors' fused kernels and chooses between them and a portable path per call,
+and **not one line of that choice has executed on a GPU.**
 
 This is deliberately a checklist rather than a CI job: GitHub's GPU runners
 are paid, and the honest interim is a documented procedure that takes about
@@ -14,16 +17,58 @@ fifteen minutes on a free Colab T4.
 
 ## The short version
 
+Two commands on a free Colab T4, in a GPU runtime:
+
 ```python
-!pip install torch-dimensions safetensors pytest
-!python -c "import torch; print(torch.cuda.get_device_name(0))"
 !git clone --depth 1 https://github.com/triadastra/torch-dimensions
-!cd torch-dimensions && pytest tests/ -v
+%cd torch-dimensions
+!pip install -q -e ".[dev,upstream]" mamba-ssm causal-conv1d
+
+!python scripts/cuda_check.py     # every CUDA claim, with the number behind each
+!pytest tests/ -q                 # the suite itself
 ```
+
+`scripts/cuda_check.py` is the whole of this page as one runnable file: it
+prints `pass`, `fail`, `skip` or `info` per claim and exits non-zero if
+anything failed. It runs on CPU too, reporting `skip` with the reason, so the
+harness can be verified without a GPU — which is how it was written.
+
+`mamba-ssm` and `causal-conv1d` are what make the *fused* paths reachable.
+Without them the dispatch still works but always chooses the portable side,
+and the most valuable checks below turn into skips.
 
 The device suite (`tests/test_device.py`) picks up CUDA automatically and
 skips *visibly* when there is none, so a green run with no CUDA present proves
 nothing — check that the device tests report `cuda` and not `skipped`.
+
+## What is newly at stake since 0.3.1
+
+The library now ships the original authors' S4, Mamba-1, Mamba-2 and Mamba-3
+and picks per call between their fused CUDA kernels and a portable path. None
+of that has ever run on CUDA:
+
+- [ ] **`prefer_upstream` has never returned True.** The dispatch decides on
+      the tensor's device at call time. If it is wrong, *every* CUDA user gets
+      the portable path silently — or worse, a CPU tensor reaches a CUDA
+      kernel. Both directions are checked.
+
+- [ ] **No fused kernel has ever executed.** The vendored Mamba-1/2 blocks
+      take upstream's fused route when `mamba_ssm` imports; the check compares
+      each against its own CPU reference on the same weights.
+
+- [ ] **Mamba-3's transcription has never met the kernel it came from.**
+      Mamba-3 ships upstream as Triton alone, so
+      `mixers/mamba3_compat.py` is *our* rewrite of the recurrence. On CPU and
+      MPS it is checked against a second independent form (3e-15), a third
+      direct sum (2e-16) and gradcheck — but never against their kernel,
+      because no machine here can run one. This is the check that closes that
+      gap, and the only one on this page that cannot be approximated
+      elsewhere. Expect agreement at bfloat16's own resolution rather than
+      float epsilon: their kernel runs bf16 with PTX `cos/sin/tanh`
+      approximations, ours runs fp32 with exact functions.
+
+- [ ] **`TD_FORCE_TORCH_KERNELS=1` exists to make the fallback testable on a
+      CUDA box** and has never been used on one.
 
 ## What each item is actually checking
 
@@ -87,11 +132,11 @@ nothing — check that the device tests report `cuda` and not `skipped`.
 
 ## What this does *not* cover
 
-Fused kernels. `mamba-ssm` and `causal-conv1d` are CUDA-only and are not
-wired in yet (PLAN.md Track C2). When they are, the rule is fixed in advance:
-**the portable path is the reference, and the fused path must agree with it in
-the conformance suite on the same machine.** A fast path whose only test is
-"it ran" does not ship.
+Training to convergence on CUDA, and any performance claim beyond the
+benchmark rows above. The rule for fast paths is unchanged and is what the
+comparisons above implement: **the portable path is the reference, and the
+fused path must agree with it on the same machine.** A fast path whose only
+test is "it ran" does not ship.
 
 ## Reporting back
 

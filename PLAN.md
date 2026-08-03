@@ -420,7 +420,8 @@ The library emits a versioned JSON spec (`td.spec`, SPEC_VERSION 1); the viewer 
 ## C1 — CUDA verification · M · **procedure written, not yet run**
 
 - [x] The procedure exists as [docs/cuda-checklist.md](docs/cuda-checklist.md): what to run, what each item protects, and what it deliberately does not cover. The README now says CUDA is a design claim rather than a test result, which it should have said from the start.
-- [ ] Run it. Fifteen minutes on a free Colab T4; the device suite was built to run there unchanged. **Nothing in this project has executed a single CUDA kernel.**
+- [x] The procedure is now one runnable file, `scripts/cuda_check.py`: every CUDA claim with the number behind it, `skip` with a reason where there is no device, non-zero exit on any failure. Verified on CPU (1 pass, 14 skips) so the GPU run cannot fail on a harness bug.
+- [ ] Run it. Two commands on a free Colab T4. **Nothing in this project has executed a single CUDA kernel** — and since 0.3.1 that includes the whole fused-vs-portable dispatch and Mamba-3's transcription, which has never met the Triton kernel it was transcribed from.
 - [ ] The bitwise rank-1 LSTM claim re-checked under cuDNN (expected: holds per single layer; document whatever is true).
 - [ ] fp16/bf16/AMP conformance additions: the relative-cancellation guard was *designed* dtype-aware; prove it at fp16 where the accidental-safety finding (rounding to exact zero) came from.
 - [ ] A `gpu` CI lane (GitHub GPU runners are paid — decide when Phase 7 fast paths land; until then, a documented manual Colab checklist per release).

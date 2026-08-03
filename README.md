@@ -287,6 +287,28 @@ the two agree numerically — the pipeline's S4D kernel matches ours **bitwise**
 with shared parameters, and that agreement is itself a CI test
 (`tests/test_vendored.py`).
 
+## Device benchmarks
+
+Sixteen models trained identically on two machines, for comparison:
+
+| directory | hardware |
+|---|---|
+| `MPS bench` | Apple Mac Studio, M1 Ultra (Metal / MPS) |
+| `CUDA bench` | NVIDIA RTX 5090 |
+
+Every model is built on CPU under one fixed seed and only then moved to the
+device, and every batch is drawn on CPU — so both machines start from
+bit-identical weights on bit-identical data and every difference is
+arithmetic. On CUDA the vendored models take the authors' fused kernels while
+MPS takes the reference path, which makes those rows a fused-vs-reference
+check rather than merely a device one. See [BENCH-README.md](BENCH-README.md)
+for what the comparison can and cannot show.
+
+```bash
+python benchmarks/pretrain.py --out "CUDA bench"
+python benchmarks/compare.py "MPS bench" "CUDA bench" --out COMPARISON.md
+```
+
 ## License
 
 Apache-2.0, © 2026 Celsia Juilyn Fan. [NOTICE](NOTICE) carries the full

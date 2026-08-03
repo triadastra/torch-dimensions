@@ -345,3 +345,16 @@ def test_a_broken_plugin_warns_instead_of_breaking_the_import(monkeypatch):
     with pytest.warns(UserWarning, match="failed to load"):
         cfgmod._load_entry_points()
     assert "broken" not in cfgmod.MODELS
+
+
+def test_the_package_reports_the_version_it_was_built_as():
+    """`__version__` used to be a literal in `__init__.py`, and it said 0.1.0
+    through the 0.2.0 and 0.3.1 releases: a published wheel misreporting its
+    own version, which is precisely the string a bug report quotes. It comes
+    from the installed metadata now, so there is one source of truth."""
+    from importlib.metadata import version
+
+    import torch_dimensions as td
+
+    assert td.__version__ == version("torch-dimensions")
+    assert td.__version__ != "0.0.0+source", "the package under test is not installed"

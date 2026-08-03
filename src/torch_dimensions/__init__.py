@@ -58,7 +58,17 @@ from torch_dimensions.plan import AxisCoverage, Coverage, ScanPlan, Step
 from torch_dimensions.spec import SPEC_VERSION as spec_version
 from torch_dimensions.spec import spec
 
-__version__ = "0.1.0"
+# Read from the installed metadata rather than written here. The literal that
+# used to live at this line said 0.1.0 through the 0.2.0 and 0.3.1 releases —
+# a published wheel that misreported its own version, which is exactly the
+# thing a bug report quotes. One source of truth, in pyproject.toml.
+try:
+    from importlib.metadata import PackageNotFoundError as _NotFound
+    from importlib.metadata import version as _dist_version
+
+    __version__ = _dist_version("torch-dimensions")
+except _NotFound:  # pragma: no cover - a source tree that was never installed
+    __version__ = "0.0.0+source"
 
 __all__ = [
     "CNN",

@@ -59,10 +59,29 @@ class Flatten(nn.Module):
             time at all, which is right for per-frame encoders and wrong for
             forecasting.
 
+    **This composition supplies no positional information, and with a
+    permutation-invariant mixer that makes the model permutation-invariant
+    too.** Attention over a set is a set function: flattened and unlabelled,
+    the cells are indistinguishable, so a task whose answer depends on *where*
+    a cell is — a cumulative sum along an axis, say — is not merely hard here
+    but unlearnable. Measured, not argued: on a dense lattice, permuting an
+    axis of the input and un-permuting the output changes nothing beyond float
+    noise (~1e-6).
+
+    That is a property of joint attention rather than a defect of this class,
+    and it is why :class:`~torch_dimensions.ViT` — the flatten-family model
+    meant for real use — adds a positional embedding of its own. Reach for a
+    mixer that carries position (or add an embedding to the features) before
+    using ``flatten`` on anything positional. The scan and kernel families do
+    not have this problem: they process an axis in order, so position is
+    implicit in the traversal.
+
     On a sparse lattice the sequence contains only cells that exist. Absent
     cells never reach the mixer, so their values cannot influence anything —
     the same guarantee the other families give by masking, obtained here by
-    construction.
+    construction. (Note that masking *does* break the symmetry above, since
+    the pattern of present cells is itself information — but incidentally,
+    not usefully.)
     """
 
     def __init__(
