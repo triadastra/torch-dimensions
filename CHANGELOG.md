@@ -6,7 +6,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-08-03
+## [0.3.1] - 2026-08-03
 
 ### Added
 - **`td.viz.weights(model)` and a weights view in the viewer** — the
