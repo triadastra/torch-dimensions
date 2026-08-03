@@ -27,11 +27,13 @@ from torch_dimensions.data.collate import Batch, collate_lattice
 from torch_dimensions.data.coords import CoordMap, from_coords
 from torch_dimensions.data.memmap import MemmapSource, Normalizer, masked_stats
 from torch_dimensions.data.source import LatticeDataset, LatticeSource, Sample, TensorSource
+from torch_dimensions.data.sparsity import SparsityReport, sparsity
 from torch_dimensions.data.table import LatticeTable, from_table
 from torch_dimensions.data.window import LatticeWindow, Window
 
 __all__ = [
     "Batch",
+    "SparsityReport",
     "CoordMap",
     "LatticeDataset",
     "LatticeSource",
@@ -43,6 +45,7 @@ __all__ = [
     "TensorSource",
     "Window",
     "collate_lattice",
+    "sparsity",
     "from_coords",
     "from_table",
     "masked_stats",

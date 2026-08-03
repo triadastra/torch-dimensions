@@ -161,6 +161,13 @@ def main() -> None:
     mask = lat.mask(torch.float32).to(device)
     w_dim = lat.tensor_dim(target_axis)
 
+    # Which flat positions are present, in the order the viewer rebuilds them:
+    # `parseSpec` walks the flattened lattice and keeps the present cells, so a
+    # present-only array in C order lines up index for index with the cells it
+    # draws. Sending the absent ones too would be padding the wire with values
+    # the model is not allowed to see.
+    present = mask.reshape(-1).bool().cpu()
+
     def draw(g: torch.Generator) -> tuple[torch.Tensor, torch.Tensor]:
         x = torch.randn(batch, t_len, *lat.shape, 1, generator=g).to(device) * mask
         return x, x.cumsum(dim=w_dim) * mask
@@ -207,10 +214,23 @@ def main() -> None:
             break
 
         x, y = draw(g)
-        loss = (head(model(x)) - y).pow(2).mean()
+        out = head(model(x))
+        loss = (out - y).pow(2).mean()
         opt.zero_grad()
         loss.backward()
         opt.step()
+
+        # What the lattice actually holds this step, for the viewer's
+        # `data_show` labels: one sample, the last timestep, present cells
+        # only. Reusing the training forward rather than running a second one —
+        # a viewer that changes the training cost is measuring itself.
+        with torch.no_grad():
+            flat = lambda t: t[0, -1].reshape(-1)[present].cpu()  # noqa: E731
+            run["cells"] = {
+                "step": step,
+                "pred": [round(v, 3) for v in flat(out.detach()).tolist()],
+                "true": [round(v, 3) for v in flat(y).tolist()],
+            }
 
         entry: dict = {"step": step, "loss": float(loss.detach())}
         if step % EVAL_EVERY == 0 or step == STEPS - 1:

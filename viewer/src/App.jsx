@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import Analytics from "./components/Analytics.jsx";
+import ModelView from "./components/ModelView.jsx";
 import Scene from "./components/Scene.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import cafaHybrid from "./samples/cafa_hybrid.json";
@@ -18,7 +20,14 @@ const SAMPLES = {
   "ViT · joint attention over patches": vitJoint,
 };
 
+// Seconds per layer with no run attached. With one, the sweep is clocked to
+// the training itself — see `layerSeconds` below.
 const LAYER_SECONDS = 2.2;
+// A full pass over the layers is one training step, so the animation can run
+// at the training's own rate. Clamped at both ends: a fast step rate turns the
+// sweep into a strobe that shows nothing, and a slow one into a still image.
+const MIN_LAYER = 0.05;
+const MAX_LAYER = 4.0;
 export const LIVE_KEY = "● live run";
 export const SHOWN_KEY = "● this model";
 
@@ -30,6 +39,11 @@ export default function App() {
   const [error, setError] = useState(null);
   const [live, setLive] = useState(null);
   const [shown, setShown] = useState(null);
+  const [tab, setTab] = useState("model");
+  const [dataShow, setDataShow] = useState(false);
+  const [dockOpen, setDockOpen] = useState(true);
+  // Measured throughput, shown in the dock. Also what the sweep is clocked to.
+  const [stepRate, setStepRate] = useState(null);
   const liveRunId = useRef(null);
 
   // progress is animation state, not UI state: it lives in a ref the render
@@ -37,7 +51,15 @@ export default function App() {
   const anim = useRef({ layer: 0, progress: 0 });
   anim.current.layer = layerIndex;
 
+  // Measured seconds per training step, and the per-layer duration derived
+  // from it. Both live in refs: the render loop reads them every frame, and
+  // re-running the effect on every metrics poll would restart the animation.
+  const stepClock = useRef({ step: -1, at: 0, seconds: null });
+  const layerSeconds = useRef(LAYER_SECONDS);
+
   const nLayers = parsed.spec.layers.length;
+  const parsedRef = useRef(parsed);
+  parsedRef.current = parsed;
 
   useEffect(() => {
     if (!playing) return undefined;
@@ -46,7 +68,7 @@ export default function App() {
     const tick = (now) => {
       const dt = (now - last) / 1000;
       last = now;
-      anim.current.progress += dt / LAYER_SECONDS;
+      anim.current.progress += dt / layerSeconds.current;
       if (anim.current.progress >= 1) {
         anim.current.progress = 0;
         setLayerIndex((i) => (i + 1) % nLayers);
@@ -119,6 +141,30 @@ export default function App() {
         if (!r.ok) return;
         const j = await r.json();
         setLive(j);
+
+        // Clock the sweep to the run. One pass over every layer is one
+        // training step, so the wavefront moves at the rate the model is
+        // actually being trained rather than at a decorative constant.
+        const last = j.metrics?.length ? j.metrics[j.metrics.length - 1] : null;
+        const clock = stepClock.current;
+        if (last && j.status === "training") {
+          const now = performance.now();
+          if (clock.step >= 0 && last.step > clock.step) {
+            const per = (now - clock.at) / 1000 / (last.step - clock.step);
+            // Smoothed: a single slow poll should not visibly jerk the sweep.
+            clock.seconds = clock.seconds ? clock.seconds * 0.6 + per * 0.4 : per;
+          }
+          clock.step = last.step;
+          clock.at = now;
+        } else {
+          clock.step = -1;
+          clock.seconds = null;
+        }
+        const layers = Math.max(1, parsedRef.current.spec.layers.length);
+        layerSeconds.current = clock.seconds
+          ? Math.min(MAX_LAYER, Math.max(MIN_LAYER, clock.seconds / layers))
+          : LAYER_SECONDS;
+        setStepRate(clock.seconds ? 1 / clock.seconds : null);
         if (j.started !== liveRunId.current) {
           liveRunId.current = j.started;
           setSampleKey(LIVE_KEY);
@@ -144,7 +190,17 @@ export default function App() {
     [loadSpec],
   );
 
-  const scene = useMemo(() => <Scene parsed={parsed} anim={anim} />, [parsed]);
+  const scene = useMemo(
+    () => (
+      <Scene
+        parsed={parsed}
+        anim={anim}
+        dataShow={dataShow}
+        cellData={sampleKey === LIVE_KEY ? live?.cells : null}
+      />
+    ),
+    [parsed, dataShow, sampleKey, live],
+  );
 
   return (
     <div style={{ display: "flex", height: "100%" }}>
@@ -162,36 +218,59 @@ export default function App() {
         sampleKey={sampleKey}
         onSample={onSample}
         onFile={onFile}
-        live={sampleKey === LIVE_KEY ? live : null}
         anim={anim}
+        tab={tab}
+        onTab={setTab}
+        dataShow={dataShow}
+        onToggleData={() => setDataShow((d) => !d)}
       />
-      <div
-        style={{
-          flex: 1,
-          position: "relative",
-          // The canvas is alpha; this is the sky behind it. A flat fill made
-          // the far cubes sit on nothing once fog took their contrast away.
-          background:
-            "radial-gradient(120% 90% at 62% 32%, #16203a 0%, #0d1220 45%, #070a10 100%)",
-        }}
-      >
-        {scene}
-        {error && (
+      {/* The main area is split: what the model does to the lattice on the
+          left, what the model is on the right, and the run's analytics across
+          the bottom of both. */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
           <div
             style={{
-              position: "absolute",
-              top: 14,
-              left: 14,
-              background: "#2a1418",
-              border: "1px solid #7f1d1d",
-              color: "#fca5a5",
-              borderRadius: 8,
-              padding: "8px 14px",
+              flex: 1,
+              position: "relative",
+              minWidth: 0,
+              // The canvas is alpha; this is the sky behind it. A flat fill made
+              // the far cubes sit on nothing once fog took their contrast away.
+              background:
+                "radial-gradient(120% 90% at 62% 32%, #16203a 0%, #0d1220 45%, #070a10 100%)",
             }}
           >
-            {error}
+            {scene}
+            {error && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 14,
+                  left: 14,
+                  background: "#2a1418",
+                  border: "1px solid #7f1d1d",
+                  color: "#fca5a5",
+                  borderRadius: 8,
+                  padding: "8px 14px",
+                }}
+              >
+                {error}
+              </div>
+            )}
           </div>
-        )}
+          <ModelView
+            parsed={parsed}
+            layerIndex={layerIndex}
+            onSelectLayer={selectLayer}
+          />
+        </div>
+        <Analytics
+          live={sampleKey === LIVE_KEY ? live : null}
+          parsed={parsed}
+          stepRate={stepRate}
+          open={dockOpen}
+          onToggle={() => setDockOpen((o) => !o)}
+        />
       </div>
     </div>
   );

@@ -9,6 +9,51 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.3.0] - 2026-08-03
 
 ### Added
+- **`td.data.sparsity(...)`** — a pre-run over the data that answers "is this
+  lattice actually sparse", because that is a property of the data rather than
+  a setting to declare. Takes a `Lattice`, a `LatticeTable`, a boolean mask, or
+  a raw tensor whose non-finite entries mark absence (`missing=` for a sentinel
+  such as 0.0). `report.percent_sparse` is the headline; `report.summary()`
+  prints it with a per-axis breakdown that separates scattered gaps from one
+  whole slice missing — the second is usually a join that went wrong upstream.
+  An ambiguous lattice placement inside a tensor is refused rather than
+  guessed, since silently picking is how a transposed axis survives to
+  training.
+- **The viewer splits in half: the lattice on the left, the model on the
+  right.** The model screen draws the layer stack as a flow — input shape into
+  the model into output shape — with one node per layer carrying its axis and
+  direction, its mixer, and its weight count as a bar scaled against the
+  heaviest layer. The mechanisms actually in play are named (composition
+  method, mixer types, families present), and when the layer weights do not add
+  up to the model's total, the remainder is labelled "outside layers" rather
+  than left to quietly disagree. Selecting a layer on either side selects it on
+  both.
+- **`data_show`** — a toggle that labels every cell with its axis names and
+  indices, tinted by which side of the wavefront it is on. Labels are drawn
+  from a fixed pool assigned to the nearest cells and then thinned in *screen*
+  space, so none of them overlap and zooming in reveals more; a label per cell
+  across a rank-4 lattice is thousands of text meshes and an unreadable thicket
+  besides.
+- **Live cell contents.** With a run attached, `examples/viewer_live.py`
+  streams the prediction and target for every present cell each step — reusing
+  the training forward pass, since a viewer that changes the training cost is
+  measuring itself — and the labels show them under the coordinates. The
+  viewer checks the array length against the spec before using it: numbers
+  against the wrong cells would be worse than no numbers.
+- **The sweep runs at training speed.** One pass over every layer is one
+  training step, so the wavefront is clocked to the measured step rate rather
+  than a decorative constant, clamped at both ends because a fast run is a
+  strobe and a slow one a still image. The measured rate is shown in the dock
+  as steps/s.
+- **An analytics dock** across the bottom of both halves: status, step, losses,
+  throughput, run controls, and a loss curve that now has room to be a curve
+  with a labelled log axis. It sizes itself to the space available — a
+  hard-coded chart width made the dock wider than its container and pushed the
+  sidebar off the left edge of the window.
+
+### Changed
+- **The sidebar is tabbed** (model / layers / data) instead of one column
+  holding everything at once, with the run metrics moved out to the dock.
 - **The viewer reads as motion instead of a slideshow.** The wavefront is a
   gaussian that travels and swells the cells it passes, rather than a hard
   stripe switching cells between two flat states; behind it a wake decays

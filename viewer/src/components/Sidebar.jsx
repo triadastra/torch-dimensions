@@ -1,19 +1,45 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import { fmtParams, latticeAxisOf } from "../spec.js";
+
+// One column tried to hold the model summary, the sweep directions, the run
+// metrics and every layer at once, so everything was cramped and the layer
+// list — the part that changes as you watch — sat below the fold. Tabs put one
+// concern on screen at a time; the run metrics moved out entirely, to the dock
+// under the scene where a training curve has room to be a curve.
 
 const S = {
   panel: {
     width: 320,
     height: "100%",
-    overflowY: "auto",
-    padding: "18px 20px",
+    display: "flex",
+    flexDirection: "column",
     background: "linear-gradient(180deg, #131926 0%, #10141d 42%, #0e121a 100%)",
     borderRight: "1px solid #1e2635",
     flexShrink: 0,
   },
+  head: { padding: "16px 18px 0" },
+  body: { flex: 1, overflowY: "auto", padding: "4px 18px 18px" },
   h1: { fontSize: 15, fontWeight: 650, letterSpacing: 0.2, marginBottom: 2 },
-  sub: { color: "#8b95a8", fontSize: 12, marginBottom: 14 },
+  sub: { color: "#8b95a8", fontSize: 12, marginBottom: 12 },
+  tabs: {
+    display: "flex",
+    gap: 2,
+    padding: "0 12px",
+    borderBottom: "1px solid #1e2635",
+  },
+  tab: (active) => ({
+    flex: 1,
+    background: "none",
+    border: "none",
+    borderBottom: active ? "2px solid #ffc061" : "2px solid transparent",
+    color: active ? "#e8eef8" : "#7d8aa3",
+    fontSize: 12.5,
+    fontWeight: active ? 650 : 500,
+    padding: "9px 4px",
+    cursor: "pointer",
+    letterSpacing: 0.3,
+  }),
   section: {
     color: "#5d6b84",
     fontSize: 10.5,
@@ -59,13 +85,12 @@ const S = {
     boxShadow: active ? "inset 3px 0 0 #ffc061" : "none",
   }),
   // The sweep's progress *through the active layer*, drawn behind its row.
-  // The 3-D wavefront already shows this, but only for whichever axis is on
-  // screen; here it is legible even when the camera is pointed elsewhere.
   layerFill: {
     position: "absolute",
     inset: 0,
     transformOrigin: "left center",
-    background: "linear-gradient(90deg, rgba(255,192,97,0.20), rgba(255,192,97,0.05))",
+    background:
+      "linear-gradient(90deg, rgba(255,192,97,0.20), rgba(255,192,97,0.05))",
     pointerEvents: "none",
   },
   chip: {
@@ -86,27 +111,6 @@ const S = {
     fontSize: 13,
     flex: 1,
   },
-  btnStart: {
-    background: "#173423",
-    color: "#9ece6a",
-    border: "1px solid #2f6e42",
-    borderRadius: 6,
-    padding: "9px 12px",
-    cursor: "pointer",
-    fontSize: 13.5,
-    fontWeight: 650,
-    width: "100%",
-  },
-  btnStop: {
-    background: "#2a1418",
-    color: "#fca5a5",
-    border: "1px solid #7f1d1d",
-    borderRadius: 6,
-    padding: "7px 12px",
-    cursor: "pointer",
-    fontSize: 13,
-    flex: 1,
-  },
   select: {
     background: "#1c2536",
     color: "#d6dbe4",
@@ -116,36 +120,41 @@ const S = {
     fontSize: 13,
     width: "100%",
   },
-  dot: (color) => ({
-    display: "inline-block",
-    width: 8,
-    height: 8,
-    borderRadius: 99,
-    background: color,
-    marginRight: 7,
+  switch: (on) => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    background: on ? "#1d2b21" : "#1c2536",
+    color: on ? "#9ece6a" : "#d6dbe4",
+    border: `1px solid ${on ? "#2f6e42" : "#2b3850"}`,
+    borderRadius: 8,
+    padding: "10px 12px",
+    cursor: "pointer",
+    fontSize: 13.5,
+    fontWeight: 600,
+    textAlign: "left",
   }),
-  barOuter: {
-    height: 6,
+  knob: (on) => ({
+    width: 30,
+    height: 17,
     borderRadius: 99,
-    background: "#0c1018",
-    border: "1px solid #232d40",
-    margin: "8px 0 2px",
-    overflow: "hidden",
-  },
-  barInner: (pct, color) => ({
-    height: "100%",
-    width: `${pct}%`,
-    background: color,
-    transition: "width 0.4s",
+    background: on ? "#2f6e42" : "#2b3850",
+    position: "relative",
+    flexShrink: 0,
+    transition: "background 160ms ease",
   }),
-};
-
-const STATUS = {
-  waiting: { color: "#e0af68", label: "waiting for start" },
-  training: { color: "#e8963a", label: "training" },
-  paused: { color: "#7aa2f7", label: "paused" },
-  done: { color: "#9ece6a", label: "done" },
-  stopped: { color: "#8b95a8", label: "stopped" },
+  dot: (on) => ({
+    position: "absolute",
+    top: 2,
+    left: on ? 15 : 2,
+    width: 13,
+    height: 13,
+    borderRadius: 99,
+    background: on ? "#9ece6a" : "#7d8aa3",
+    transition: "left 160ms ease",
+  }),
+  note: { color: "#5d6b84", fontSize: 11.5, marginTop: 8, lineHeight: 1.5 },
 };
 
 // Progress through the active layer, written straight to the DOM node. Going
@@ -166,202 +175,14 @@ function LayerFill({ anim }) {
   return <div ref={ref} style={S.layerFill} />;
 }
 
-
-function LossChart({ metrics }) {
-  const w = 276;
-  const h = 84;
-  const pad = 4;
-  const logs = metrics.map((m) => Math.log10(Math.max(m.loss, 1e-8)));
-  const lo = Math.min(...logs);
-  const hi = Math.max(...logs, lo + 1e-6);
-  const x = (i) => pad + (i * (w - 2 * pad)) / Math.max(metrics.length - 1, 1);
-  const y = (v) => pad + ((hi - v) * (h - 2 * pad)) / (hi - lo);
-  const line = logs
-    .map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`)
-    .join(" ");
-  const held = metrics
-    .map((m, i) =>
-      m.held_out == null ? null : [i, Math.log10(Math.max(m.held_out, 1e-8))],
-    )
-    .filter(Boolean);
-  const heldLine = held
-    .map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`)
-    .join(" ");
-  return (
-    <svg width={w} height={h} style={{ display: "block", marginTop: 8 }}>
-      <polyline points={line} fill="none" stroke="#e8963a" strokeWidth="1.6" />
-      {held.length > 1 && (
-        <polyline
-          points={heldLine}
-          fill="none"
-          stroke="#7aa2f7"
-          strokeWidth="1.4"
-          strokeDasharray="4 3"
-        />
-      )}
-    </svg>
-  );
-}
-
-function RunPanel({ live }) {
-  const [sendError, setSendError] = useState(null);
-  const post = useCallback(
-    (action) => {
-      setSendError(null);
-      fetch(`${live.control}/control`, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ action }),
-      }).catch(() =>
-        setSendError(
-          "control server unreachable — is the training script running?",
-        ),
-      );
-    },
-    [live.control],
-  );
-
-  const st = STATUS[live.status] ?? STATUS.stopped;
-  const last = live.metrics?.length
-    ? live.metrics[live.metrics.length - 1]
-    : null;
-  const lastHeld = live.metrics
-    ? [...live.metrics].reverse().find((e) => e.held_out != null)
-    : null;
-  const pct =
-    live.total_steps && last ? ((last.step + 1) / live.total_steps) * 100 : 0;
-
-  return (
-    <div style={{ ...S.card, borderColor: "#2c3b58" }}>
-      <div style={S.row}>
-        <span style={S.key}>
-          <span style={S.dot(st.color)} />
-          {st.label}
-        </span>
-        <span style={S.chip}>{live.device}</span>
-      </div>
-      <div style={S.row}>
-        <span style={S.key}>task</span>
-        <span style={{ fontSize: 11, color: "#8b95a8", textAlign: "right" }}>
-          {live.task}
-        </span>
-      </div>
-
-      {live.status === "waiting" && (
-        <div style={{ marginTop: 10 }}>
-          <button style={S.btnStart} onClick={() => post("start")}>
-            ▶ start training
-          </button>
-          <div style={{ fontSize: 11.5, color: "#8b95a8", marginTop: 6 }}>
-            the model is built and idle — nothing runs until you press start
-          </div>
-        </div>
-      )}
-
-      {(live.status === "training" || live.status === "paused") && (
-        <div style={S.controls}>
-          {live.status === "training" ? (
-            <button style={S.btn} onClick={() => post("pause")}>
-              ⏸ pause
-            </button>
-          ) : (
-            <button style={S.btn} onClick={() => post("resume")}>
-              ▶ resume
-            </button>
-          )}
-          <button style={S.btnStop} onClick={() => post("stop")}>
-            ■ stop
-          </button>
-        </div>
-      )}
-
-      {last && (
-        <>
-          <div style={S.barOuter}>
-            <div style={S.barInner(pct, st.color)} />
-          </div>
-          <div style={S.row}>
-            <span style={S.key}>step</span>
-            <span>
-              {last.step + 1} / {live.total_steps}
-            </span>
-          </div>
-          <div style={S.row}>
-            <span style={S.key}>train loss</span>
-            <span style={{ color: "#e8963a" }}>{last.loss.toFixed(5)}</span>
-          </div>
-          {lastHeld && (
-            <div style={S.row}>
-              <span style={S.key}>held-out</span>
-              <span style={{ color: "#7aa2f7" }}>
-                {lastHeld.held_out.toFixed(5)}
-              </span>
-            </div>
-          )}
-          <LossChart metrics={live.metrics} />
-        </>
-      )}
-
-      {sendError && <div style={S.warn}>{sendError}</div>}
-    </div>
-  );
-}
-
-export default function Sidebar({
-  parsed,
-  layerIndex,
-  playing,
-  onTogglePlay,
-  onSelectLayer,
-  samples,
-  sampleKey,
-  onSample,
-  onFile,
-  live,
-  anim,
-}) {
+function ModelTab({ parsed }) {
   const { spec } = parsed;
   const m = spec.model;
   const cells = spec.lattice.cells;
-  const dirGlyph = (r) => (r ? "←" : "→");
-
   return (
-    <div style={S.panel} className="td-panel">
-      <div style={S.h1}>torch-dimensions</div>
-      <div style={S.sub}>architecture viewer &middot; spec v{spec.version}</div>
-
-      <select
-        style={S.select}
-        value={sampleKey}
-        onChange={(e) => onSample(e.target.value)}
-      >
-        {Object.keys(samples).map((k) => (
-          <option key={k} value={k}>
-            {k}
-          </option>
-        ))}
-      </select>
-      <div style={{ margin: "8px 0 0" }}>
-        <label style={{ ...S.btn, display: "inline-block", flex: "none" }}>
-          open spec JSON
-          <input
-            type="file"
-            accept=".json"
-            style={{ display: "none" }}
-            onChange={(e) => e.target.files[0] && onFile(e.target.files[0])}
-          />
-        </label>
-      </div>
-
-      {live && (
-        <>
-          <div style={S.section}>run</div>
-          <RunPanel live={live} />
-        </>
-      )}
-
+    <>
       <div style={S.section}>model</div>
-      <div style={S.card}>
+      <div style={S.card} className="td-card">
         <div style={S.row}>
           <span style={S.key}>model</span>
           <b>{m.kind}</b>
@@ -406,7 +227,7 @@ export default function Sidebar({
       )}
 
       <div style={S.section}>directions</div>
-      <div style={S.card}>
+      <div style={S.card} className="td-card">
         {Object.entries(spec.sweeps.directions).map(([axis, dir]) => (
           <div key={axis} style={S.row}>
             <span style={S.key}>{axis}</span>
@@ -435,16 +256,39 @@ export default function Sidebar({
           </div>
         ))}
       </div>
+    </>
+  );
+}
 
+function LayersTab({
+  parsed,
+  layerIndex,
+  playing,
+  onTogglePlay,
+  onSelectLayer,
+  anim,
+}) {
+  const { spec } = parsed;
+  const dirGlyph = (r) => (r ? "←" : "→");
+  return (
+    <>
       <div style={S.section}>sweep animation</div>
-      <div style={{ ...S.controls, marginTop: 0, marginBottom: 6 }}>
+      <div style={{ ...S.controls, marginTop: 0, marginBottom: 8 }}>
         <button style={S.btn} className="td-btn" onClick={onTogglePlay}>
           {playing ? "⏸ pause" : "▶ play"}
         </button>
-        <button style={S.btn} className="td-btn" onClick={() => onSelectLayer(layerIndex - 1)}>
+        <button
+          style={S.btn}
+          className="td-btn"
+          onClick={() => onSelectLayer(layerIndex - 1)}
+        >
           ◀ prev
         </button>
-        <button style={S.btn} className="td-btn" onClick={() => onSelectLayer(layerIndex + 1)}>
+        <button
+          style={S.btn}
+          className="td-btn"
+          onClick={() => onSelectLayer(layerIndex + 1)}
+        >
           next ▶
         </button>
       </div>
@@ -471,9 +315,7 @@ export default function Sidebar({
             {joint ? (
               <>
                 <b style={{ color: "#5eead4" }}>{(l.axes ?? []).join(" ⊕ ")}</b>
-                <span style={S.key}>
-                  {l.tokens ? `${l.tokens} tokens` : ""}
-                </span>
+                <span style={S.key}>{l.tokens ? `${l.tokens} tokens` : ""}</span>
               </>
             ) : kernel ? (
               <>
@@ -493,6 +335,154 @@ export default function Sidebar({
           </div>
         );
       })}
+    </>
+  );
+}
+
+function DataTab({ parsed, dataShow, onToggleData }) {
+  const { spec } = parsed;
+  const cells = spec.lattice.cells;
+  const names = (spec.lattice.names ?? []).slice(spec.lattice.time ? 1 : 0);
+  return (
+    <>
+      <div style={S.section}>cell data</div>
+      <button style={S.switch(dataShow)} className="td-btn" onClick={onToggleData}>
+        <span style={S.knob(dataShow)}>
+          <span style={S.dot(dataShow)} />
+        </span>
+        data_show — label every cell
+      </button>
+      <div style={S.note}>
+        Each cell is labelled with its axis names and indices, and tinted by
+        which side of the wavefront it is on. Only the cells nearest the camera
+        get one: a label per cell across a rank-4 lattice is thousands of text
+        meshes and an unreadable thicket besides. Zoom in to name more of them.
+      </div>
+
+      <div style={S.section}>axes</div>
+      <div style={S.card} className="td-card">
+        {parsed.shape.map((size, i) => (
+          <div key={i} style={S.row}>
+            <span style={S.key}>{names[i] ?? `dim${i}`}</span>
+            <span>{size}</span>
+          </div>
+        ))}
+        {spec.lattice.time && (
+          <div style={S.row}>
+            <span style={S.key}>time</span>
+            <span style={{ color: "#8b95a8" }}>dynamic</span>
+          </div>
+        )}
+      </div>
+
+      <div style={S.section}>presence</div>
+      <div style={S.card} className="td-card">
+        <div style={S.row}>
+          <span style={S.key}>present</span>
+          <span style={{ color: "#9ece6a" }}>{cells.present}</span>
+        </div>
+        <div style={S.row}>
+          <span style={S.key}>absent</span>
+          <span style={{ color: cells.dense ? "#8b95a8" : "#e0af68" }}>
+            {cells.total - cells.present}
+          </span>
+        </div>
+        <div style={S.row}>
+          <span style={S.key}>total</span>
+          <span>{cells.total}</span>
+        </div>
+      </div>
+      {!cells.dense && (
+        <div style={S.note}>
+          Absent cells are not drawn at all, and their values can never reach an
+          output — that is tested bitwise, not asserted.
+        </div>
+      )}
+    </>
+  );
+}
+
+const TABS = ["model", "layers", "data"];
+
+export default function Sidebar({
+  parsed,
+  layerIndex,
+  playing,
+  onTogglePlay,
+  onSelectLayer,
+  samples,
+  sampleKey,
+  onSample,
+  onFile,
+  anim,
+  tab,
+  onTab,
+  dataShow,
+  onToggleData,
+}) {
+  const { spec } = parsed;
+
+  return (
+    <div style={S.panel}>
+      <div style={S.head}>
+        <div style={S.h1}>torch-dimensions</div>
+        <div style={S.sub}>architecture viewer &middot; spec v{spec.version}</div>
+
+        <select
+          style={S.select}
+          value={sampleKey}
+          onChange={(e) => onSample(e.target.value)}
+        >
+          {Object.keys(samples).map((k) => (
+            <option key={k} value={k}>
+              {k}
+            </option>
+          ))}
+        </select>
+        <div style={{ margin: "8px 0 12px" }}>
+          <label
+            style={{ ...S.btn, display: "inline-block", flex: "none" }}
+            className="td-btn"
+          >
+            open spec JSON
+            <input
+              type="file"
+              accept=".json"
+              style={{ display: "none" }}
+              onChange={(e) => e.target.files[0] && onFile(e.target.files[0])}
+            />
+          </label>
+        </div>
+      </div>
+
+      <div style={S.tabs}>
+        {TABS.map((t) => (
+          <button key={t} style={S.tab(tab === t)} onClick={() => onTab(t)}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <div style={S.body} className="td-panel">
+        {tab === "model" && <ModelTab parsed={parsed} />}
+        {tab === "layers" && (
+          <LayersTab
+            parsed={parsed}
+            layerIndex={layerIndex}
+            playing={playing}
+            onTogglePlay={onTogglePlay}
+            onSelectLayer={onSelectLayer}
+            anim={anim}
+          />
+        )}
+        {tab === "data" && (
+          <DataTab
+            parsed={parsed}
+            dataShow={dataShow}
+            onToggleData={onToggleData}
+          />
+        )}
+      </div>
     </div>
   );
 }

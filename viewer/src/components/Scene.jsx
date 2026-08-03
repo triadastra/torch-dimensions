@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
+import CellLabels from "./CellLabels.jsx";
 import { CUBE, makeLayout } from "../layout.js";
 import { latticeAxisOf } from "../spec.js";
 
@@ -244,19 +245,31 @@ function Depth({ layout }) {
 function Recenter({ layout }) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls);
+  const size = useThree((s) => s.size);
   useEffect(() => {
-    const dist = Math.max(6, layout.radius * 2.4);
-    camera.position.set(dist * 0.8, dist * 0.55, dist * 0.85);
+    // Fit both axes, not just the vertical one. A fixed multiple of the radius
+    // frames the model only at a wide aspect: in a tall narrow pane the
+    // horizontal field of view is far smaller than the vertical, and a
+    // rank-4 stack — which is wide — fell entirely outside it and rendered a
+    // black screen. Refits on resize for the same reason.
+    const fovY = (camera.fov * Math.PI) / 180;
+    const aspect = Math.max(size.width / Math.max(size.height, 1), 0.01);
+    const fitV = layout.radius / Math.tan(fovY / 2);
+    const fitH = layout.radius / Math.tan(fovY / 2) / aspect;
+    const dist = Math.max(6, Math.max(fitV, fitH) * 1.15);
+    camera.position.set(dist * 0.62, dist * 0.43, dist * 0.66);
     camera.lookAt(0, 0, 0);
+    camera.far = Math.max(1000, dist * 6);
+    camera.updateProjectionMatrix();
     if (controls) {
       controls.target.set(0, 0, 0);
       controls.update();
     }
-  }, [layout, camera, controls]);
+  }, [layout, camera, controls, size]);
   return null;
 }
 
-export default function Scene({ parsed, anim }) {
+export default function Scene({ parsed, anim, dataShow, cellData }) {
   const layout = useMemo(() => makeLayout(parsed.shape), [parsed]);
   const dist = Math.max(6, layout.radius * 2.4);
   const [touched, setTouched] = useState(false);
@@ -288,6 +301,16 @@ export default function Scene({ parsed, anim }) {
         anim={anim}
       />
       <SweepArrow parsed={parsed} layout={layout} anim={anim} />
+      <Suspense fallback={null}>
+        <CellLabels
+          key={parsed.cells.length}
+          parsed={parsed}
+          layout={layout}
+          anim={anim}
+          enabled={!!dataShow}
+          cellData={cellData}
+        />
+      </Suspense>
       <Suspense fallback={null}>
         <AxisLabels parsed={parsed} layout={layout} />
       </Suspense>
