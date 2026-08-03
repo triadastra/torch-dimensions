@@ -129,10 +129,22 @@ def test_a_model_without_a_composition_is_refused():
         td.viz.weights(torch.nn.Linear(4, 4))
 
 
-def test_the_server_offers_weights_for_a_model():
-    pytest.importorskip("torch_dimensions.viz")
-    if not td.viz.bundle_exists():
-        pytest.skip("viewer bundle not built")
+@pytest.fixture
+def bundle(tmp_path, monkeypatch):
+    """A stand-in for the built viewer.
+
+    The JSON routes are library code and have nothing to do with the JavaScript
+    — but `serve` refuses to start without a bundle, so without this the whole
+    server went untested wherever the viewer had not been built, which is every
+    CI job that is not the viewer job. A directory with an index.html in it is
+    all the static handler needs.
+    """
+    (tmp_path / "index.html").write_text("<!doctype html><title>stub</title>")
+    monkeypatch.setattr(td.viz, "BUNDLE", tmp_path)
+    return tmp_path
+
+
+def test_the_server_offers_weights_for_a_model(bundle):
     import urllib.request
 
     server = td.viz.serve(td.LSTM(16, 2, LAT), port=0)
@@ -145,11 +157,9 @@ def test_the_server_offers_weights_for_a_model():
         server.shutdown()
 
 
-def test_the_server_says_so_when_there_are_no_weights_to_serve():
+def test_the_server_says_so_when_there_are_no_weights_to_serve(bundle):
     """Opened on a spec dict there are no parameters, and 404 is the honest
     answer — the viewer then tells the user to open a model instead."""
-    if not td.viz.bundle_exists():
-        pytest.skip("viewer bundle not built")
     import urllib.error
     import urllib.request
 
@@ -254,3 +264,107 @@ def test_the_digest_shows_the_trained_weights_not_a_snapshot():
     assert not torch.allclose(before, after)  # training moved them
     live = dict(model.nd.mixers[0].named_parameters())["rnn.weight_ih_l0"]
     assert torch.allclose(after, live[::rs, ::cs].detach(), atol=1e-4)
+
+
+# --- the fallback paths, which are where a digest quietly goes wrong ----------
+
+
+def test_roles_fall_back_sensibly_for_unusual_names():
+    """Role classification has to cope with mixers this library did not write.
+    Owner type decides where it can; the name-based rules below it are the
+    fallback, and an unrecognised tensor must land on a role rather than crash."""
+    from torch_dimensions.viz.weights import _role
+
+    two_d = torch.zeros(3, 3)
+    one_d = torch.zeros(3)
+    assert _role("something.bias", one_d, None) == "bias"
+    assert _role("A_log", one_d, None) == "ssm_decay"
+    # `kernel.log_dt` is a timescale, not a decay matrix, and lands on the
+    # generic 1-D role — which is what S4D actually reports for it.
+    assert _role("kernel.log_dt", one_d, None) == "vector"
+    assert _role("D", one_d, None) == "skip"
+    assert _role("gamma", one_d, None) == "vector"  # a plain 1-D parameter
+    assert _role("kernel.B", two_d, None) == "ssm_in"
+    assert _role("kernel.C", two_d, None) == "ssm_out"
+    assert _role("A_imag", two_d, None) == "ssm_decay"
+    assert _role("mystery", two_d, None) == "linear"  # 2-D and nothing else fits
+
+
+def test_a_mixer_that_refuses_the_probe_yields_no_operator_rather_than_raising():
+    """The impulse probe feeds a shape the mixer may simply not accept. That is
+    a picture that cannot be drawn, not an error that should sink the payload."""
+    from torch_dimensions.viz.weights import _operator
+
+    class Picky(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Parameter(torch.zeros(4, 4))
+
+        def forward(self, x):
+            raise RuntimeError("not that shape")
+
+    assert _operator(Picky(), 8, 4) is None
+    # A width the composition could not supply is refused before probing.
+    assert _operator(Picky(), 8, 0) is None
+
+
+def test_a_mixer_that_changes_the_shape_yields_no_operator():
+    """The operator only means anything if the mixer maps positions to
+    positions; one that returns something else has no square to draw."""
+    from torch_dimensions.viz.weights import _operator
+
+    class Reshaper(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Parameter(torch.zeros(4, 4))
+
+        def forward(self, x):
+            return x[:, :1]
+
+    assert _operator(Reshaper(), 8, 4) is None
+
+
+def test_a_constant_mixer_has_no_structure_to_report():
+    """An all-zero response divides by nothing: the guards have to hold."""
+    from torch_dimensions.viz.weights import _operator
+
+    class Zero(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Parameter(torch.zeros(4, 4))
+
+        def forward(self, x):
+            return torch.zeros_like(x)
+
+    op = _operator(Zero(), 6, 4)
+    assert op is not None
+    assert op["absmax"] == 0.0
+    assert op["tied"] == 0.0  # nothing to be tied along
+
+
+def test_the_kernel_family_reports_its_kernels():
+    """`td.cafa` has no `mixers` at all — its per-axis kernels are the whole
+    mechanism, and a payload that skipped them would report nothing."""
+    lat = td.Lattice(shape=(4, 5), names=("h", "w"), time=True)
+    payload = td.viz.weights(td.LSTM(16, 2, lat, method=td.cafa))
+    assert payload["layers"], "a kernel-family model must still report parameters"
+
+
+def test_the_server_also_serves_the_spec_and_the_static_bundle(bundle):
+    """The other two routes, which were untested for the same reason."""
+    import urllib.request
+
+    server = td.viz.serve(td.LSTM(16, 2, LAT), port=0)
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+        spec = json.loads(urllib.request.urlopen(f"{base}/spec.json").read())
+        assert spec["layers"]
+        assert b"stub" in urllib.request.urlopen(f"{base}/index.html").read()
+    finally:
+        server.shutdown()
+
+
+def test_serving_without_a_bundle_says_which_path_is_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(td.viz, "BUNDLE", tmp_path / "nope")
+    with pytest.raises(FileNotFoundError):
+        td.viz.serve(td.LSTM(16, 1, LAT), port=0)
