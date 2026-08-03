@@ -28,6 +28,7 @@ import json
 import platform
 from pathlib import Path
 
+import init_weights
 import torch
 
 import torch_dimensions as td
@@ -53,7 +54,7 @@ def device_name(device: str) -> str:
     return platform.processor() or platform.machine()
 
 
-def probe(name: str, build, lat, device: str, dtype: torch.dtype) -> dict:
+def probe(name: str, build, lat, device: str, dtype: torch.dtype, init=None) -> dict:
     """One forward and one backward from fixed weights, recorded exactly.
 
     Everything is created on CPU and moved, so the *inputs* to the arithmetic
@@ -62,6 +63,9 @@ def probe(name: str, build, lat, device: str, dtype: torch.dtype) -> dict:
     """
     torch.manual_seed(SEED)
     model = build(lat)
+    # The seed alone does not give identical S4/S4D weights across platforms —
+    # `eigh`'s eigenvectors are fixed only up to a phase. See init_weights.py.
+    weights_from = init_weights.sync(model, init, name)
     torch.manual_seed(SEED + 1)
     x = torch.randn(2, 3, *lat.shape, 1, dtype=torch.float32)
 
@@ -74,14 +78,18 @@ def probe(name: str, build, lat, device: str, dtype: torch.dtype) -> dict:
     loss = out.square().mean()
     loss.backward()
 
-    grads = {
-        n: p.grad.detach().float().cpu() for n, p in model.named_parameters() if p.grad is not None
-    }
+    # Saved in the dtype they were computed in. Casting to float32 here — which
+    # this did — puts a floor of float32 epsilon (~1.2e-07) under every
+    # comparison, including the float64 one whose entire purpose is to measure
+    # below that floor. The float64 column read ~4e-07 for every model and was
+    # measuring this line rather than the arithmetic.
+    grads = {n: p.grad.detach().cpu() for n, p in model.named_parameters() if p.grad is not None}
     return {
-        "output": out.detach().float().cpu(),
+        "output": out.detach().cpu(),
         "loss": float(loss.detach()),
-        "input_grad": x.grad.detach().float().cpu(),
+        "input_grad": x.grad.detach().cpu(),
         "grads": grads,
+        "weights_from": weights_from,
     }
 
 
@@ -99,6 +107,7 @@ def summarise(result: dict) -> dict:
         if result["grads"]
         else 0.0,
         "n_grads": len(result["grads"]),
+        "weights_from": result["weights_from"],
     }
 
 
@@ -118,9 +127,11 @@ if __name__ == "__main__":
     ap.add_argument("--out", required=True)
     ap.add_argument("--device", default=None)
     ap.add_argument("--only", default=None)
+    init_weights.add_argument(ap)
     args = ap.parse_args()
 
     device = pick_device(args.device)
+    init = Path(args.init) if args.init else None
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -140,7 +151,7 @@ if __name__ == "__main__":
         entry: dict = {}
         for label, dtype in dtypes:
             try:
-                result = probe(name, cfg["build"], cfg["lat"](), device, dtype)
+                result = probe(name, cfg["build"], cfg["lat"](), device, dtype, init)
                 entry[label] = summarise(result)
                 torch.save(
                     {"output": result["output"], "grads": result["grads"]},
@@ -151,6 +162,13 @@ if __name__ == "__main__":
         records[name] = entry
         f32 = entry.get("float32", {})
         print(f"loss {f32.get('loss', float('nan')):.6f}" if "loss" in f32 else "failed")
+
+    # `--only` re-runs a subset; without this it would rewrite agreement.json
+    # with just that subset and silently drop every other model's result.
+    existing = out / "agreement.json"
+    if existing.exists():
+        prior = json.loads(existing.read_text()).get("models", {})
+        records = {**prior, **records}
 
     (out / "agreement.json").write_text(
         json.dumps(

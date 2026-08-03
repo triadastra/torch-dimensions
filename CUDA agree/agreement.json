@@ -1,0 +1,333 @@
+{
+  "device": "cuda",
+  "device_name": "NVIDIA GeForce RTX 5090",
+  "torch": "2.12.1+cu130",
+  "torch_dimensions": "0.3.1",
+  "seed": 20260803,
+  "dtypes": [
+    "float32",
+    "float64"
+  ],
+  "models": {
+    "lstm_2d_sparse": {
+      "float32": {
+        "loss": 0.6577075123786926,
+        "output_sum": 171.14788975846022,
+        "output_absmax": 4.129190444946289,
+        "input_grad_sum": 0.032328714747563936,
+        "grad_norm": 0.8434755879792363,
+        "n_grads": 38,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 0.6577204299451628,
+        "output_sum": 171.28962979590034,
+        "output_absmax": 4.1291869524761635,
+        "input_grad_sum": 0.03233283816786031,
+        "grad_norm": 0.8434897569263692,
+        "n_grads": 38,
+        "weights_from": "loaded"
+      }
+    },
+    "gru_2d_sparse": {
+      "float32": {
+        "loss": 1.0023777484893799,
+        "output_sum": 1749.6690582185984,
+        "output_absmax": 4.759915828704834,
+        "input_grad_sum": 0.11368642024172004,
+        "grad_norm": 2.1198490347870775,
+        "n_grads": 38,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 1.0023862523816405,
+        "output_sum": 1749.8380461252186,
+        "output_absmax": 4.759849278876694,
+        "input_grad_sum": 0.11373910410969904,
+        "grad_norm": 2.1198200867717083,
+        "n_grads": 38,
+        "weights_from": "loaded"
+      }
+    },
+    "s4d_portable_2d": {
+      "float32": {
+        "loss": 0.6335614919662476,
+        "output_sum": 64.81034126109444,
+        "output_absmax": 4.1826395988464355,
+        "input_grad_sum": 0.08073959674948128,
+        "grad_norm": 0.8627356510957638,
+        "n_grads": 38,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 0.6335615429149304,
+        "output_sum": 64.81027452414799,
+        "output_absmax": 4.182639398986513,
+        "input_grad_sum": 0.08073960318190351,
+        "grad_norm": 0.8627356797715751,
+        "n_grads": 38,
+        "weights_from": "loaded"
+      }
+    },
+    "s4d_upstream_2d": {
+      "float32": {
+        "loss": 0.5606191754341125,
+        "output_sum": 388.7902815528214,
+        "output_absmax": 4.032330513000488,
+        "input_grad_sum": 0.11131489842227893,
+        "grad_norm": 0.844073155035927,
+        "n_grads": 42,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 0.5606191284025633,
+        "output_sum": 388.7901665940344,
+        "output_absmax": 4.032330711162618,
+        "input_grad_sum": 0.11131489485967327,
+        "grad_norm": 0.8440731845682901,
+        "n_grads": 42,
+        "weights_from": "loaded"
+      }
+    },
+    "s4_upstream_2d": {
+      "float32": {
+        "loss": 0.5503488183021545,
+        "output_sum": 343.6823273105547,
+        "output_absmax": 4.062697887420654,
+        "input_grad_sum": 0.10116215951711638,
+        "grad_norm": 0.8342575384419647,
+        "n_grads": 46,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 0.5503487796732731,
+        "output_sum": 343.68232805173614,
+        "output_absmax": 4.062697498419833,
+        "input_grad_sum": 0.10116216901756339,
+        "grad_norm": 0.8342575459367941,
+        "n_grads": 46,
+        "weights_from": "loaded"
+      }
+    },
+    "mamba_portable_2d": {
+      "float32": {
+        "loss": 0.48611560463905334,
+        "output_sum": -120.93015070795082,
+        "output_absmax": 3.7346246242523193,
+        "input_grad_sum": 0.012844240100093884,
+        "grad_norm": 0.2855167653183074,
+        "n_grads": 46,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 0.4861156250313535,
+        "output_sum": -120.93014863630543,
+        "output_absmax": 3.734624681079961,
+        "input_grad_sum": 0.01284424167246078,
+        "grad_norm": 0.2855167655799333,
+        "n_grads": 46,
+        "weights_from": "loaded"
+      }
+    },
+    "mamba_upstream_2d": {
+      "float32": {
+        "loss": 0.48611560463905334,
+        "output_sum": -120.93015061202459,
+        "output_absmax": 3.7346246242523193,
+        "input_grad_sum": 0.012844240915001137,
+        "grad_norm": 0.28551676508019125,
+        "n_grads": 46,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 0.48611562500669026,
+        "output_sum": -120.93014836609794,
+        "output_absmax": 3.734624679568101,
+        "input_grad_sum": 0.012844241655264294,
+        "grad_norm": 0.28551676553074073,
+        "n_grads": 46,
+        "weights_from": "loaded"
+      }
+    },
+    "mamba2_2d": {
+      "float32": {
+        "loss": 1.445457935333252,
+        "output_sum": 369.98330434411764,
+        "output_absmax": 4.905056476593018,
+        "input_grad_sum": 0.1686023872171063,
+        "grad_norm": 5.928437100242767,
+        "n_grads": 42,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 1.4454578270854774,
+        "output_sum": 369.9832754077361,
+        "output_absmax": 4.905056398295109,
+        "input_grad_sum": 0.16860239470597754,
+        "grad_norm": 5.928436997059517,
+        "n_grads": 42,
+        "weights_from": "loaded"
+      }
+    },
+    "mamba3_2d": {
+      "float32": {
+        "loss": 1.1397204399108887,
+        "output_sum": 1599.3492066394538,
+        "output_absmax": 5.738320827484131,
+        "input_grad_sum": 0.026481786189833656,
+        "grad_norm": 9.48026265983063,
+        "n_grads": 42,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 1.1397203684461572,
+        "output_sum": 1599.3493108770458,
+        "output_absmax": 5.738320615369773,
+        "input_grad_sum": 0.026481701872873895,
+        "grad_norm": 9.48026337847029,
+        "n_grads": 42,
+        "weights_from": "loaded"
+      }
+    },
+    "transformer_scan_2d": {
+      "float32": {
+        "loss": 19.463809967041016,
+        "output_sum": -293.49427619203925,
+        "output_absmax": 12.901665687561035,
+        "input_grad_sum": -0.45571492752060294,
+        "grad_norm": 31.15384059584781,
+        "n_grads": 54,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 19.46380925833986,
+        "output_sum": -293.49419913773045,
+        "output_absmax": 12.901664833952754,
+        "input_grad_sum": -0.4557149348340908,
+        "grad_norm": 31.153841351531593,
+        "n_grads": 54,
+        "weights_from": "loaded"
+      }
+    },
+    "transformer_cafa_2d": {
+      "float32": {
+        "loss": 19.429950714111328,
+        "output_sum": -40.10519205033779,
+        "output_absmax": 13.832276344299316,
+        "input_grad_sum": -1.687932959466707,
+        "grad_norm": 21.619561657294373,
+        "n_grads": 94,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 19.429950276306663,
+        "output_sum": -40.105159321079555,
+        "output_absmax": 13.832276173436608,
+        "input_grad_sum": -1.6879330167342599,
+        "grad_norm": 21.61956215762256,
+        "n_grads": 94,
+        "weights_from": "loaded"
+      }
+    },
+    "transformer_flatten_2d": {
+      "float32": {
+        "loss": 19.420812606811523,
+        "output_sum": -349.6462728381157,
+        "output_absmax": 12.919079780578613,
+        "input_grad_sum": -0.4663514222484082,
+        "grad_norm": 13.454730649070381,
+        "n_grads": 54,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 19.420813310756767,
+        "output_sum": -349.6462410276815,
+        "output_absmax": 12.919079586255805,
+        "input_grad_sum": -0.4663514051807411,
+        "grad_norm": 13.454731080146242,
+        "n_grads": 54,
+        "weights_from": "loaded"
+      }
+    },
+    "cnn_2d_sparse": {
+      "float32": {
+        "loss": 0.9205837249755859,
+        "output_sum": 2583.707972873468,
+        "output_absmax": 5.100329875946045,
+        "input_grad_sum": 0.15777889121090993,
+        "grad_norm": 2.1297971552263006,
+        "n_grads": 18,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 0.920592526288299,
+        "output_sum": 2583.7419828235134,
+        "output_absmax": 5.1005506215135155,
+        "input_grad_sum": 0.157748041684188,
+        "grad_norm": 2.129771932930939,
+        "n_grads": 18,
+        "weights_from": "loaded"
+      }
+    },
+    "tcn_2d_sparse": {
+      "float32": {
+        "loss": 0.6061553359031677,
+        "output_sum": 1940.9966058642603,
+        "output_absmax": 4.214599132537842,
+        "input_grad_sum": 0.10020898882066831,
+        "grad_norm": 0.7989456381983249,
+        "n_grads": 26,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 0.6061664003697732,
+        "output_sum": 1940.9967417479183,
+        "output_absmax": 4.214697577167885,
+        "input_grad_sum": 0.10023973858158489,
+        "grad_norm": 0.7990484476593267,
+        "n_grads": 26,
+        "weights_from": "loaded"
+      }
+    },
+    "mamba_upstream_3d": {
+      "float32": {
+        "loss": 0.6789306402206421,
+        "output_sum": -1026.1730570008513,
+        "output_absmax": 3.8567235469818115,
+        "input_grad_sum": -0.03764882677751302,
+        "grad_norm": 0.4282158984211279,
+        "n_grads": 68,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 0.6789306151061646,
+        "output_sum": -1026.173062831313,
+        "output_absmax": 3.8567238490762183,
+        "input_grad_sum": -0.03764882522628001,
+        "grad_norm": 0.4282158961469557,
+        "n_grads": 68,
+        "weights_from": "loaded"
+      }
+    },
+    "lstm_3d": {
+      "float32": {
+        "loss": 0.8991847038269043,
+        "output_sum": 62.77570581110194,
+        "output_absmax": 4.041250228881836,
+        "input_grad_sum": -0.03430343193031149,
+        "grad_norm": 1.0845061207688784,
+        "n_grads": 38,
+        "weights_from": "loaded"
+      },
+      "float64": {
+        "loss": 0.899200385522481,
+        "output_sum": 63.27133885867613,
+        "output_absmax": 4.041237906357202,
+        "input_grad_sum": -0.03430227150195277,
+        "grad_norm": 1.0845237241566357,
+        "n_grads": 38,
+        "weights_from": "loaded"
+      }
+    }
+  }
+}

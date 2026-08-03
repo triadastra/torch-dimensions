@@ -72,6 +72,40 @@ def first_divergence(la: list[float], lb: list[float], tol: float = 1e-6) -> int
     return None
 
 
+def _weights_provenance(left: dict, right: dict) -> list[str]:
+    """Say — and check — where each run's starting weights came from.
+
+    The comparison used to assert that both machines began from bit-identical
+    weights. For S4 and S4D that was false: `torch.linalg.eigh` fixes
+    eigenvectors only up to a phase, so their `B` and `P` differ between macOS
+    and Linux under the same seed, and the comparison reported a 2.6e-01
+    difference that was two different models rather than two devices.
+
+    A claim the instrument cannot check is worth less than one it can, so this
+    reads what the runs recorded instead of assuming.
+    """
+
+    def sources(run: dict) -> set[str]:
+        return {m.get("weights_from", "seed") for m in run["models"] if "error" not in m}
+
+    both = sources(left) | sources(right)
+    if both <= {"written", "loaded"}:
+        return [
+            "Both runs load one shared set of starting weights, so the initial",
+            "conditions are bit-identical and every difference below is arithmetic.",
+            "",
+        ]
+    return [
+        "> **The two runs did not share starting weights** "
+        f"({', '.join(sorted(both))}). The seed alone does not give identical",
+        "> S4/S4D weights across platforms — `eigh`'s eigenvectors are fixed only",
+        "> up to a phase — so differences below may be initialisation rather than",
+        "> arithmetic. Re-run both sides with `--init <dir>` pointing at the same",
+        "> directory. See benchmarks/init_weights.py.",
+        "",
+    ]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("left")
@@ -95,9 +129,10 @@ def main() -> int:
         f" · torch-dimensions {right['torch_dimensions']}",
         "",
         f"Both runs: seed {left['seed']}, {left['steps']} steps, batch {left['batch']}.",
-        "Weights are initialised on CPU and data is drawn on CPU, so the initial",
-        "conditions are bit-identical and every difference below is arithmetic.",
+        "Data is drawn on CPU from a seeded generator, so both machines see the",
+        "same batches in the same order.",
         "",
+        *_weights_provenance(left, right),
         "| model | loss (left) | loss (right) | Δ loss | first divergence "
         "| rel Δw | max Δw | speed |",
         "|---|---|---|---|---|---|---|---|",

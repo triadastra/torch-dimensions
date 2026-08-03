@@ -223,7 +223,15 @@ class UpstreamMamba2Mixer(nn.Module):
         _require_upstream()
         from torch_dimensions._vendor.mamba.mamba2 import Mamba2
 
-        mamba_args.setdefault("use_mem_eff_path", torch.cuda.is_available())
+        # Whether the fused path is available is a property of the *tensor*,
+        # not of the box. Defaulting this to `torch.cuda.is_available()` meant
+        # that on a CUDA machine a CPU-resident Mamba-2 was built asking for a
+        # kernel it could not reach, and refused on the first forward — which
+        # is every sanity check, every CPU test, and the CPU half of any
+        # device comparison. An explicit argument is still honoured verbatim;
+        # only the default is deferred to `forward`, where the input says.
+        self._mem_eff_is_ours = "use_mem_eff_path" not in mamba_args
+        mamba_args.setdefault("use_mem_eff_path", False)
         self.block = Mamba2(
             d_model,
             d_state=d_state,
@@ -234,6 +242,24 @@ class UpstreamMamba2Mixer(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self._mem_eff_is_ours:
+            from torch_dimensions.mixers._kernels import load_upstream, prefer_upstream
+
+            # Three conditions, all of them necessary. `prefer_upstream` is the
+            # predicate the rest of the library dispatches on, so
+            # TD_FORCE_TORCH_KERNELS reaches Mamba-2 too. But it only knows
+            # that CUDA and Triton are present, and this path calls one
+            # specific mamba-ssm entry point — a CUDA box with Triton and
+            # without mamba-ssm satisfies `prefer_upstream` and still cannot
+            # run it. And the fused kernel has no float64 instantiation.
+            fused = load_upstream(
+                "mamba_ssm.ops.triton.ssd_combined", "mamba_split_conv1d_scan_combined"
+            )
+            self.block.use_mem_eff_path = (
+                prefer_upstream(x)
+                and fused is not None
+                and x.dtype in (torch.float32, torch.float16, torch.bfloat16)
+            )
         return self.block(x)
 
 

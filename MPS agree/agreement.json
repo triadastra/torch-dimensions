@@ -15,7 +15,8 @@
         "output_absmax": 4.129186630249023,
         "input_grad_sum": 0.032332793554815,
         "grad_norm": 0.8434897931963228,
-        "n_grads": 38
+        "n_grads": 38,
+        "weights_from": "written"
       }
     },
     "gru_2d_sparse": {
@@ -25,7 +26,8 @@
         "output_absmax": 4.759849548339844,
         "input_grad_sum": 0.11373912010458298,
         "grad_norm": 2.1198200965552814,
-        "n_grads": 38
+        "n_grads": 38,
+        "weights_from": "written"
       }
     },
     "s4d_portable_2d": {
@@ -35,7 +37,8 @@
         "output_absmax": 4.182639122009277,
         "input_grad_sum": 0.08073959498506156,
         "grad_norm": 0.8627356438818098,
-        "n_grads": 38
+        "n_grads": 38,
+        "weights_from": "written"
       }
     },
     "s4d_upstream_2d": {
@@ -45,7 +48,8 @@
         "output_absmax": 4.032330513000488,
         "input_grad_sum": 0.11131489287072327,
         "grad_norm": 0.8440731811330991,
-        "n_grads": 42
+        "n_grads": 42,
+        "weights_from": "written"
       }
     },
     "s4_upstream_2d": {
@@ -55,7 +59,8 @@
         "output_absmax": 4.062697410583496,
         "input_grad_sum": 0.1011621619691141,
         "grad_norm": 0.8342575852522781,
-        "n_grads": 46
+        "n_grads": 46,
+        "weights_from": "written"
       }
     },
     "mamba_portable_2d": {
@@ -65,7 +70,8 @@
         "output_absmax": 3.7346246242523193,
         "input_grad_sum": 0.012844238022807986,
         "grad_norm": 0.28551676446110036,
-        "n_grads": 46
+        "n_grads": 46,
+        "weights_from": "written"
       }
     },
     "mamba_upstream_2d": {
@@ -75,7 +81,8 @@
         "output_absmax": 3.7346246242523193,
         "input_grad_sum": 0.0128442388959229,
         "grad_norm": 0.2855167661649821,
-        "n_grads": 46
+        "n_grads": 46,
+        "weights_from": "written"
       }
     },
     "mamba2_2d": {
@@ -85,7 +92,8 @@
         "output_absmax": 4.905056953430176,
         "input_grad_sum": 0.16860242729308084,
         "grad_norm": 5.928436944383681,
-        "n_grads": 42
+        "n_grads": 42,
+        "weights_from": "written"
       }
     },
     "mamba3_2d": {
@@ -95,7 +103,8 @@
         "output_absmax": 5.738320350646973,
         "input_grad_sum": 0.026481781475013122,
         "grad_norm": 9.480261377640016,
-        "n_grads": 42
+        "n_grads": 42,
+        "weights_from": "written"
       }
     },
     "transformer_scan_2d": {
@@ -105,7 +114,8 @@
         "output_absmax": 12.901665687561035,
         "input_grad_sum": -0.4557149344473146,
         "grad_norm": 31.15384332547461,
-        "n_grads": 54
+        "n_grads": 54,
+        "weights_from": "written"
       }
     },
     "transformer_cafa_2d": {
@@ -115,7 +125,8 @@
         "output_absmax": 13.832277297973633,
         "input_grad_sum": -1.687932983506471,
         "grad_norm": 21.61956248570444,
-        "n_grads": 94
+        "n_grads": 94,
+        "weights_from": "written"
       }
     },
     "transformer_flatten_2d": {
@@ -125,7 +136,8 @@
         "output_absmax": 12.919079780578613,
         "input_grad_sum": -0.46635136764962226,
         "grad_norm": 13.454731929791407,
-        "n_grads": 54
+        "n_grads": 54,
+        "weights_from": "written"
       }
     },
     "cnn_2d_sparse": {
@@ -135,7 +147,8 @@
         "output_absmax": 5.100550651550293,
         "input_grad_sum": 0.1577480350897531,
         "grad_norm": 2.1297718900959635,
-        "n_grads": 18
+        "n_grads": 18,
+        "weights_from": "written"
       }
     },
     "tcn_2d_sparse": {
@@ -145,7 +158,8 @@
         "output_absmax": 4.21469783782959,
         "input_grad_sum": 0.1002397393604042,
         "grad_norm": 0.7990484434874322,
-        "n_grads": 26
+        "n_grads": 26,
+        "weights_from": "written"
       }
     },
     "mamba_upstream_3d": {
@@ -155,7 +169,8 @@
         "output_absmax": 3.8567235469818115,
         "input_grad_sum": -0.03764883164330968,
         "grad_norm": 0.42821589986591196,
-        "n_grads": 68
+        "n_grads": 68,
+        "weights_from": "written"
       }
     },
     "lstm_3d": {
@@ -165,7 +180,8 @@
         "output_absmax": 4.041238307952881,
         "input_grad_sum": -0.03430233454491827,
         "grad_norm": 1.0845238212243868,
-        "n_grads": 38
+        "n_grads": 38,
+        "weights_from": "written"
       }
     }
   }

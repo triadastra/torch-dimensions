@@ -10,6 +10,12 @@ The load-bearing assumption is the first test below. Everything the comparison
 claims rests on two machines starting from bit-identical weights on
 bit-identical data — if that quietly stopped being true, every number in the
 comparison would be measuring initialisation drift and still look plausible.
+
+It did quietly stop being true, and only on another machine: the seed gives
+identical weights on *one* platform, which is all a test here can check, but
+S4's `eigh` returns different eigenvectors on macOS and Linux and so different
+`B` and `P`. See tests/test_init_weights.py, which covers the mechanism that
+now carries the assumption instead of the seed.
 """
 
 from __future__ import annotations
@@ -23,6 +29,12 @@ import pytest
 import torch
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# The benchmark scripts import each other by plain name (`import init_weights`),
+# which works when they are run as scripts because Python puts the script's own
+# directory on sys.path. Loading them by file location here does not, so the
+# directory has to be added explicitly.
+sys.path.insert(0, str(ROOT / "benchmarks"))
 
 
 def _load(name: str, path: Path):

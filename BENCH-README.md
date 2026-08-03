@@ -29,18 +29,76 @@ Two runs of the same sixteen models, trained identically on two machines:
 ## What makes them comparable
 
 Every model is built on **CPU** under one fixed seed and only then moved to
-the device, and every batch is drawn on CPU from a seeded generator. So both
-machines start from bit-identical weights and see bit-identical data, and
-every difference in the results is produced by the arithmetic rather than by
-initialisation or data order.
+the device, and every batch is drawn on CPU from a seeded generator, so both
+machines see bit-identical data.
 
-Reproduce either side with:
+**The seed is not enough for the weights, and this was found the hard way.**
+S4 and S4D diagonalise the HiPPO matrix with `torch.linalg.eigh`. Eigenvalues
+are unique and agreed across the two machines to every digit printed — which
+is exactly why the problem hid, since `A_imag` looked perfect. Eigenvectors are
+fixed only up to a phase, and macOS Accelerate and Linux LAPACK each return a
+different one. `B` and `P` are projections through those vectors, so on the
+Mac Studio and the 5090 they differed by a relative **1.5** and **0.53**.
+
+Both initialisations are valid S4 models. They are not the *same* model, and
+the first CUDA run therefore reported a 2.6e-01 output difference for the
+vendored S4D — unchanged in float64, which is precisely the signature of a
+different kernel — when nothing about the kernel was involved.
+
+So one set of starting weights is written once and loaded by every machine
+(`--init`, see [benchmarks/init_weights.py](benchmarks/init_weights.py)). With
+that in place the same pair agrees at **4e-07**. Pass the same directory on
+both sides:
 
 ```bash
-python benchmarks/pretrain.py --out "MPS bench"     # on the Mac Studio
-python benchmarks/pretrain.py --out "CUDA bench"    # on the 5090
+python benchmarks/pretrain.py --out "MPS bench"  --init "init weights"   # writes
+python benchmarks/pretrain.py --out "CUDA bench" --init "init weights"   # loads
 python benchmarks/compare.py "MPS bench" "CUDA bench" --out COMPARISON.md
 ```
+
+The manifest records `weights_from` as `written`, `loaded` or `seed` for every
+model, so a run can always say which of the two assumptions its numbers rest
+on — the difference is invisible in the losses otherwise.
+
+## How close can two devices actually get?
+
+Three separate questions hide inside "do they agree", and separating them
+moves the answer by nine orders of magnitude. Measured **in one process on the
+5090**, so the torch version and the platform are held fixed and only the
+device varies:
+
+| model | float32 | float64 |
+|---|---|---|
+| `lstm_2d_sparse` | 1.21e-04 | **2.69e-16** |
+| `cnn_2d_sparse` | 1.96e-04 | **2.83e-16** |
+| `s4d_upstream_2d` | 1.77e-07 | **2.20e-16** |
+| `mamba_upstream_2d` | 1.28e-07 | 1.48e-09 |
+
+- **In float64 the devices agree to about one part in 1e16** — the last bit.
+  So the differences are float non-associativity and nothing else: the same
+  terms summed in a different order.
+- **In float32, 1e-7 is not reachable and should not be asked for.** float32
+  machine epsilon is 1.19e-07, so "under 1e-7" means bit-identical output from
+  cuDNN, Metal and a pure-torch loop. Note that `s4d_upstream` and
+  `mamba_upstream` are already at 1.3–1.8e-07 — they are *at* the floor, not
+  above it. The ~1e-04 rows are four to six layers of that floor compounding.
+- **`mamba_upstream` stops at 1.5e-09** rather than 1e-16, because its scan
+  casts internally (`A_log.float()`) — a deliberate upstream choice for fp16
+  stability, not a device difference.
+
+Two consequences worth stating plainly:
+
+**MPS cannot take this route.** Metal has no float64 at all, so on Apple
+silicon the float32 column is the only column, and 1e-04 is where it ends. The
+sub-1e-16 numbers above are CPU-vs-CUDA.
+
+**The float32 result is not contaminated by the version skew.** The two
+machines run torch 2.13.0 and 2.12.1. Same-process CPU-vs-CUDA gives 1.21e-04
+and 1.96e-04 for the LSTM and the CNN — the same three digits as the
+cross-machine MPS-vs-CUDA comparison. At float32 there is no headroom for the
+version to show; it only becomes visible in float64, where the cross-machine
+comparison flattens out at ~5e-07 while the same-process one reaches 2e-16.
+That residual is the torch version, not the hardware.
 
 ## What the comparison can and cannot show
 

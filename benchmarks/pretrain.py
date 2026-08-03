@@ -30,6 +30,7 @@ import platform
 import time
 from pathlib import Path
 
+import init_weights
 import torch
 import torch.nn as nn
 
@@ -157,17 +158,30 @@ ZOO: dict[str, dict] = {
 }
 
 
-def train_one(name: str, cfg: dict, device: str, steps: int, batch: int, t_len: int) -> dict:
+def train_one(
+    name: str,
+    cfg: dict,
+    device: str,
+    steps: int,
+    batch: int,
+    t_len: int,
+    init: Path | None = None,
+) -> dict:
     """Build on CPU under a fixed seed, move, train, and record.
 
-    Building on CPU first is what makes two machines comparable: the initial
-    weights are then identical bit for bit, so any divergence in the numbers
-    below is arithmetic rather than initialisation.
+    Building on CPU first is most of what makes two machines comparable. It is
+    not all of it: S4 and S4D diagonalise HiPPO with `torch.linalg.eigh`, whose
+    eigenvectors are only defined up to a phase, so their `B` and `P` differ
+    between macOS and Linux under the same seed. Pass `--init` to share one set
+    of starting weights and remove that difference from the measurement — see
+    benchmarks/init_weights.py.
     """
     lat = cfg["lat"]()
     torch.manual_seed(SEED)
     model = cfg["build"](lat)
     head = nn.Linear(model.config["d_model"], 1)
+    weights_from = init_weights.sync(model, init, name)
+    init_weights.sync(head, init, f"{name}.head")
 
     # On CPU in float64: MPS has no float64 at all, and a norm computed in the
     # device's own precision would differ between machines for that reason
@@ -226,6 +240,7 @@ def train_one(name: str, cfg: dict, device: str, steps: int, batch: int, t_len: 
         {
             "name": name,
             "n_params": n_params,
+            "weights_from": weights_from,
             "lr": lr,
             "recipe": "adamw+param_groups+warmup_cosine+clip",
             "steps": steps,
@@ -257,22 +272,27 @@ def main() -> int:
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--t-len", type=int, default=6)
     ap.add_argument("--only", default=None, help="comma-separated subset of model names")
+    init_weights.add_argument(ap)
     args = ap.parse_args()
 
     device = pick_device(args.device)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    init = Path(args.init) if args.init else None
 
     names = args.only.split(",") if args.only else list(ZOO)
     print(f"device: {device} ({device_name(device)})")
-    print(f"models: {len(names)}   steps: {args.steps}\n")
+    print(f"models: {len(names)}   steps: {args.steps}")
+    print(f"weights: {init if init else 'from the seed (see --init)'}\n")
 
     results = []
     for i, name in enumerate(names, 1):
         cfg = ZOO[name]
         print(f"[{i:2d}/{len(names)}] {name:26s} ", end="", flush=True)
         try:
-            record, model, head = train_one(name, cfg, device, args.steps, args.batch, args.t_len)
+            record, model, head = train_one(
+                name, cfg, device, args.steps, args.batch, args.t_len, init
+            )
         except Exception as exc:  # noqa: BLE001 - one model failing is a result
             print(f"FAILED — {type(exc).__name__}: {exc}")
             results.append({"name": name, "error": f"{type(exc).__name__}: {exc}"})

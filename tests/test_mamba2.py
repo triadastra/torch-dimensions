@@ -168,3 +168,49 @@ def test_mamba2_on_mps_matches_cpu():
     mps.train()
     mps(xg).pow(2).mean().backward()
     assert torch.isfinite(xg.grad).all()
+
+
+# --- which implementation the block reaches for -------------------------------
+
+
+def test_the_fused_path_is_chosen_per_tensor_not_per_machine():
+    """`use_mem_eff_path` used to default to `torch.cuda.is_available()`, which
+    is a property of the *box*. On a CUDA machine that made every CPU-resident
+    Mamba-2 ask for a kernel it could not reach, and the block refused on its
+    first forward — so a CPU sanity check, a CPU test, or the CPU half of a
+    device comparison all raised `NotImplementedError` on a machine that had a
+    GPU, and only on such a machine. Found by running the suite on an RTX 5090.
+
+    The predicate is now the input tensor's, evaluated in `forward`, matching
+    how the rest of the library dispatches.
+    """
+    mixer = UpstreamMamba2Mixer(64, d_state=16, headdim=32).eval()
+    x = torch.randn(2, 16, 64)
+    with torch.no_grad():
+        out = mixer(x)
+    assert out.shape == x.shape
+    assert torch.isfinite(out).all()
+    # A CPU tensor can never take the fused path, whatever the box has.
+    assert mixer.block.use_mem_eff_path is False
+
+
+def test_an_explicit_choice_is_left_alone():
+    """Only the *default* is deferred. A caller who names the flag is making a
+    decision about upstream's own switch and must keep it."""
+    chosen = UpstreamMamba2Mixer(64, d_state=16, headdim=32, use_mem_eff_path=False)
+    assert chosen._mem_eff_is_ours is False
+    assert chosen.block.use_mem_eff_path is False
+
+    default = UpstreamMamba2Mixer(64, d_state=16, headdim=32)
+    assert default._mem_eff_is_ours is True
+
+
+def test_float64_takes_the_reference_path():
+    """The fused kernel has no float64 instantiation, and float64 is the
+    control that separates reassociation from a different computation in the
+    agreement benchmark — so it must not silently fail to run."""
+    mixer = UpstreamMamba2Mixer(64, d_state=16, headdim=32).double().eval()
+    with torch.no_grad():
+        out = mixer(torch.randn(2, 16, 64, dtype=torch.float64))
+    assert out.dtype == torch.float64
+    assert torch.isfinite(out).all()

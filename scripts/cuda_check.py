@@ -149,7 +149,10 @@ def _():
 print("\n=== the vendored models on CUDA")
 
 
-def _cuda_vs_cpu(build, length=32, width=16, seed=0):
+def _cuda_vs_cpu(build, width, length=32, seed=0):
+    """`width` is the mixer's own d_model and is required, not defaulted: a
+    default silently fed a 16-wide input to a 6-wide S4 and the resulting
+    einsum error read as a CUDA failure when it was neither CUDA's nor S4's."""
     torch.manual_seed(seed)
     cpu = build().eval()
     gpu = build().eval().cuda()
@@ -163,7 +166,7 @@ def _cuda_vs_cpu(build, length=32, width=16, seed=0):
 def _():
     from torch_dimensions.mixers.upstream import UpstreamMambaMixer
 
-    d = _cuda_vs_cpu(lambda: UpstreamMambaMixer(16, d_state=8))
+    d = _cuda_vs_cpu(lambda: UpstreamMambaMixer(16, d_state=8), 16)
     return (
         "pass" if d < 5e-2 else "fail",
         f"relative {d:.2e} (fused vs reference; bf16 tolerated)",
@@ -174,7 +177,7 @@ def _():
 def _():
     from torch_dimensions.mixers.upstream import UpstreamMamba2Mixer
 
-    d = _cuda_vs_cpu(lambda: UpstreamMamba2Mixer(64, d_state=16, headdim=32))
+    d = _cuda_vs_cpu(lambda: UpstreamMamba2Mixer(64, d_state=16, headdim=32), 64)
     return ("pass" if d < 5e-2 else "fail", f"relative {d:.2e}")
 
 
@@ -183,7 +186,7 @@ def _():
     from torch_dimensions.mixers.upstream import UpstreamS4Mixer
 
     worst = max(
-        _cuda_vs_cpu(lambda: UpstreamS4Mixer(6, d_state=8), length=n) for n in (32, 64, 128)
+        _cuda_vs_cpu(lambda: UpstreamS4Mixer(6, d_state=8), 6, length=n) for n in (32, 64, 128)
     )
     # L=64 is where MPS landed exactly on the pole and produced NaN.
     return ("pass" if worst < 1e-4 else "fail", f"worst relative over L=32/64/128 {worst:.2e}")
@@ -193,7 +196,7 @@ def _():
 def _():
     from torch_dimensions.mixers.upstream import UpstreamS4DMixer
 
-    d = _cuda_vs_cpu(lambda: UpstreamS4DMixer(6, d_state=8))
+    d = _cuda_vs_cpu(lambda: UpstreamS4DMixer(6, d_state=8), 6)
     return ("pass" if d < 1e-4 else "fail", f"relative {d:.2e}")
 
 
@@ -268,13 +271,15 @@ print("\n=== claims the README makes")
 @check("rank-1 LSTM is still bitwise identical to nn.LSTM under cuDNN")
 def _():
     torch.manual_seed(0)
-    model = td.LSTM(16, 1, lat(shape=(), names=()), portable=True).cuda().eval()
-    bare = torch.nn.LSTM(16, 16, batch_first=True).cuda().eval()
-    mixer = model.nd.mixers[0]
-    bare.load_state_dict({k: v for k, v in mixer.rnn.state_dict().items()})
+    # A rank-1 lattice is one spatial axis, not none. And the claim is the one
+    # tests/test_conformance.py makes: a 1-layer stack is a pre-norm residual
+    # around the single mixer — not a bare nn.LSTM, which has no norm and no
+    # residual and differs by ~3.6 on CPU for that reason alone.
+    model = td.LSTM(16, 1, lat(shape=(32,), names=("l",))).cuda().eval()
     x = torch.randn(2, 32, 16, device="cuda")
     with torch.no_grad():
-        d = float((model(x) - bare(x)[0]).abs().max())
+        want = x + model.nd.mixers[0].rnn(model.nd.norms[0](x))[0]
+        d = float((model(x) - want).abs().max())
     # Whatever is true, write it down: cuDNN may reorder reductions.
     return (
         "pass" if d == 0.0 else "info",

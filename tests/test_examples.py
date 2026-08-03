@@ -11,6 +11,7 @@ and train a small model — and that is the cost of the guides being true.
 import sys
 from pathlib import Path
 
+import pytest
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -18,6 +19,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from examples import custom_method, custom_mixer  # noqa: E402
 
 import torch_dimensions as td  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _restore_the_method_registry():
+    """`register_nd_method` writes to a process-global dict, and the guide in
+    docs/adding-a-method.md really does register "pyramid". Without this, every
+    test that runs after this file sees a registry the library did not ship —
+    which is exactly how it was found: tests/test_matrix.py asserts what the
+    registry contains and failed only in a full-suite run.
+    """
+    before = dict(td.ND_METHODS)
+    yield
+    td.ND_METHODS.clear()
+    td.ND_METHODS.update(before)
 
 
 def test_the_custom_mixer_guide_runs_end_to_end():
