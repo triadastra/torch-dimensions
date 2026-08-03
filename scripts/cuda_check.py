@@ -355,4 +355,11 @@ print(
     "\n(the device tests must report cuda, not skipped — a green run with no"
     "\n CUDA present proves nothing)"
 )
-sys.exit(1 if counts["fail"] else 0)
+
+# Only when run as a script. The checks above execute at import — that is the
+# design, since each one is a decorated function — but exiting at import made
+# the harness impossible to import, and therefore impossible to test that it
+# skips cleanly without a device. Which is precisely the property a report
+# from a machine that *has* one depends on.
+if __name__ == "__main__":
+    sys.exit(1 if counts["fail"] else 0)
