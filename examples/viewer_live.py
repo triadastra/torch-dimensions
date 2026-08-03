@@ -234,6 +234,15 @@ def main() -> None:
 
         entry: dict = {"step": step, "loss": float(loss.detach())}
         if step % EVAL_EVERY == 0 or step == STEPS - 1:
+            # The weight diagrams show what the model holds *now*, not what it
+            # held when the page was opened. Refreshed on the eval cadence
+            # rather than every step: the digest probes each mixer with an
+            # impulse to measure its operator, and doing that per step would
+            # make the viewer a measurable part of the training cost.
+            run["weights"] = {
+                "step": step,
+                **td.viz.weights(model, max_units=16, operator_size=12),
+            }
             model.eval()
             with torch.no_grad():
                 entry["held_out"] = float((head(model(x_eval)) - y_eval).pow(2).mean())

@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import Weights from "./Weights.jsx";
 
 import { fmtParams, latticeAxisOf } from "../spec.js";
 
@@ -88,6 +90,18 @@ const S = {
     flexWrap: "wrap",
     marginTop: 8,
   },
+  tabs: { display: "flex", gap: 2, marginTop: 10 },
+  tab: (active) => ({
+    background: "none",
+    border: "none",
+    borderBottom: active ? "2px solid #ffc061" : "2px solid transparent",
+    color: active ? "#e8eef8" : "#7d8aa3",
+    fontSize: 11.5,
+    fontWeight: active ? 650 : 500,
+    padding: "5px 10px",
+    cursor: "pointer",
+    letterSpacing: 0.3,
+  }),
 };
 
 function Node({ layer, i, spec, active, maxParams, onSelect }) {
@@ -142,7 +156,9 @@ function Node({ layer, i, spec, active, maxParams, onSelect }) {
         onClick={() => onSelect(i)}
       >
         <span style={{ color: "#6b7a96", width: 26, flexShrink: 0 }}>L{i}</span>
-        <span style={{ color: fam.color, width: 14, flexShrink: 0 }}>{fam.glyph}</span>
+        <span style={{ color: fam.color, width: 14, flexShrink: 0 }}>
+          {fam.glyph}
+        </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
@@ -187,7 +203,13 @@ function Node({ layer, i, spec, active, maxParams, onSelect }) {
   );
 }
 
-export default function ModelView({ parsed, layerIndex, onSelectLayer }) {
+export default function ModelView({
+  parsed,
+  layerIndex,
+  onSelectLayer,
+  weights,
+}) {
+  const [view, setView] = useState("flow");
   const { spec } = parsed;
   const m = spec.model;
   const io = spec.io ?? {};
@@ -199,7 +221,9 @@ export default function ModelView({ parsed, layerIndex, onSelectLayer }) {
   // Which distinct mechanisms this model is actually built from — the mixers
   // in play plus the composition, rather than a class name that hides both.
   const mechanisms = useMemo(() => {
-    const mixers = [...new Set(spec.layers.map((l) => l.mixer).filter(Boolean))];
+    const mixers = [
+      ...new Set(spec.layers.map((l) => l.mixer).filter(Boolean)),
+    ];
     const kinds = [...new Set(spec.layers.map((l) => l.kind ?? "scan"))];
     return { mixers, kinds };
   }, [spec]);
@@ -225,7 +249,10 @@ export default function ModelView({ parsed, layerIndex, onSelectLayer }) {
             </span>
           ))}
           {mechanisms.kinds.map((k) => (
-            <span key={k} style={{ ...S.chip, color: FAMILY[k]?.color ?? "#9fb3d9" }}>
+            <span
+              key={k}
+              style={{ ...S.chip, color: FAMILY[k]?.color ?? "#9fb3d9" }}
+            >
               {FAMILY[k]?.glyph} {k}
             </span>
           ))}
@@ -239,20 +266,35 @@ export default function ModelView({ parsed, layerIndex, onSelectLayer }) {
             </span>
           )}
         </div>
+        <div style={S.tabs}>
+          {["flow", "weights"].map((v) => (
+            <button
+              key={v}
+              style={S.tab(view === v)}
+              onClick={() => setView(v)}
+            >
+              {v === "flow" ? "layer flow" : `weights · L${layerIndex}`}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={S.body} className="td-panel">
-        {spec.layers.map((l, i) => (
-          <Node
-            key={i}
-            layer={l}
-            i={i}
-            spec={spec}
-            active={i === layerIndex}
-            maxParams={maxParams}
-            onSelect={onSelectLayer}
-          />
-        ))}
+        {view === "weights" && (
+          <Weights weights={weights} layerIndex={layerIndex} />
+        )}
+        {view === "flow" &&
+          spec.layers.map((l, i) => (
+            <Node
+              key={i}
+              layer={l}
+              i={i}
+              spec={spec}
+              active={i === layerIndex}
+              maxParams={maxParams}
+              onSelect={onSelectLayer}
+            />
+          ))}
       </div>
     </div>
   );

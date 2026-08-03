@@ -9,6 +9,33 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.3.0] - 2026-08-03
 
 ### Added
+- **`td.viz.weights(model)` and a weights view in the viewer** — the
+  parameters themselves, drawn as the mechanism rather than as a heatmap of
+  everything. Every tensor is classified by the *role* it plays (linear, conv,
+  ssm_decay, ssm_in, ssm_out, skip, bias), which is what lets a linear map be
+  drawn as a matrix, a convolution as a receptive field of taps, and an SSM as
+  a bank of states with a retention loop each. Downsampling is always
+  declared: each entry carries its original shape, the stride used, and the
+  statistics of the *whole* tensor, because a picture of one corner of a
+  matrix presented as the matrix is worse than no picture. Served at
+  `/weights.json` by `td.viz.show(model)`, and 404 with a reason when the
+  viewer was opened on a spec, which has no parameters to read.
+- **The impulse-response operator: one picture every family can be drawn in.**
+  A mixer is a map over positions along the swept axis; families differ in the
+  structure that map is *forced* to have. Probing each mixer with a unit
+  impulse per position measures it directly, and the payload reports what it
+  finds — causality, bandwidth, weight-tying, and reach past the diagonal. The
+  numbers separate the families exactly as the theory says they should: a
+  convolution is banded and tied (the same kernel repeated at every position),
+  a TCN and an SSM are strictly causal, an SSM carries real influence past the
+  diagonal while attention carries none — because attention's mixing is
+  computed from the data and is not in the parameters to draw at all. That
+  last case is reported in those words rather than as an empty diagram.
+- **Weights stream while training.** `examples/viewer_live.py` refreshes the
+  digest on the eval cadence, so the diagrams show what the model holds now
+  rather than what it held when the page was opened. On the eval cadence and
+  not every step, because the operator probe is forward passes and a viewer
+  that changes the training cost is measuring itself.
 - **`td.data.sparsity(...)`** — a pre-run over the data that answers "is this
   lattice actually sparse", because that is a property of the data rather than
   a setting to declare. Takes a `Lattice`, a `LatticeTable`, a boolean mask, or

@@ -52,9 +52,13 @@ def main() -> int:
     # wheel would carry whatever run happened to be on the packager's laptop —
     # and the viewer would load it in preference to the model the user passed
     # to `td.viz.show`, which is how this was noticed at all.
-    for stray in dest.rglob("run.json"):
-        stray.unlink()
-        print(f"stripped {stray.relative_to(dest)} (a local run, not part of the viewer)")
+    # `weights.json` is the same kind of stray: `td.viz.show(model)` serves the
+    # real one from memory, and a packaged copy would show the packager's
+    # weights for somebody else's model.
+    for name in ("run.json", "weights.json"):
+        for stray in dest.rglob(name):
+            stray.unlink()
+            print(f"stripped {stray.relative_to(dest)} (a local artefact, not part of the viewer)")
 
     installed = sum(1 for f in dest.rglob("*") if f.is_file())
     print(f"installed {installed} of {files} files, {size_mb:.2f} MB -> {dest.relative_to(root)}")

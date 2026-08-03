@@ -16,6 +16,7 @@ node_modules/
 viewer/dist/
 src/torch_dimensions/viz/static/
 viewer/public/run.json
+viewer/public/weights.json
 
 # Local Claude Code settings (launch configs, agents) — not part of the library
 .claude/

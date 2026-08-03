@@ -44,6 +44,13 @@ export default function App() {
   const [dockOpen, setDockOpen] = useState(true);
   // Measured throughput, shown in the dock. Also what the sweep is clocked to.
   const [stepRate, setStepRate] = useState(null);
+  // Served by td.viz.show(model); absent when the viewer was opened on a
+  // spec, which has no parameters to read.
+  const [weights, setWeights] = useState(null);
+  // A run streams its weights as they train; those win over the snapshot
+  // taken when the page was opened, which is stale the moment training starts.
+  const liveWeights =
+    sampleKey === LIVE_KEY && live?.weights ? live.weights : null;
   const liveRunId = useRef(null);
 
   // progress is animation state, not UI state: it lives in a ref the render
@@ -114,6 +121,10 @@ export default function App() {
   // the samples are the whole app and nothing about this path is visible.
   useEffect(() => {
     let cancelled = false;
+    fetch("/weights.json", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((w) => !cancelled && w && setWeights(w))
+      .catch(() => {});
     fetch("/spec.json", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
@@ -152,7 +163,9 @@ export default function App() {
           if (clock.step >= 0 && last.step > clock.step) {
             const per = (now - clock.at) / 1000 / (last.step - clock.step);
             // Smoothed: a single slow poll should not visibly jerk the sweep.
-            clock.seconds = clock.seconds ? clock.seconds * 0.6 + per * 0.4 : per;
+            clock.seconds = clock.seconds
+              ? clock.seconds * 0.6 + per * 0.4
+              : per;
           }
           clock.step = last.step;
           clock.at = now;
@@ -227,7 +240,14 @@ export default function App() {
       {/* The main area is split: what the model does to the lattice on the
           left, what the model is on the right, and the run's analytics across
           the bottom of both. */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+        }}
+      >
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
           <div
             style={{
@@ -262,6 +282,7 @@ export default function App() {
             parsed={parsed}
             layerIndex={layerIndex}
             onSelectLayer={selectLayer}
+            weights={liveWeights ?? weights}
           />
         </div>
         <Analytics
