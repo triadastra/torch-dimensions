@@ -307,6 +307,20 @@ repository and reproducible.
 | [**BENCH-README.md**](BENCH-README.md) | the design, and what the comparison cannot show |
 | [**BENCHMARK-DESIGN.md**](BENCHMARK-DESIGN.md) | why three benchmarks rather than one |
 
+All of it is mirrored on **Hugging Face** at
+[`Celsia/torch-dimensions`](https://huggingface.co/Celsia/torch-dimensions),
+where the checkpoints can be pulled individually:
+
+```python
+from huggingface_hub import hf_hub_download
+import torch
+path = hf_hub_download("Celsia/torch-dimensions", "CUDA bench/s4d_upstream_2d/weights.pt")
+blob = torch.load(path, weights_only=True)   # {"model": ..., "head": ...}
+```
+
+The card there is [docs/hf-card.md](docs/hf-card.md) in this repository, so the
+two stay in step.
+
 ### The headline numbers
 
 **In float32, worst output difference between the two devices: 3.11e-06.**

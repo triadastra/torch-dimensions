@@ -11,6 +11,11 @@
   plus the one gap that a Blackwell card could not close. Fifteen minutes on a
   free Colab T4 to re-run.
 
+- **[Hugging Face model card](hf-card.md)** — the source for
+  [`Celsia/torch-dimensions`](https://huggingface.co/Celsia/torch-dimensions),
+  where the benchmark checkpoints and agreement runs are published. Edited
+  here, uploaded as that repo's `README.md`.
+
 Elsewhere in the repo: [DESIGN.md](../DESIGN.md) (the architecture),
 [PLAN.md](../PLAN.md) (what is built and what is next),
 [RESULTS.md](../RESULTS.md) (reproductions),
