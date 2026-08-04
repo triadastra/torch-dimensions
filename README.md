@@ -307,6 +307,12 @@ weights on identical data.
 | **MPS** | Apple Mac Studio, M1 Ultra (Metal) | 2.13.0 | [`MPS bench/`](MPS%20bench), [`MPS agree/`](MPS%20agree) |
 | **CPU** | Apple M1 Ultra (arm64) | 2.13.0 | [`CPU bench/`](CPU%20bench), [`CPU agree/`](CPU%20agree) |
 
+All three devices carry all sixteen models in the *agreement* runs, which are
+the device comparison proper. The CPU *training* run is partial (13/16): the
+upstream reference Mamba scans are Python loops over sequence length, and
+`mamba2_2d` took ninety minutes for 300 steps on CPU against ninety seconds on
+a GPU. The figure labels that coverage rather than leaving a gap to be noticed.
+
 **CPU and MPS are the same machine and the same torch build**, so a difference
 between them is the device and nothing else. CPU-vs-CUDA crosses machines and
 torch versions. Reading the pairs together is what separates what the hardware

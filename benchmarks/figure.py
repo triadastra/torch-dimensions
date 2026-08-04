@@ -209,11 +209,20 @@ def main() -> int:
     # every panel, including the agreement heatmaps that do have them.
     fullest = max(have_b.values(), key=lambda m: len([e for e in m["models"] if "error" not in e]))
     order = [m["name"] for m in fullest["models"] if "error" not in m]
+
     # Panels 5, 6 and 8 read the *training* runs, which are far slower to
     # produce than the agreement runs — a CPU pass over the Mamba zoo is hours.
     # Naming the devices in each subtitle keeps a two-device panel beside a
     # three-device one from reading as a dropped result.
-    trained_on = ", ".join(have_b)
+    def coverage(dev: str, man: dict) -> str:
+        n = len([e for e in man["models"] if "error" not in e])
+        return dev if man.get("complete", True) else f"{dev} ({n}/{len(order_all(man))})"
+
+    def order_all(man: dict) -> list:
+        return man.get("requested") or [e["name"] for e in man["models"]]
+
+    trained_on = ", ".join(coverage(d, m) for d, m in have_b.items())
+    partial = [d for d, m in have_b.items() if not m.get("complete", True)]
 
     # --- the comparisons this figure can make ------------------------------
     PAIRS = [
@@ -511,7 +520,17 @@ def main() -> int:
         "float32 by construction — they sum oscillating terms that nearly\n"
         "   cancel. The same quantity differs by 1.35e-04 in float32 and "
         "4.87e-15 in float64. Eleven orders is cancellation, not disagreement.\n"
-        "\n"
+        + (
+            "·  The CPU column of panels 5, 6 and 8 is a partial run. Training "
+            "Mamba on CPU is impractical here: the authors' reference scans are\n"
+            "   Python loops over sequence length, and one model (mamba2_2d) "
+            "took ninety minutes for 300 steps against ninety seconds on a GPU.\n"
+            "   The agreement panels, which are the actual device comparison, "
+            "have all sixteen models on all three devices.\n"
+            if partial
+            else ""
+        )
+        + "\n"
         "Two corrections were required before any of this was measurable, and "
         "both generalise\n"
         "\n"

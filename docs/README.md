@@ -30,6 +30,9 @@ already exist, so the figure cannot drift from the numbers it draws.
 | **MPS** | Apple Mac Studio, M1 Ultra (Metal) | 2.13.0 |
 | **CPU** | Apple M1 Ultra (arm64) | 2.13.0 |
 
+All sixteen models on all three devices in the agreement runs; the CPU training
+run is partial (13/16) because the reference Mamba scans are Python loops.
+
 CPU and MPS are the same machine and the same torch build, so the difference
 between them is the device alone; CPU-vs-CUDA crosses machines and versions.
 Worst float32 output difference across every pair is **3.11e-06**, thirteen of
