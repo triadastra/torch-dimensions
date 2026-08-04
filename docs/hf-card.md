@@ -107,15 +107,48 @@ from `AGREEMENT.md` and `COMPARISON.md`.
 | **MPS** | Apple Mac Studio, M1 Ultra (Metal) | 2.13.0 | `MPS bench/`, `MPS agree/` |
 | **CPU** | Apple M1 Ultra (arm64) | 2.13.0 | `CPU bench/`, `CPU agree/` |
 
-All three devices carry all sixteen models in the agreement runs. The CPU
-training run is partial (13/16) — the reference Mamba scans are Python loops
-over sequence length, and one model took ninety minutes for 300 steps on CPU
-against ninety seconds on a GPU.
-
 **CPU and MPS are the same machine and the same torch build**, so a difference
 between them is the device and nothing else. CPU-vs-CUDA crosses machines and
 torch versions. Reading the pairs together separates what the hardware did from
 what the software version did — neither pair alone can.
+
+### What the throughput panel shows
+
+Three findings, none of which is "the GPU is faster":
+
+| model | CPU | MPS | CUDA | CUDA vs CPU |
+|---|---|---|---|---|
+| `mamba_upstream_3d` | 0.1 | 26.8 | 23.7 | **455×** |
+| `mamba2_2d` | 0.1 | 5.6 | 24.3 | **285×** |
+| `mamba_upstream_2d` | 0.2 | 40.1 | 23.8 | 95× |
+| `tcn_2d_sparse` | 5.2 | 90.5 | 87.3 | 17× |
+| `cnn_2d_sparse` | 12.7 | 106.5 | 104.4 | 8× |
+| `mamba3_2d` | 5.3 | 14.6 | 21.0 | 3.9× |
+| `s4_upstream_2d` | 39.4 | 39.0 | 28.3 | **0.7×** |
+| `s4d_upstream_2d` | 42.7 | 46.9 | 32.7 | **0.8×** |
+
+*training steps per second, 300 steps, batch 4*
+
+**The upstream reference scans are the bottleneck, not the hardware.** Mamba-1
+and Mamba-2 fall to 0.1–0.2 steps/s on CPU because `selective_scan_ref` and
+`ssd_minimal_discrete` are sequential Python loops over sequence length. That
+is what the fused CUDA kernels exist to avoid, and it is why a CPU pass over
+this zoo takes hours while a GPU pass takes minutes.
+
+**Our Mamba-3 transcription is 30–50× faster on CPU than the authors' Mamba-1
+and Mamba-2 references** (5.3 steps/s against 0.1–0.2), because
+`mixers/mamba3_compat.py` computes the recurrence as a chunked, vectorised
+scan rather than a Python loop. Mamba-3 ships Triton-only upstream, so there
+was no reference loop to copy — the transcription had to be written, and it
+was written vectorised.
+
+**The RTX 5090 loses to an M1 Ultra CPU on the small S4 models** (0.7–0.8×).
+These are 13k–17k-parameter models on a 6×8 lattice: the axial sweep issues
+many small sequential kernels, launch overhead dominates every one of them, and
+the GPU never fills. That is a property of this benchmark's size rather than of
+the hardware — a defensible throughput number needs the warmup-and-repeats
+protocol designed in `BENCHMARK-DESIGN.md` and not yet
+implemented.
 
 ## Results
 

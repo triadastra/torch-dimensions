@@ -57,9 +57,15 @@ def test_the_recorded_numbers_match_the_prose_that_quotes_them():
     tabulates is checked against the table, digit for digit."""
     bench = (ROOT / "BENCH-README.md").read_text()
 
-    # Only the *table rows* — the model name also appears in prose, where no
-    # per-model number is quoted and there is nothing to compare against.
-    rows = dict(re.findall(r"^\| `([a-z0-9_]+)` \|([^\n]*)$", bench, re.M))
+    # Scoped to the TF32 table specifically. BENCH-README has more than one
+    # table keyed by model name — the throughput table has the same row shape
+    # and holds steps/second — so an unscoped search reads the wrong numbers
+    # and the failure looks like a drifted constant rather than a bad regex.
+    header = "| model | TF32 on (torch's default) | TF32 off | + cuDNN off |"
+    assert header in bench, "BENCH-README's TF32 table header changed"
+    after = bench[bench.index(header) :]
+    table = after[: after.index("\n\n")]
+    rows = dict(re.findall(r"^\| `([a-z0-9_]+)` \|([^\n]*)$", table, re.M))
     tabulated = [n for n in figure.TF32_LADDER if n in rows]
     assert len(tabulated) >= 5, "BENCH-README's TF32 table lost its rows"
 

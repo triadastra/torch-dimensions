@@ -118,6 +118,54 @@ headroom for the version to show. It appears only in float64, where the
 cross-machine comparison flattens at ~5e-07 while the same-process one reaches
 2e-16 — that residual is the torch version, not the hardware.
 
+## Throughput, and why a GPU is not uniformly faster
+
+All sixteen models on all three devices, 300 steps, batch 4, training steps per
+second:
+
+| model | CPU | MPS | CUDA | CUDA vs CPU |
+|---|---|---|---|---|
+| `mamba_upstream_3d` | 0.1 | 26.8 | 23.7 | **455×** |
+| `mamba2_2d` | 0.1 | 5.6 | 24.3 | **285×** |
+| `mamba_upstream_2d` | 0.2 | 40.1 | 23.8 | 95× |
+| `mamba_portable_2d` | 0.2 | 44.9 | 24.7 | 99× |
+| `tcn_2d_sparse` | 5.2 | 90.5 | 87.3 | 17× |
+| `cnn_2d_sparse` | 12.7 | 106.5 | 104.4 | 8× |
+| `mamba3_2d` | 5.3 | 14.6 | 21.0 | 3.9× |
+| `lstm_3d` | 21.1 | 66.0 | 52.0 | 2.5× |
+| `transformer_scan_2d` | 36.0 | 55.7 | 68.6 | 1.9× |
+| `lstm_2d_sparse` | 36.0 | 70.0 | 53.5 | 1.5× |
+| `s4d_portable_2d` | 45.8 | 61.1 | 42.3 | **0.9×** |
+| `s4d_upstream_2d` | 42.7 | 46.9 | 32.7 | **0.8×** |
+| `s4_upstream_2d` | 39.4 | 39.0 | 28.3 | **0.7×** |
+
+Three things worth separating, because the spread here is four orders of
+magnitude and almost none of it is the hardware.
+
+**The reference scans are the bottleneck.** Mamba-1 and Mamba-2 fall to
+0.1–0.2 steps/s on CPU because upstream's `selective_scan_ref` and
+`ssd_minimal_discrete` are sequential Python loops over sequence length —
+correct, readable, and written to be a specification rather than a fast path.
+That is exactly what the fused CUDA kernels exist to avoid. A CPU pass over
+this zoo takes hours; `mamba2_2d` alone took ninety minutes for 300 steps.
+
+**Our Mamba-3 transcription is 30–50× faster on CPU than those references**
+(5.3 steps/s against 0.1–0.2), and the reason is not cleverness. Mamba-3 ships
+Triton-only upstream — there is no pure-torch reference beside it, as there is
+for Mamba-1 and Mamba-2 — so `mixers/mamba3_compat.py` had to be written from
+the kernel, and it was written as a chunked, vectorised scan rather than a
+loop. The comparison is not like-for-like and should not be read as one; it is
+a statement about two implementation styles, not two algorithms.
+
+**The RTX 5090 loses to an M1 Ultra CPU on the small S4 models** (0.7–0.8×).
+These are 13k–17k-parameter models on a 6×8 lattice, and the axial sweep issues
+many small sequential kernels: launch overhead dominates every one of them and
+the GPU never fills. Nothing here says a 5090 is slow — it says this benchmark
+is too small to measure a 5090, which is why the throughput protocol in
+[BENCHMARK-DESIGN.md](BENCHMARK-DESIGN.md) (warmup discarded, ≥50 repeats,
+median with coefficient of variation, peak memory) is still the number anyone
+should quote. It is designed and not yet implemented.
+
 ## What the comparison can and cannot show
 
 It **cannot** show bitwise agreement, and a run that claimed to would be

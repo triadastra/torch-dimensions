@@ -108,6 +108,16 @@ def panel_title(ax, title, subtitle=""):
         )
 
 
+def zoo_order() -> list[str]:
+    """The zoo's own declaration order, which is grouped by model family."""
+    here = Path(__file__).resolve().parent
+    spec_z = importlib.util.spec_from_file_location("_td_zoo_order", here / "pretrain.py")
+    zoo = importlib.util.module_from_spec(spec_z)
+    sys.modules["_td_zoo_order"] = zoo
+    spec_z.loader.exec_module(zoo)
+    return list(zoo.ZOO)
+
+
 def load_agreement(root: Path, name: str) -> dict | None:
     path = root / f"{name} agree" / "agreement.json"
     if not path.exists():
@@ -203,12 +213,14 @@ def main() -> int:
     have_b = {k: v for k, v in bench.items() if v}
     print(f"agreement runs: {list(have_a)}\nbenchmark runs: {list(have_b)}")
 
-    # From the *most complete* run, not the first one found. A partial run —
-    # a CPU pass over this zoo is hours, and the manifest is written after
-    # every model — would otherwise silently drop its missing models from
-    # every panel, including the agreement heatmaps that do have them.
+    # Row order comes from the zoo *definition*, which groups by family —
+    # recurrent, state space, attention, convolutional, rank 3. A run's own
+    # order is whatever `--only` asked for (the CPU pass puts the slow Mamba
+    # models last so a partial run is still useful), and inheriting it would
+    # scatter the families across the heatmaps for no reason.
     fullest = max(have_b.values(), key=lambda m: len([e for e in m["models"] if "error" not in e]))
-    order = [m["name"] for m in fullest["models"] if "error" not in m]
+    trained = {m["name"] for m in fullest["models"] if "error" not in m}
+    order = [n for n in zoo_order() if n in trained]
 
     # Panels 5, 6 and 8 read the *training* runs, which are far slower to
     # produce than the agreement runs — a CPU pass over the Mamba zoo is hours.
@@ -393,13 +405,14 @@ def main() -> int:
         )
     ax.set_xticks(x)
     ax.set_xticklabels(order, rotation=42, ha="right", fontsize=8, family="monospace")
-    ax.set_ylabel("training steps / second", fontsize=10)
+    ax.set_yscale("log")
+    ax.set_ylabel("training steps / second  (log)", fontsize=10)
     ax.legend(fontsize=9)
     panel_title(
         ax,
         "5 · Throughput",
-        f"{trained_on} · 12k–141k-parameter models: at this size launch "
-        "overhead dominates and a GPU cannot fill",
+        f"{trained_on} · log scale: the spread is four orders. Mamba on CPU is "
+        "0.1 steps/s — upstream's reference scans are Python loops.",
     )
     ax.grid(axis="y", alpha=0.25)
     ax.set_axisbelow(True)

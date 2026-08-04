@@ -30,8 +30,11 @@ already exist, so the figure cannot drift from the numbers it draws.
 | **MPS** | Apple Mac Studio, M1 Ultra (Metal) | 2.13.0 |
 | **CPU** | Apple M1 Ultra (arm64) | 2.13.0 |
 
-All sixteen models on all three devices in the agreement runs; the CPU training
-run is partial (13/16) because the reference Mamba scans are Python loops.
+All sixteen models on all three devices, in both benchmarks. The throughput
+panel is the surprising one: Mamba on CPU runs at 0.1 steps/s against 24 on
+CUDA — 455× — because the upstream reference scans are Python loops over
+sequence length, while the RTX 5090 *loses* to the M1 Ultra's CPU on the small
+S4 models, where launch overhead dominates.
 
 CPU and MPS are the same machine and the same torch build, so the difference
 between them is the device alone; CPU-vs-CUDA crosses machines and versions.
