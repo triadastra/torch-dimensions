@@ -203,7 +203,12 @@ def main() -> int:
     have_b = {k: v for k, v in bench.items() if v}
     print(f"agreement runs: {list(have_a)}\nbenchmark runs: {list(have_b)}")
 
-    order = [m["name"] for m in next(iter(have_b.values()))["models"] if "error" not in m]
+    # From the *most complete* run, not the first one found. A partial run —
+    # a CPU pass over this zoo is hours, and the manifest is written after
+    # every model — would otherwise silently drop its missing models from
+    # every panel, including the agreement heatmaps that do have them.
+    fullest = max(have_b.values(), key=lambda m: len([e for e in m["models"] if "error" not in e]))
+    order = [m["name"] for m in fullest["models"] if "error" not in m]
     # Panels 5, 6 and 8 read the *training* runs, which are far slower to
     # produce than the agreement runs — a CPU pass over the Mamba zoo is hours.
     # Naming the devices in each subtitle keeps a two-device panel beside a
@@ -424,8 +429,9 @@ def main() -> int:
 
     # 7. parameters
     ax = fig.add_subplot(gs[3, :1])
-    any_b = next(iter(have_b.values()))
-    by = {m["name"]: m for m in any_b["models"] if "error" not in m}
+    # `fullest`, not the first run: parameter counts are a property of the
+    # model, but only a run that trained it recorded them.
+    by = {m["name"]: m for m in fullest["models"] if "error" not in m}
     ax.barh(np.arange(len(order)), [by[m]["n_params"] for m in order], color="#8172B3")
     ax.set_yticks(np.arange(len(order)))
     ax.set_yticklabels(order, fontsize=8, family="monospace")

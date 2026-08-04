@@ -289,7 +289,26 @@ def main() -> int:
     print(f"weights: {init if init else 'from the seed (see --init)'}")
     print(f"{precision.describe(prec)}\n")
 
-    results = []
+    def manifest_of(records: list) -> dict:
+        return {
+            "device": device,
+            "device_name": device_name(device),
+            "platform": platform.platform(),
+            "python": platform.python_version(),
+            "torch": torch.__version__,
+            "torch_cuda": torch.version.cuda,
+            "torch_dimensions": getattr(td, "__version__", "unknown"),
+            "seed": SEED,
+            "precision": prec,
+            "steps": args.steps,
+            "batch": args.batch,
+            "t_len": args.t_len,
+            "complete": len(records) == len(names),
+            "requested": names,
+            "models": records,
+        }
+
+    results: list[dict] = []
     for i, name in enumerate(names, 1):
         cfg = ZOO[name]
         print(f"[{i:2d}/{len(names)}] {name:26s} ", end="", flush=True)
@@ -315,27 +334,18 @@ def main() -> int:
         )
         (model_dir / "metrics.json").write_text(json.dumps(record, indent=2) + "\n")
         results.append(record)
+        # Rewritten after every model, not once at the end. A CPU pass over
+        # this zoo is hours — the authors' reference Mamba scan is a Python
+        # loop over sequence length — and a run that keeps everything in memory
+        # until the last model loses all of it to one interrupt. `complete`
+        # says whether the file is the whole run or a prefix of it.
+        (out / "manifest.json").write_text(json.dumps(manifest_of(results), indent=2) + "\n")
         print(
             f"loss {record['loss_first']:.4f} -> {record['loss_final']:.5f}   "
             f"{record['steps_per_second']:6.1f} steps/s   {record['n_params']:,} params"
         )
 
-    manifest = {
-        "device": device,
-        "device_name": device_name(device),
-        "platform": platform.platform(),
-        "python": platform.python_version(),
-        "torch": torch.__version__,
-        "torch_cuda": torch.version.cuda,
-        "torch_dimensions": getattr(td, "__version__", "unknown"),
-        "seed": SEED,
-        "precision": prec,
-        "steps": args.steps,
-        "batch": args.batch,
-        "t_len": args.t_len,
-        "models": results,
-    }
-    (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (out / "manifest.json").write_text(json.dumps(manifest_of(results), indent=2) + "\n")
     ok = sum(1 for r in results if "error" not in r)
     print(f"\nwrote {out}/manifest.json — {ok}/{len(results)} models trained")
     return 0 if ok == len(results) else 1
