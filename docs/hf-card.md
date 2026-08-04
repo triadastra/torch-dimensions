@@ -10,6 +10,15 @@ tags:
   - benchmark
 ---
 
+<!--
+  This file is uploaded as the *root* README.md of
+  https://huggingface.co/Celsia/torch-dimensions, so every relative path below
+  is resolved from the Hub repo root, not from docs/. That is why the image
+  reference reads docs/device-comparison.png and appears broken when this file
+  is viewed here. Edit it here; publish with:
+      hf upload Celsia/torch-dimensions docs/hf-card.md README.md
+-->
+
 # torch-dimensions
 
 **An N-dimensional model is a 1-D mixer plus a plan for sweeping it over an
@@ -37,15 +46,17 @@ every patched line tagged and a manifest pinning upstream commits and sha256s.
 
 ## What is in this repository
 
-Sixteen models trained identically on two machines, plus the artifacts needed
+Sixteen models trained identically on three devices, plus the artifacts needed
 to check that the comparison means anything.
 
 | directory | contents |
 |---|---|
 | `CUDA bench/` | 16 checkpoints trained on an **NVIDIA RTX 5090** (Blackwell, sm_120; torch 2.12.1+cu130), plus `cuda_check.txt` |
 | `MPS bench/` | the same 16 on an **Apple Mac Studio, M1 Ultra** (Metal / MPS; torch 2.13.0) |
-| `CUDA agree/`, `MPS agree/` | one forward and one backward from fixed weights, **no optimiser** — outputs and every gradient, saved as tensors |
-| `init weights/` | the single set of starting weights both machines load |
+| `CPU bench/` | the same 16 on that Mac's **CPU** (arm64, torch 2.13.0) — the same-machine control for MPS |
+| `CUDA agree/`, `MPS agree/`, `CPU agree/` | one forward and one backward from fixed weights, **no optimiser** — outputs and every gradient, saved as tensors |
+| `init weights/` | the single set of starting weights every device loads |
+| `docs/device-comparison.png` | the figure below, and its `.svg` |
 | `AGREEMENT.md` | do the two devices compute the same thing? |
 | `COMPARISON.md` | do they train to the same place, and how fast? |
 | `*/SCORECARD.md` | per-machine model ranking, one column per question, no combined score |
@@ -81,11 +92,31 @@ mechanisms. Use them to reproduce the comparison, not as a starting point.
 
 ---
 
+## Evaluation and Device Comparison
+
+![Evaluation and device comparison across CUDA, CPU and MPS](docs/device-comparison.png)
+
+Sixteen models, three devices, two benchmarks, from one shared set of starting
+weights on identical data. Regenerate with `python benchmarks/figure.py` — every
+panel reads artifact directories that already exist, so the figure cannot drift
+from `AGREEMENT.md` and `COMPARISON.md`.
+
+| device | hardware | torch | artifacts |
+|---|---|---|---|
+| **CUDA** | NVIDIA RTX 5090 (Blackwell, sm_120) | 2.12.1+cu130 | `CUDA bench/`, `CUDA agree/` |
+| **MPS** | Apple Mac Studio, M1 Ultra (Metal) | 2.13.0 | `MPS bench/`, `MPS agree/` |
+| **CPU** | Apple M1 Ultra (arm64) | 2.13.0 | `CPU bench/`, `CPU agree/` |
+
+**CPU and MPS are the same machine and the same torch build**, so a difference
+between them is the device and nothing else. CPU-vs-CUDA crosses machines and
+torch versions. Reading the pairs together separates what the hardware did from
+what the software version did — neither pair alone can.
+
 ## Results
 
 ### Do the two devices compute the same thing?
 
-**Worst float32 output difference: 3.11e-06.** Thirteen of sixteen models are
+**Worst float32 output difference across every device pair: 3.11e-06.** Thirteen of sixteen models are
 at or below **1e-06**. In float64 the devices agree to **2.2e-16** — the last
 bit. Full per-model table in `AGREEMENT.md`.
 
@@ -156,12 +187,14 @@ not against its own kernel. An Ampere or Ada card would close it.
 ```bash
 pip install "torch-dimensions[dev,upstream]"
 
-python benchmarks/agreement.py --out "MPS agree"  --init "init weights"
-python benchmarks/agreement.py --out "CUDA agree" --init "init weights"
-python benchmarks/compare_agreement.py "MPS agree" "CUDA agree" --out AGREEMENT.md
+# on each machine, once
+python benchmarks/agreement.py --out "MPS agree" --init "init weights"
+python benchmarks/pretrain.py  --out "MPS bench" --init "init weights"
 
-python benchmarks/pretrain.py --out "CUDA bench" --init "init weights"
+# then, anywhere
+python benchmarks/compare_agreement.py "MPS agree" "CUDA agree" --out AGREEMENT.md
 python benchmarks/compare.py "MPS bench" "CUDA bench" --out COMPARISON.md
+python benchmarks/figure.py --out docs/device-comparison.png
 
 python scripts/cuda_check.py
 ```

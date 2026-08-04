@@ -48,6 +48,10 @@ dev = [
   # deps are here so tests/test_vendored.py actually runs the vendored
   # originals.
   "safetensors>=0.4", "numpy", "einops", "scipy", "hydra-core", "omegaconf",
+  # benchmarks/figure.py draws the published device-comparison sheet. Here
+  # rather than optional so the figure is regenerated and checked, not
+  # hand-maintained alongside numbers it is supposed to be derived from.
+  "matplotlib>=3.8",
 ]
 all = ["torch-dimensions[mamba,fla,safetensors,upstream]"]
 

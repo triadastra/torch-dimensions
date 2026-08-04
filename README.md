@@ -289,21 +289,87 @@ the two agree numerically — the pipeline's S4D kernel matches ours **bitwise**
 with shared parameters, and that agreement is itself a CI test
 (`tests/test_vendored.py`).
 
-## Device benchmarks — RTX 5090 vs Apple M1 Ultra
+## Evaluation and Device Comparison
 
-Sixteen models trained identically on two machines, plus a no-optimiser
-numerical comparison and a per-machine scorecard. Everything below is in the
-repository and reproducible.
+![Evaluation and device comparison across CUDA, CPU and MPS](docs/device-comparison.png)
+
+*Regenerate with `python benchmarks/figure.py`. Every panel reads the artifact
+directories in this repository — nothing in the figure is computed for it, so
+the picture cannot drift from [AGREEMENT.md](AGREEMENT.md) and
+[COMPARISON.md](COMPARISON.md).*
+
+Sixteen models, three devices, two benchmarks, from one shared set of starting
+weights on identical data.
+
+| device | hardware | torch | artifacts |
+|---|---|---|---|
+| **CUDA** | NVIDIA RTX 5090 (Blackwell, sm_120) | 2.12.1+cu130 | [`CUDA bench/`](CUDA%20bench), [`CUDA agree/`](CUDA%20agree) |
+| **MPS** | Apple Mac Studio, M1 Ultra (Metal) | 2.13.0 | [`MPS bench/`](MPS%20bench), [`MPS agree/`](MPS%20agree) |
+| **CPU** | Apple M1 Ultra (arm64) | 2.13.0 | [`CPU bench/`](CPU%20bench), [`CPU agree/`](CPU%20agree) |
+
+**CPU and MPS are the same machine and the same torch build**, so a difference
+between them is the device and nothing else. CPU-vs-CUDA crosses machines and
+torch versions. Reading the pairs together is what separates what the hardware
+did from what the software version did — neither pair alone can.
+
+### What it shows
+
+**Worst float32 output difference across every device pair: 3.11e-06.**
+Thirteen of sixteen models are at or below **1e-06**. In float64, measured in
+one process so only the device varies, they agree to **2.2e-16** — the last
+bit. The devices compute the same thing; float32 has nowhere to put the
+agreement.
+
+The three models above the bound are the cuDNN RNNs, and their residual is
+*algorithm*, not precision: cuDNN's fused LSTM/GRU is a different
+implementation, and disabling it brings them to 1.5–1.8e-07 like everything
+else. That is left visible because the fused kernel is what actually runs.
+
+One class of gradient cannot meet a float32 bound and should not be expected
+to. The derivative with respect to an SSM frequency sums oscillating terms
+that nearly cancel: `A_imag` differs by **1.35e-04 in float32 and 4.87e-15 in
+float64**. Eleven orders between the two is what cancellation looks like — a
+genuinely different computation does not shrink when mantissa bits are added.
+
+### Two corrections were needed first, and both generalise
+
+**CUDA does not run float32 by default.** `torch.backends.cudnn.allow_tf32`
+ships as `True`, so cuDNN convolutions and RNNs execute in TF32 — 10 mantissa
+bits against float32's 23. That accounted for the *entire* original 1.96e-04
+gap, and explains why only LSTM, GRU, CNN and TCN were affected while
+attention, Mamba and S4 sat at ~2e-07 throughout. Turning it off moves
+`tcn_2d_sparse` by 1024x and `cnn_2d_sparse` by 839x.
+
+**A fixed seed does not give identical S4 weights across platforms.**
+`hippo.nplr` diagonalises with `torch.linalg.eigh`: eigenvalues are unique and
+matched across macOS and Linux to twelve decimals — which is why this hid,
+since `A_imag` looked perfect — but eigenvectors are fixed only up to a phase,
+so `B` and `P` differed by a relative **1.5** and **0.53**. Two valid S4
+initialisations; two different models. Both benchmarks now load one shared set
+of weights via `--init`.
+
+### On the throughput panel
+
+The 5090 wins where there is real matmul work (`mamba2_2d` 4.35x, CaFA
+attention 2.21x) and *loses* on the small recurrent models. These are
+12k–141k-parameter models on a 6x8 lattice: the axial sweep issues many small
+sequential kernels, launch overhead dominates, and the GPU never fills. That
+is a property of this benchmark's size, not of the hardware — a defensible
+throughput number needs the warmup-and-repeats protocol designed in
+[BENCHMARK-DESIGN.md](BENCHMARK-DESIGN.md) and not yet implemented.
+
+### Every artifact
 
 | artifact | what it is |
 |---|---|
-| [`MPS bench/`](MPS%20bench) | 16 trained checkpoints — Apple Mac Studio, M1 Ultra (Metal / MPS) |
-| [`CUDA bench/`](CUDA%20bench) | the same 16 — NVIDIA RTX 5090 · [`cuda_check.txt`](CUDA%20bench/cuda_check.txt) |
-| [`MPS agree/`](MPS%20agree), [`CUDA agree/`](CUDA%20agree) | one forward + backward from fixed weights, no optimiser |
-| [`init weights/`](init%20weights) | the shared starting weights both machines load |
+| [`CUDA bench/`](CUDA%20bench) | 16 trained checkpoints — RTX 5090 · [`cuda_check.txt`](CUDA%20bench/cuda_check.txt) |
+| [`MPS bench/`](MPS%20bench), [`CPU bench/`](CPU%20bench) | the same 16 on the Mac Studio's GPU and its CPU |
+| [`CUDA agree/`](CUDA%20agree), [`MPS agree/`](MPS%20agree), [`CPU agree/`](CPU%20agree) | one forward + backward from fixed weights, no optimiser |
+| [`init weights/`](init%20weights) | the shared starting weights every machine loads |
+| [`docs/device-comparison.png`](docs/device-comparison.png) | the figure above · [`.svg`](docs/device-comparison.svg) · [`benchmarks/figure.py`](benchmarks/figure.py) |
 | [**AGREEMENT.md**](AGREEMENT.md) | do the two devices compute the same thing? |
 | [**COMPARISON.md**](COMPARISON.md) | do they train to the same place, and how fast? |
-| [`MPS bench/SCORECARD.md`](MPS%20bench/SCORECARD.md), [`CUDA bench/SCORECARD.md`](CUDA%20bench/SCORECARD.md) | per-machine model ranking, one column per question |
+| `*/SCORECARD.md` | per-machine model ranking, one column per question, no combined score |
 | [**BENCH-README.md**](BENCH-README.md) | the design, and what the comparison cannot show |
 | [**BENCHMARK-DESIGN.md**](BENCHMARK-DESIGN.md) | why three benchmarks rather than one |
 
@@ -321,41 +387,21 @@ blob = torch.load(path, weights_only=True)   # {"model": ..., "head": ...}
 The card there is [docs/hf-card.md](docs/hf-card.md) in this repository, so the
 two stay in step.
 
-### The headline numbers
-
-**In float32, worst output difference between the two devices: 3.11e-06.**
-Thirteen of sixteen models are at or below 1e-06. In float64 they agree to
-2.2e-16 — the last bit. Full table in [AGREEMENT.md](AGREEMENT.md).
-
-Two things had to be fixed before that number meant anything, and both are
-worth knowing if you benchmark across devices yourself:
-
-- **CUDA does not run float32 by default.** `cudnn.allow_tf32` ships as `True`,
-  so cuDNN convolutions and RNNs execute in TF32 — 10 mantissa bits against
-  float32's 23. That alone accounted for the entire original 1.96e-04 gap;
-  turning it off moves the convolutional models by three orders of magnitude.
-  `agreement.py` therefore defaults to `--tf32 off`, and `pretrain.py` to
-  `--tf32 torch` so its speed numbers describe what you actually get.
-- **A fixed seed does not give identical S4 weights across platforms.**
-  `hippo.nplr` diagonalises with `torch.linalg.eigh`, whose eigenvalues are
-  unique but whose eigenvectors are fixed only up to a phase — so macOS and
-  Linux produce different (both valid) `B` and `P`. Pass `--init` to share one
-  set of weights; see [benchmarks/init_weights.py](benchmarks/init_weights.py).
-
-On CUDA the vendored models take the authors' fused kernels while MPS takes the
-reference path, so those rows are a **fused-vs-reference** check rather than
-merely a device one.
-
 ### Reproduce
 
-```bash
-python benchmarks/agreement.py --out "MPS agree"  --init "init weights"   # writes
-python benchmarks/agreement.py --out "CUDA agree" --init "init weights"   # loads
-python benchmarks/compare_agreement.py "MPS agree" "CUDA agree" --out AGREEMENT.md
+Pass the **same** `--init` directory on every machine — the seed alone is not
+enough, for the reason above. The first run writes it; the rest load it.
 
-python benchmarks/pretrain.py --out "CUDA bench" --init "init weights"
+```bash
+# on each machine, once
+python benchmarks/agreement.py --out "MPS agree" --init "init weights"
+python benchmarks/pretrain.py  --out "MPS bench" --init "init weights"
+
+# then, anywhere
+python benchmarks/compare_agreement.py "MPS agree" "CUDA agree" --out AGREEMENT.md
 python benchmarks/compare.py "MPS bench" "CUDA bench" --out COMPARISON.md
 python benchmarks/scorecard.py "CUDA bench" --out "CUDA bench/SCORECARD.md"
+python benchmarks/figure.py --out docs/device-comparison.png
 ```
 
 Every CUDA claim the library makes runs as one file:
